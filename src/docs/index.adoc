@@ -20,6 +20,39 @@ Bucket.Hsu
 
 筆記來源可能由個人工作筆記整理而來；公開前已去除公司名稱、內部 IP、真實帳密、客戶資訊與不可公開專案代號。
 
+== 授權與使用限制
+
+本網站內容為 Bucket.Hsu 個人技術筆記的公開展示，不是開源文件，也不是可自由再利用的文件素材。
+
+除非另有明確書面同意，Bucket.Hsu 原創內容保留所有權利，不授權他人複製、散布、轉載、改作、再發布、商業使用，或作為教材、產品文件、內部知識庫與訓練資料集使用。
+
+公開 repository 仍可能依 GitHub 服務功能被瀏覽與 fork；這不代表取得上述再利用授權。第三方樣式表、圖片或外部元件仍依其原始授權或權利聲明使用。
+
+== Reference
+
+由個人 `note.adoc` 拆分出的綜合參考筆記，適合查閱常用指令、工具小抄、名詞對照與公開資料表。
+
+[cols="35%,45%,20%", options="header"]
+|===
+|文件 |重點 |連結
+
+|技術相關參考網頁
+|整理 Maven、AsciiDoc、PlantUML、Font Awesome、SweetAlert2、Linux 命令列等常用參考連結。
+|link:reference/technical-links.html[開啟]
+
+|其餘說明
+|整理 HTTP、Linux、Git、Curl、JavaScript、Maven、Docker、Kubernetes、SQL、AI CLI 等綜合小抄。
+|link:reference/misc-notes.html[開啟]
+
+|地政名詞英文對照
+|整理常見地政名詞的中英文對照，作為文件撰寫與系統欄位命名參考。
+|link:reference/land-office-terms-en.html[開啟]
+
+|台灣縣市英文、代碼與身分證字號對照表
+|整理台灣縣市英文名稱、行政區代碼與身分證字號首碼等公開資料對照。
+|link:reference/taiwan-county-id-codes.html[開啟]
+|===
+
 == Network
 
 網路協定、連線分層、加密通道與檔案分享協定相關筆記。
@@ -33,6 +66,23 @@ Bucket.Hsu
 |link:network/tls-tcp-smb-cifs-nfs.html[開啟]
 |===
 
+== Container
+
+Container、Docker Compose、互動式 shell 與容器環境排查筆記。
+
+[cols="35%,45%,20%", options="header"]
+|===
+|文件 |重點 |連結
+
+|Docker Compose 整理
+|整理 Docker Compose 常用功能、環境變數、healthcheck、volume、network、NFS/CIFS 掛載等範例。
+|link:container/docker-compose-notes.html[開啟]
+
+|使用 sh 進入 container 時 Backspace 無法使用
+|整理 container 內使用 `sh` 時 Backspace 異常的原因與 `stty erase`、`TERM`、`bash` 解法。
+|link:container/container-shell-backspace.html[開啟]
+|===
+
 == Kubernetes
 
 Kubernetes 部署、服務導流、Storage 與實務排查筆記。
@@ -40,6 +90,10 @@ Kubernetes 部署、服務導流、Storage 與實務排查筆記。
 [cols="35%,45%,20%", options="header"]
 |===
 |文件 |重點 |連結
+
+|CKAD 考古題與練習題
+|整理 CKAD 準備資源、練習題、kubectl create 常用指令、常見 YAML 範本與考場操作小抄。
+|link:k8s/ckad-practice-notes.html[開啟]
 
 |Kubernetes Ingress-nginx 導入與問題排除筆記
 |整理 Ingress-nginx、NodePort、ClusterIP、forwarded headers 與多層 proxy 導流問題。
@@ -61,6 +115,10 @@ Java Web 分層、資料物件命名與企業應用常見架構筆記。
 |Java MVC / MVVM 分層與 DTO、DAO、Entity、Repository 名詞說明
 |整理 MVC / MVVM、DTO、Entity、DAO、Mapper、Repository、Service 的用途與命名差異。
 |link:java/java-layering-dto-dao-entity.html[開啟]
+
+|Tomcat server.xml 設定
+|整理 Tomcat HTTP / HTTPS Connector、TLS 憑證格式、keystore / PEM 寫法與 server.xml 實務設定。
+|link:java/tomcat-server-xml.html[開啟]
 |===
 
 == Frontend
@@ -87,4 +145,17 @@ Web 安全 Header、瀏覽器安全規則與常見弱點名詞筆記。
 |資安名詞與 Web 安全 Header 說明
 |整理 COOP、COEP、CORP、CSP、HSTS、CORS、Cookie 與常見 Web 弱點名詞。
 |link:security/web-security-headers.html[開啟]
+|===
+
+== Tools
+
+開發工具、AI CLI 與工程工作流筆記。
+
+[cols="35%,45%,20%", options="header"]
+|===
+|文件 |重點 |連結
+
+|AI CLI 注意事項
+|整理 Codex、Claude Code、Gemini CLI 等工具使用策略，以及 Spec / Skill 對 CLI 成本與結果穩定性的影響。
+|link:tools/ai-cli-notes.html[開啟]
 |===

@@ -1,0 +1,390 @@
+= Docker Compose 整理
+V1.0, 2026-04-26
+:revnumber: 1.0
+:revdate: 中華民國115年04月26日
+:experimental:
+:icons: font
+:icon-set: fas
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 2
+:imagesdir:
+:sourcedir:
+:saltdir:
+:authors: Bucket.Hsu
+
+
+
+
+:doctype: book
+:media: prepress
+:chapter-signifier: 章
+:chapter-refsig: 章
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+:stylesheet: ../stylesheets/colony.css
+
+
+
+
+:last-update-label!:
+
+== 元件來源與授權
+
+=== Loki
+
+* 專案：Grafana Loki
+* 開發公司：Grafana Labs
+* 國籍：
+- 公司：美國
+- 開發團隊：歐洲（英國、法國為主）
+* 授權：Apache License 2.0
+* 是否開源：是
+
+'''
+
+=== Grafana
+
+
+== Docker Compose 常用功能整理（含範例）
+
+[cols="<.^1a,<.^2a,<.^4a", options="header"]
+|===
+| 功能分類 | 功能名稱 | 說明 + 範例
+
+| 基本控制
+| environment / .env
+| 管理環境變數
+
+[source,yaml]
+----
+services:
+  app:
+    image: your-app
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: ${DB_URL}
+----
+
+| 基本控制
+| restart
+| 容器異常自動重啟
+
+[source,yaml]
+----
+services:
+  app:
+    restart: always
+----
+
+| 基本控制
+| depends_on
+| 控制啟動順序（非可用性保證）
+
+[source,yaml]
+----
+services:
+  app:
+    depends_on:
+      db:
+        condition: service_healthy
+----
+
+| 健康監控
+| healthcheck
+| 檢查服務是否可用（建議 readiness）
+
+[source,yaml]
+----
+healthcheck:
+  test: ["CMD-SHELL", "curl -fs http://localhost:8080/actuator/health/readiness \|\| exit 1"]
+  interval: 20s
+  timeout: 5s
+  retries: 3
+  start_period: 60s
+----
+
+| 儲存
+| bind mount
+| 掛載 host 資料夾
+
+[source,yaml]
+----
+volumes:
+  - /mnt/share/upload:/app/upload
+----
+
+| 儲存
+| named volume
+| Docker 管理資料卷
+
+[source,yaml]
+----
+volumes:
+  db-data:
+
+services:
+  db:
+    volumes:
+      - db-data:/var/lib/mysql
+----
+
+| 網路
+| networks
+| service name 可當 DNS
+
+[source,yaml]
+----
+networks:
+  backend:
+
+services:
+  app:
+    networks:
+      - backend
+----
+
+| 建置
+| build
+| 從 Dockerfile 建 image
+
+[source,yaml]
+----
+services:
+  app:
+    build: .
+----
+
+| 共用設定
+| x- / anchor
+| 共用設定
+
+[source,yaml]
+----
+x-app-base: &app-base
+  image: your-app
+  restart: always
+
+services:
+  ap1:
+    <<: *app-base
+  ap2:
+    <<: *app-base
+----
+
+| 日誌
+| logging
+| 控制 log 輪替
+
+[source,yaml]
+----
+logging:
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+----
+
+| 叢集
+| deploy
+| 僅 Docker Swarm 有效
+
+[source,yaml]
+----
+deploy:
+  replicas: 3
+----
+
+|===
+
+== Volume 類型說明
+
+=== bind mount
+
+[source,yaml]
+----
+- /mnt/share/upload:/app/upload
+----
+
+=== named volume
+
+[source,yaml]
+----
+- db-data:/var/lib/mysql
+----
+
+'''
+
+== Volume 備份與搬移
+
+[source,bash]
+----
+docker run --rm \
+  -v db-data:/data \
+  -v $(pwd):/backup \
+  alpine \
+  tar czf /backup/db-data.tar.gz -C /data .
+----
+
+'''
+
+== 改用 NFS / CIFS（網路儲存）
+
+讓多台主機共用資料
+
+=== NFS（Linux 建議優先）
+
+==== host mount（推薦）
+
+[source,fstab]
+----
+fileserver.example.local:/data/nfs /mnt/nfs nfs defaults 0 0
+----
+
+[source,yaml]
+----
+- /mnt/nfs/upload:/app/upload
+----
+
+==== Compose 直接掛 NFS
+
+[source,yaml]
+----
+volumes:
+  nfs-data:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=fileserver.example.local,rw
+      device: ":/data/nfs/upload"
+
+services:
+  app:
+    volumes:
+      - nfs-data:/app/upload
+----
+
+'''
+
+=== CIFS / SMB（Windows 分享）
+
+==== host mount（推薦）
+
+[source,fstab]
+----
+ //fileserver.example.local/share /mnt/share cifs \
+ credentials=/root/.smbcred,vers=3.0 0 0
+----
+
+[source,yaml]
+----
+- /mnt/share/upload:/app/upload
+----
+
+==== Compose 直接掛 CIFS
+
+[source,yaml]
+----
+volumes:
+  cifs-data:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "//fileserver.example.local/share/upload"
+      o: "username=example_user,password=change-me,vers=3.0"
+
+services:
+  app:
+    volumes:
+      - cifs-data:/app/upload
+----
+
+'''
+
+== SELinux 注意事項（NFS / CIFS 對齊版）
+
+=== bind mount（通用）
+
+[source,yaml]
+----
+- /mnt/share/upload:/app/upload:z
+----
+
+說明：
+
+- :Z → 單 container
+- :z → 多 container
+
+'''
+
+=== NFS（SELinux）
+
+[source,fstab]
+----
+fileserver.example.local:/data/nfs /mnt/nfs nfs \
+context="system_u:object_r:container_file_t:s0" 0 0
+----
+
+📌 NFS 通常支援 SELinux context，比 CIFS 穩定
+
+'''
+
+=== CIFS（SELinux）
+
+[source,fstab]
+----
+ //fileserver.example.local/share /mnt/share cifs \
+ credentials=/root/.smbcred,vers=3.0,\
+ uid=1000,gid=1000,\
+ file_mode=0660,dir_mode=0770,\
+ context="system_u:object_r:container_file_t:s0" 0 0
+----
+
+'''
+
+=== Compose driver_opts（NFS / CIFS）
+
+[source,yaml]
+----
+volumes:
+  shared-data:
+    driver: local
+    driver_opts:
+      type: nfs   # 或 cifs
+      device: ":/data"   # CIFS 改 //ip/share
+      o: "addr=fileserver.example.local,rw,\
+context=system_u:object_r:container_file_t:s0"
+----
+
+📌 重點：
+
+- named volume 不能用 :z
+- 必須用 context
+
+'''
+
+== Docker Swarm
+
+:contentReference[oaicite:0]{index=0}
+
+[cols="1,2", options="header"]
+|===
+| 功能 | 說明
+
+| 多機管理 | 多台主機
+| 自動擴展 | replicas
+| 負載平衡 | 內建
+| 自動復原 | 有
+|===
+
+'''
+
+== 總結
+
+- bind mount → 最穩（推薦）
+- NFS → Linux 環境首選
+- CIFS → Windows 分享用
+- SELinux → 一定要處理 context
+- Compose volume → 可用但 debug 較難
