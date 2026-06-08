@@ -156,8 +156,8 @@ V1.0.0, 2026-04-16
     <SSLHostConfig hostName="_default_" protocols="TLSv1.2">
         <Certificate
             certificateKeystoreFile="D:/temp/keystore-with-chain.keystore"
-            certificateKeystorePassword="tpcwolsssl115"
-            certificateKeyAlias="tpcwolssl115" />
+            certificateKeystorePassword="********"
+            certificateKeyAlias="server-cert" />
     </SSLHostConfig>
 
     <UpgradeProtocol className="org.apache.coyote.http2.Http2Protocol" />
@@ -305,8 +305,8 @@ V1.0.0, 2026-04-16
     <SSLHostConfig hostName="_default_" protocols="TLSv1.2">
         <Certificate
             certificateKeystoreFile="D:/temp/keystore-with-chain.keystore"
-            certificateKeystorePassword="tpcwolsssl115"
-            certificateKeyAlias="tpcwolssl115" />
+            certificateKeystorePassword="********"
+            certificateKeyAlias="server-cert" />
     </SSLHostConfig>
 
     <UpgradeProtocol className="org.apache.coyote.http2.Http2Protocol" />
@@ -452,8 +452,8 @@ V1.0.0, 2026-04-16
     <SSLHostConfig hostName="_default_" protocols="TLSv1.2">
         <Certificate
             certificateKeystoreFile="D:/temp/keystore-with-chain.keystore"
-            certificateKeystorePassword="tpcwolsssl115"
-            certificateKeyAlias="tpcwolssl115" />
+            certificateKeystorePassword="********"
+            certificateKeyAlias="server-cert" />
     </SSLHostConfig>
 
     <UpgradeProtocol className="org.apache.coyote.http2.Http2Protocol" />
