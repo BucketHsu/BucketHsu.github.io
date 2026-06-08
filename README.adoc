@@ -1,0 +1,29 @@
+= BucketHsu 技術筆記
+Bucket.Hsu
+:toc:
+:toc-title: 目錄
+:toclevels: 2
+
+這個 repository 是 `https://buckethsu.github.io/` 的 AsciiDoc 靜態筆記來源。
+
+== 本機編譯
+
+[source,bash]
+----
+mvn -B -DskipTests generate-resources
+----
+
+編譯後 HTML 會產生在：
+
+[source,text]
+----
+target/generated-docs/
+----
+
+== GitHub Pages
+
+推送到 `main` 後，GitHub Actions 會編譯 AsciiDoc 並發布 `target/generated-docs/` 到 GitHub Pages。
+
+== 文件來源原則
+
+公開內容只保留可對外分享的通用技術筆記。搬移既有個人筆記時，需先移除公司名稱、內部 IP、真實帳密、客戶資訊、專案代號與不可公開截圖。

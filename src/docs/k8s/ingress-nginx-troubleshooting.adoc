@@ -1,0 +1,326 @@
+= Kubernetes Ingress-nginx 導入與問題排除筆記
+V1.0, 2026-04-10
+:experimental:
+:sectnums:
+:toc: left
+:toc-title: 大綱
+:toclevels: 3
+:imagesdir: images
+:sourcedir: uml
+:saltdir: salt
+:authors: Bucket.Hsu
+:doctype: book
+:chapter-label:
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+
+:stylesheet: ../stylesheets/colony.css
+
+
+
+:last-update-label!:
+:icons: font
+:icon-set: fas
+:iconfont-remote: true
+:iconfont-fontawesome:
+:favicon: images/favicon.ico
+
+== Kubernetes Ingress-nginx 導入與問題排除筆記
+
+=== 架構說明
+
+原始架構：
+
+----
+使用者 → 203.0.113.10 → 203.0.113.20 → NodePort(30081) → Pod
+----
+
+調整後架構：
+
+----
+使用者 → 203.0.113.10 → 203.0.113.20 → Ingress(30080) → Service(ClusterIP) → Pod
+----
+
+設計目標：
+
+* 使用者只需記住 `203.0.113.10`
+* 所有內部 IP（203.0.113.20 / 10.244.x.x）皆為轉發用途
+* 對外入口統一
+
+---
+
+=== 安裝 Helm
+
+[source,bash]
+----
+# 安裝 helm（snap）
+snap install helm
+
+# 確認版本
+helm version
+----
+
+---
+
+=== 安裝 ingress-nginx
+
+[source,bash]
+----
+# 加入 repo
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+
+# 更新 repo
+helm repo update
+
+# 安裝 ingress-nginx（使用 NodePort）
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --create-namespace \
+  --set controller.service.type=NodePort \
+  --set controller.service.nodePorts.http=30080 \
+  --set controller.service.nodePorts.https=30443
+----
+
+---
+
+=== 建立 Ingress
+
+[source,yaml]
+----
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sample-app-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /sample-app
+            pathType: Prefix
+            backend:
+              service:
+                name: sample-app-service
+                port:
+                  number: 8080
+----
+
+---
+
+=== 問題現象
+
+使用 ingress（30080）時：
+
+* 前端出現 CSP 錯誤
+* 錯誤訊息：
+
+----
+violates Content Security Policy "default-src 'self'"
+Failed to fetch
+----
+
+但改回 NodePort（30081）則正常
+
+---
+
+=== 問題原因
+
+原因為：
+
+* ingress-nginx 預設 **不信任上游 proxy 傳來的 header**
+* 會自行重建：
+
+[cols="1,2"]
+|===
+|Header |問題
+
+|X-Forwarded-Proto
+|被改成 http（原本應為 https）
+
+|Host
+|可能被重新解析
+
+|===
+
+導致後端或前端組出錯誤 URL：
+
+----
+http://203.0.113.10/...
+----
+
+而實際應為：
+
+----
+https://203.0.113.10/...
+----
+
+進而觸發：
+
+* CSP 阻擋
+* Mixed Content
+* API 呼叫失敗
+
+---
+
+=== 解決方式（ingress-nginx 設定）
+
+[source,bash]
+----
+helm upgrade ingress-nginx ingress-nginx/ingress-nginx \
+  -n ingress-nginx \
+  --reuse-values \
+  --set controller.config.use-forwarded-headers="true" \
+  --set controller.config.enable-real-ip="true" \
+  --set controller.config.compute-full-forwarded-for="true"
+----
+
+---
+
+=== 設定說明
+
+[cols="1,3", options="header"]
+|===
+|設定 |說明
+
+|use-forwarded-headers
+|信任上游 proxy 傳入的 X-Forwarded-* header
+
+|enable-real-ip
+|取得真實 client IP
+
+|compute-full-forwarded-for
+|保留完整 proxy chain
+
+|===
+
+---
+
+=== Nginx Proxy Header 傳遞
+
+所有 proxy 層需確保傳遞：
+
+[source,nginx]
+----
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-Host $host;
+proxy_set_header X-Forwarded-Port $server_port;
+----
+
+---
+
+=== 驗證 ingress
+
+[source,bash]
+----
+k get ingress
+k describe ingress sample-app-ingress
+----
+
+確認 backend：
+
+----
+sample-app-service:8080
+----
+
+---
+
+=== Service 從 NodePort 改為 ClusterIP
+
+修改前：
+
+[source,yaml]
+----
+type: NodePort
+----
+
+修改後：
+
+[source,yaml]
+----
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-app-service
+spec:
+  type: ClusterIP
+  selector:
+    app: sample-app
+  ports:
+    - port: 8080
+      targetPort: 8080
+----
+
+套用：
+
+[source,bash]
+----
+k apply -f sample-app-service.yaml
+----
+
+---
+
+=== 驗證 Service
+
+[source,bash]
+----
+k get svc sample-app-service
+----
+
+應為：
+
+----
+TYPE        ClusterIP
+PORT(S)     8080/TCP
+----
+
+---
+
+=== 最終架構
+
+----
+使用者
+  ↓
+203.0.113.10
+  ↓
+203.0.113.20 (nginx)
+  ↓
+ingress-nginx (NodePort 30080)
+  ↓
+Service (ClusterIP 8080)
+  ↓
+Pod
+----
+
+---
+
+=== 重點整理
+
+* ingress-nginx 預設 **不信任 forwarded headers**
+* 必須開啟 `use-forwarded-headers`
+* 多層 proxy 架構必須「一路傳遞 Host / Proto」
+* NodePort → ClusterIP 為標準收斂做法
+* 前端不得使用內部 IP（10.244.x.x）
+
+---
+
+=== 延伸建議
+
+* Spring Boot 設定：
+
+[source,yaml]
+----
+server:
+  forward-headers-strategy: framework
+----
+
+* 避免後端自行組錯 URL
+
+* 建議前端統一使用相對路徑：
+
+----
+/sample-app/api/xxx
+----
