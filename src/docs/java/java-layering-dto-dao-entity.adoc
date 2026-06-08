@@ -4,7 +4,7 @@ V1.0.0, 2026-06-05
 :icons: font
 :icon-set: fas
 :sectnums:
-:toc:
+:toc: left
 :toc-title: 大綱
 :toclevels: 3
 :imagesdir:
@@ -16,12 +16,10 @@ V1.0.0, 2026-06-05
 :table-caption: 表
 :figure-caption: 圖
 :source-highlighter: highlight.js
-
 :stylesheet: ../stylesheets/colony.css
-
-
-
+:index-link: ../index.html
 :last-update-label!:
+:nofooter:
 
 == 說明
 

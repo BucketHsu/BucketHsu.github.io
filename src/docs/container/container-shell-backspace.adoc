@@ -14,7 +14,9 @@ Bucket.Hsu
 :figure-caption: 圖
 :source-highlighter: highlight.js
 :stylesheet: ../stylesheets/colony.css
+:index-link: ../index.html
 :last-update-label!:
+:nofooter:
 
 == 問題
 

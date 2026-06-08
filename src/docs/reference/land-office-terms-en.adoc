@@ -3,9 +3,9 @@ Bucket.Hsu
 :experimental:
 :icons: font
 :sectnums:
-:toc:
+:toc: left
 :toc-title: 大綱
-:toclevels: 0
+:toclevels: 1
 :imagesdir: ../images
 :authors: Bucket.Hsu
 :doctype: book
@@ -14,8 +14,11 @@ Bucket.Hsu
 :figure-caption: 圖
 :source-highlighter: highlight.js
 :stylesheet: ../stylesheets/colony.css
+:index-link: ../index.html
 :last-update-label!:
+:nofooter:
 
+== 名詞對照
 
 [width="100%", cols="2,3",options="header"]
 |===
@@ -74,4 +77,3 @@ Bucket.Hsu
 | 登記原因 | Cause of registration
 | 登記簿謄本 | Land/Building Register Transcript
 |===
-

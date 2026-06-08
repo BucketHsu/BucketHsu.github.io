@@ -13,10 +13,6 @@ V1.0, 2026-04-26
 :sourcedir:
 :saltdir:
 :authors: Bucket.Hsu
-
-
-
-
 :doctype: book
 :media: prepress
 :chapter-signifier: 章
@@ -25,11 +21,9 @@ V1.0, 2026-04-26
 :figure-caption: 圖
 :source-highlighter: highlight.js
 :stylesheet: ../stylesheets/colony.css
-
-
-
-
+:index-link: ../index.html
 :last-update-label!:
+:nofooter:
 
 == 元件來源與授權
 

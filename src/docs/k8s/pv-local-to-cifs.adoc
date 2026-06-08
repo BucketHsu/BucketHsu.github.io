@@ -16,12 +16,10 @@ V1.0, 2026-04
 :table-caption: 表
 :figure-caption: 圖
 :source-highlighter: highlight.js
-
 :stylesheet: ../stylesheets/colony.css
-
-
-
+:index-link: ../index.html
 :last-update-label!:
+:nofooter:
 :icons: font
 :icon-set: fas
 :iconfont-remote: true
