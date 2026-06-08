@@ -1,0 +1,577 @@
+= 資安名詞與 Web 安全 Header 說明
+V1.0.0, 2026-06-05
+:experimental:
+:icons: font
+:icon-set: fas
+:sectnums:
+:toc:
+:toc-title: 大綱
+:toclevels: 3
+:imagesdir:
+:sourcedir: uml
+:saltdir: salt
+:authors: Bucket.Hsu
+:doctype: book
+:chapter-label: 章
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+
+:stylesheet: ../stylesheets/colony.css
+
+
+
+:last-update-label!:
+
+== 說明
+
+本文件整理企業 Web 系統常見資安名詞，重點放在 HTTP 安全 Header、瀏覽器同源 / 跨來源規則，以及弱掃、原碼檢測常見攻擊類型。
+
+適用情境：
+
+* Spring Boot / Tomcat / Nginx / Podman 部署的 Web 系統。
+* Thymeleaf、React、iframe、舊式 JSP 或前後端混合型系統。
+* 需要判斷弱掃建議是否能直接套用全站，或應分路徑、分資源設定的情境。
+
+== 核心觀念
+
+資安 Header 不是越嚴越好。 +
+正確作法是先確認頁面用途、是否需要 iframe、是否會載入跨來源圖片 / script / PDF / API，再決定全站或分路徑設定。
+
+常見判斷原則：
+
+* 登入頁、錯誤頁、靜態根目錄：通常可以套較嚴格 Header。
+* 舊維護系統、報表、PDF、外部 iframe：需先盤點資源來源，避免 COEP / CSP / frame-ancestors 造成頁面破版。
+* API：CORS 是瀏覽器跨來源讀取規則，不是授權機制；仍需後端身分驗證與權限檢查。
+* Cookie：`HttpOnly`、`Secure`、`SameSite` 是基本防護，但不能取代 CSRF token、權限檢查與伺服器端 session 控制。
+
+== 同源、同站與跨來源
+
+[cols="20%,30%,50%", options="header"]
+|===
+|名詞 |判斷方式 |說明
+
+|Origin
+|scheme + host + port
+|來源由協定、主機與 port 組成。例如 `https://example.com:443` 與 `http://example.com:80` 是不同來源。
+
+|Same-Origin
+|Origin 完全相同
+|同源政策會限制不同來源文件或 script 彼此互動，是瀏覽器的基本隔離機制。
+
+|Cross-Origin
+|scheme、host 或 port 任一不同
+|跨來源。常見於前端從 A 網站呼叫 B 網站 API、載入 CDN script、iframe 外部頁面。
+
+|Site
+|通常以 registrable domain 判斷
+|同站概念比同源寬。例如不同 subdomain 可能是 same-site，但不是 same-origin。
+
+|SameSite Cookie
+|依請求是否 same-site 判斷是否帶 Cookie
+|用來降低 CSRF 風險，但不是完整授權機制。
+|===
+
+== HTTP 安全 Header 名詞
+
+=== COOP
+
+[cols="25%,75%", options="header"]
+|===
+|項目 |說明
+
+|全名
+|Cross-Origin-Opener-Policy
+
+|用途
+|控制 `window.open()` 或新頂層頁面開啟後，是否與 opener 維持在同一個 browsing context group。
+
+|常見值
+|`same-origin`、`same-origin-allow-popups`、`unsafe-none`
+
+|常見設定
+|`Cross-Origin-Opener-Policy: same-origin`
+
+|效果
+|`same-origin` 會把不同來源的 opener 關係切開，降低 XS-Leaks 類型風險，也常與 COEP 搭配形成 cross-origin isolated 環境。
+
+|注意事項
+|若系統流程依賴 `window.opener` 回呼，例如外部登入、彈窗選取資料、第三方支付流程，直接全站套用可能造成流程失效。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Opener-Policy[MDN - Cross-Origin-Opener-Policy]
+|===
+
+=== COEP
+
+[cols="25%,75%", options="header"]
+|===
+|項目 |說明
+
+|全名
+|Cross-Origin-Embedder-Policy
+
+|用途
+|控制目前頁面是否允許載入跨來源資源，尤其是 `no-cors` 模式請求的資源。
+
+|常見值
+|`require-corp`、`credentialless`、`unsafe-none`
+
+|常見設定
+|`Cross-Origin-Embedder-Policy: require-corp`
+
+|效果
+|`require-corp` 代表跨來源資源必須明確允許，例如透過 CORS 或 CORP，否則瀏覽器會阻擋載入或使用。
+
+|注意事項
+|用在靜態根目錄、錯誤頁通常風險較低；用在舊系統全站可能阻擋圖片、script、iframe、PDF、報表或外部 CDN 資源。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy[MDN - Cross-Origin-Embedder-Policy]
+|===
+
+=== CORP
+
+[cols="25%,75%", options="header"]
+|===
+|項目 |說明
+
+|全名
+|Cross-Origin-Resource-Policy
+
+|用途
+|由資源端宣告「誰可以跨來源讀取或嵌入我」。
+
+|常見值
+|`same-origin`、`same-site`、`cross-origin`
+
+|常見設定
+|`Cross-Origin-Resource-Policy: same-origin`
+
+|效果
+|主要影響 `no-cors` 請求。瀏覽器可能仍送出請求，但會阻止回應內容被跨來源取用。
+
+|注意事項
+|若圖片、字型、script、PDF 需要被其他網域載入，不應直接設為 `same-origin`。需依資源類型分路徑設定。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/Security/Practical_implementation_guides/CORP[MDN - Cross-Origin Resource Policy]
+|===
+
+=== CSP
+
+[cols="25%,75%", options="header"]
+|===
+|項目 |說明
+
+|全名
+|Content-Security-Policy
+
+|用途
+|限制瀏覽器允許載入的 script、style、image、font、frame、connect 等資源來源。
+
+|常見設定
+|`Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'`
+
+|效果
+|可降低 XSS、惡意資源載入、資料外送與點擊劫持等風險。
+
+|注意事項
+|舊系統常有 inline script、inline style、第三方 CDN、報表 iframe；全站套嚴格 CSP 前需先盤點資源。可先用 `Content-Security-Policy-Report-Only` 觀察違規。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy[MDN - Content-Security-Policy]
+|===
+
+=== frame-ancestors
+
+[cols="25%,75%", options="header"]
+|===
+|項目 |說明
+
+|所屬 Header
+|Content-Security-Policy directive
+
+|用途
+|控制哪些來源可以把目前頁面放進 `<frame>`、`<iframe>`、`<object>`、`<embed>`。
+
+|常見設定
+|`Content-Security-Policy: frame-ancestors 'self'`
+
+|效果
+|`frame-ancestors 'none'` 等同禁止任何網站嵌入，效果接近 `X-Frame-Options: DENY`。
+
+|注意事項
+|`frame-ancestors` 不會被 `default-src` 取代，也不能靠 `<meta>` 設定。若系統需要被入口平台或同網域 iframe 嵌入，需明確列入允許來源。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors[MDN - CSP frame-ancestors]
+|===
+
+=== X-Frame-Options
+
+[cols="25%,75%", options="header"]
+|===
+|項目 |說明
+
+|用途
+|舊式防點擊劫持 Header，用來控制頁面是否可被 frame / iframe 嵌入。
+
+|常見值
+|`DENY`、`SAMEORIGIN`
+
+|常見設定
+|`X-Frame-Options: SAMEORIGIN`
+
+|效果
+|防止其他網站把系統頁面嵌入 iframe，降低 clickjacking 風險。
+
+|注意事項
+|`frame-ancestors` 彈性較高；實務上可同時設定 CSP `frame-ancestors` 與 `X-Frame-Options`，但需避免兩者規則互相矛盾。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Frame-Options[MDN - X-Frame-Options]
+|===
+
+=== HSTS
+
+[cols="25%,75%", options="header"]
+|===
+|項目 |說明
+
+|全名
+|HTTP Strict-Transport-Security
+
+|用途
+|要求瀏覽器後續以 HTTPS 存取該 host，避免降級到 HTTP。
+
+|常見設定
+|`Strict-Transport-Security: max-age=31536000; includeSubDomains`
+
+|效果
+|降低 HTTP downgrade、cookie 被明文傳輸與中間人攻擊風險。
+
+|注意事項
+|只應在 HTTPS 正常、憑證穩定、子網域都可支援 HTTPS 時設定 `includeSubDomains`。`preload` 更需確認所有子網域長期支援 HTTPS。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security[MDN - Strict-Transport-Security]
+|===
+
+=== Referrer-Policy
+
+[cols="25%,75%", options="header"]
+|===
+|項目 |說明
+
+|用途
+|控制瀏覽器送出 `Referer` Header 時包含多少來源資訊。
+
+|常見設定
+|`Referrer-Policy: strict-origin-when-cross-origin`
+
+|效果
+|降低 URL 中的敏感參數外洩到外站的風險。
+
+|注意事項
+|若外部系統依賴完整 Referer 判斷來源，調整後可能影響整合。正式系統不應把 token、身分證號、案件號等敏感資料放在 URL query string。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy[MDN - Referrer-Policy]
+|===
+
+=== Permissions-Policy
+
+[cols="25%,75%", options="header"]
+|===
+|項目 |說明
+
+|用途
+|控制頁面與 iframe 可否使用瀏覽器功能，例如 camera、microphone、geolocation、fullscreen。
+
+|常見設定
+|`Permissions-Policy: camera=(), microphone=(), geolocation=()`
+
+|效果
+|縮小瀏覽器功能濫用風險，尤其適合內部系統預設關閉不需要的高風險能力。
+
+|注意事項
+|若系統有掃描、拍照、定位、iframe fullscreen 等需求，需依功能開放，不應盲目全關。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy[MDN - Permissions-Policy]
+|===
+
+=== X-Content-Type-Options
+
+[cols="25%,75%", options="header"]
+|===
+|項目 |說明
+
+|用途
+|要求瀏覽器不要 MIME sniffing，避免把錯誤 MIME 的檔案當成 script 或 style 執行。
+
+|常見設定
+|`X-Content-Type-Options: nosniff`
+
+|效果
+|降低錯誤 Content-Type 導致的 script / style 執行風險。
+
+|注意事項
+|需同時確保靜態檔、下載檔、報表檔案都有正確 `Content-Type`。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Content-Type-Options[MDN - X-Content-Type-Options]
+|===
+
+=== CORS
+
+[cols="25%,75%", options="header"]
+|===
+|項目 |說明
+
+|全名
+|Cross-Origin Resource Sharing
+
+|用途
+|由伺服器透過 HTTP Header 告訴瀏覽器，哪些來源可以跨來源讀取資源。
+
+|常見 Header
+|`Access-Control-Allow-Origin`、`Access-Control-Allow-Methods`、`Access-Control-Allow-Headers`、`Access-Control-Allow-Credentials`
+
+|效果
+|允許符合規則的前端 JavaScript 讀取跨來源 API 回應。
+
+|注意事項
+|CORS 不是權限控管。即使 CORS 擋住瀏覽器讀取，後端 API 仍可能被非瀏覽器工具呼叫，因此仍需驗證登入、權限與 CSRF 風險。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS[MDN - CORS]
+|===
+
+=== Cookie 安全屬性
+
+[cols="25%,75%", options="header"]
+|===
+|屬性 |說明
+
+|`HttpOnly`
+|限制 JavaScript 讀取 Cookie，降低 XSS 直接竊取 session cookie 的風險。
+
+|`Secure`
+|要求 Cookie 只透過 HTTPS 傳送。
+
+|`SameSite=Lax`
+|大多數一般站台可用的預設方向，可降低 CSRF 風險並保留常見導頁相容性。
+
+|`SameSite=Strict`
+|更嚴格，跨站導頁通常不帶 Cookie，可能影響外部入口導回系統。
+
+|`SameSite=None; Secure`
+|跨站 iframe 或第三方情境可能需要，但必須搭配 HTTPS 與 `Secure`。
+
+|參考
+|https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie[MDN - Set-Cookie]
+|===
+
+== 常見攻擊名詞
+
+[cols="18%,32%,50%", options="header"]
+|===
+|名詞 |中文說明 |重點
+
+|XSS
+|跨站腳本攻擊
+|攻擊者讓惡意 script 在使用者瀏覽器中執行。防護重點是輸出編碼、避免危險 DOM API、CSP、HTML sanitize。
+
+|DOM XSS
+|DOM 型跨站腳本攻擊
+|風險點在前端 JavaScript 讀取不可信資料後寫入 DOM，例如 `innerHTML`、`document.write`。
+
+|CSRF
+|跨站請求偽造
+|攻擊者誘導已登入使用者的瀏覽器對可信網站送出狀態變更請求。防護包含 CSRF token、SameSite Cookie、檢查 Origin / Referer。
+
+|SQL Injection
+|SQL 注入
+|外部輸入被拼入 SQL，造成查詢條件或語法被竄改。防護重點是參數化查詢；table、column、order by 等 identifier 必須白名單。
+
+|Command Injection
+|命令注入
+|外部輸入被拼入 OS command。防護重點是避免 shell、固定參數白名單、使用安全 API。
+
+|Path Traversal
+|路徑穿越
+|使用 `../` 或變形路徑讀取 base directory 外的檔案。防護重點是 normalize 後確認仍位於允許根目錄內。
+
+|SSRF
+|伺服器端請求偽造
+|攻擊者控制伺服器去呼叫內網或雲端 metadata 服務。防護重點是 URL 白名單、阻擋內網 IP、限制協定與 redirect。
+
+|Open Redirect
+|開放重新導向
+|外部輸入控制 redirect 目的地，可能被用於釣魚或繞過信任流程。防護重點是只允許相對路徑或白名單網域。
+
+|IDOR / BOLA
+|不安全直接物件參照 / 物件層級授權失效
+|使用者可改 ID 存取不屬於自己的資料。防護重點是在每次查詢 / 修改時檢查資料歸屬與權限。
+
+|Broken Access Control
+|存取控制失效
+|權限檢查不完整，例如只檢查選單、不檢查 API，或只前端隱藏按鈕。防護重點是後端集中檢查。
+
+|Clickjacking
+|點擊劫持
+|攻擊者把頁面嵌入透明 iframe，誘導使用者點擊。防護使用 `frame-ancestors` 或 `X-Frame-Options`。
+
+|XS-Leaks
+|跨站資訊洩漏
+|利用瀏覽器行為差異推測使用者狀態或資料存在性。COOP、CORP、SameSite、CORS 與嚴格快取策略可降低部分風險。
+
+|XXE
+|XML 外部實體攻擊
+|XML parser 允許外部實體時，可能讀取本機檔案或觸發 SSRF。防護重點是關閉外部實體與 DTD。
+
+|Insecure Deserialization
+|不安全反序列化
+|反序列化不可信資料造成任意物件建立、指令執行或權限繞過。防護重點是避免反序列化外部輸入。
+
+|Sensitive Data Exposure
+|敏感資料外洩
+|密碼、token、身分證字號、案件資料等被記錄到 log、URL、錯誤訊息或前端。防護重點是遮罩、最小揭露與加密。
+
+|Security Misconfiguration
+|安全設定錯誤
+|例如 debug endpoint 暴露、錯誤頁顯示 stack trace、預設帳密、Header 缺漏。防護重點是環境基準與發佈檢查。
+
+|Credential Stuffing
+|帳密填充攻擊
+|攻擊者用外洩帳密大量嘗試登入。防護包含速率限制、登入失敗鎖定、MFA、異常偵測。
+
+|Rate Limiting
+|速率限制
+|限制同 IP、同帳號或同 API 在一定時間內的請求量，用於降低暴力破解與資源濫用。
+|===
+
+== Header 導入建議
+
+=== 可優先套用的低風險設定
+
+[source,http]
+----
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+----
+
+說明：
+
+* `nosniff` 通常適合全站，但需確保 Content-Type 正確。
+* `Referrer-Policy` 可降低 URL 洩漏。
+* `Permissions-Policy` 可先關閉內部系統不使用的瀏覽器能力。
+
+=== 需盤點後套用的設定
+
+[source,http]
+----
+Content-Security-Policy: default-src 'self'; object-src 'none'; base-uri 'self'
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+Cross-Origin-Resource-Policy: same-origin
+Content-Security-Policy: frame-ancestors 'self'
+----
+
+說明：
+
+* CSP 需盤點 inline script、CDN、圖片、字型、API、iframe。
+* COEP / CORP 需盤點跨來源資源。
+* COOP 需確認是否使用 `window.opener`。
+* `frame-ancestors` 需確認系統是否被入口平台 iframe 嵌入。
+
+=== HTTPS 環境確認後套用
+
+[source,http]
+----
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+----
+
+說明：
+
+* 僅適合 HTTPS 完整且穩定的環境。
+* `includeSubDomains` 會影響所有子網域。
+* `preload` 需更謹慎，通常不應在測試環境或尚未盤點完成的網域啟用。
+
+== 後端實作提醒
+
+=== SQL Injection
+
+* 一般資料值使用 `PreparedStatement`、MyBatis `#{}` 或 NamedParameter。
+* `order by`、table、column、schema 等 SQL identifier 不能直接參數化，必須白名單。
+* 不要把前端欄位名稱直接拼進 SQL。
+
+=== Path Traversal
+
+* 檔案名稱需限制允許字元與副檔名。
+* `normalize()` 後仍需確認目標路徑位於 base directory 內。
+* 下載檔案時不要直接信任前端傳入的完整路徑。
+
+=== Open Redirect
+
+* 優先使用固定路由或相對路徑。
+* 若需導外部系統，使用白名單網域。
+* 不要直接信任 `redirectUrl`、`returnUrl`、`next` 參數。
+
+=== SSRF
+
+* 後端不可直接依使用者輸入呼叫任意 URL。
+* 限制協定為 `https`，並設定網域白名單。
+* 阻擋 localhost、內網 IP、link-local、metadata IP 與 redirect 後變成內網的 URL。
+
+== 常見誤解
+
+[cols="35%,65%", options="header"]
+|===
+|誤解 |正確理解
+
+|CORS 可以當權限控管
+|CORS 只控制瀏覽器是否允許前端讀取跨來源回應，不是後端授權機制。
+
+|設定 `default-src 'self'` 就能取代 `frame-ancestors`
+|`frame-ancestors` 是獨立 directive，不會被 `default-src` 取代。
+
+|`frame-ancestors` 可以寫在 `<meta>`
+|`frame-ancestors` 必須由 HTTP Header 設定。
+
+|COEP / CORP 全站套用一定比較安全
+|舊系統可能因此擋掉跨來源圖片、script、iframe、PDF 或報表資源，需分路徑評估。
+
+|`HttpOnly` 可以防止所有 XSS
+|`HttpOnly` 只能降低 Cookie 被 JavaScript 讀取的風險，不能阻止 XSS 執行本身。
+
+|前端隱藏按鈕就等於有權限
+|權限必須在後端 API 檢查，前端只做操作體驗。
+
+|有 WAF 就不用修程式
+|WAF 是外層防護，不能取代參數化 SQL、權限檢查與安全編碼。
+|===
+
+== 參考資料
+
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Opener-Policy[MDN - Cross-Origin-Opener-Policy]
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy[MDN - Cross-Origin-Embedder-Policy]
+* https://developer.mozilla.org/en-US/docs/Web/Security/Practical_implementation_guides/CORP[MDN - Cross-Origin Resource Policy]
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy[MDN - Content-Security-Policy]
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/frame-ancestors[MDN - CSP frame-ancestors]
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Frame-Options[MDN - X-Frame-Options]
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security[MDN - Strict-Transport-Security]
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Referrer-Policy[MDN - Referrer-Policy]
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy[MDN - Permissions-Policy]
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Content-Type-Options[MDN - X-Content-Type-Options]
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS[MDN - CORS]
+* https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie[MDN - Set-Cookie]
+* https://owasp.org/Top10/2021/[OWASP Top 10:2021]
+* https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html[OWASP - XSS Prevention Cheat Sheet]
+* https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html[OWASP - CSRF Prevention Cheat Sheet]
+* https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html[OWASP - SQL Injection Prevention Cheat Sheet]
+* https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html[OWASP - SSRF Prevention Cheat Sheet]
+* https://owasp.org/www-community/attacks/Path_Traversal[OWASP - Path Traversal]

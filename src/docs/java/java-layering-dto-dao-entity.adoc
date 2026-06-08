@@ -1,0 +1,350 @@
+= Java MVC MVVM 分層與 DTO DAO Entity Repository 名詞說明
+V1.0.0, 2026-06-05
+:experimental:
+:icons: font
+:icon-set: fas
+:sectnums:
+:toc:
+:toc-title: 大綱
+:toclevels: 3
+:imagesdir:
+:sourcedir: uml
+:saltdir: salt
+:authors: Bucket.Hsu
+:doctype: book
+:chapter-label: 章
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+
+:stylesheet: ../stylesheets/colony.css
+
+
+
+:last-update-label!:
+
+== 說明
+
+本文件整理 Java Web 專案中常見的 MVC / MVVM 分層概念，以及 DTO、DAO、Entity、Repository、Mapper、Model 等名詞差異。
+
+適用情境：
+
+* Spring MVC / Spring Boot 專案。
+* Thymeleaf HTML 搭配 JavaScript `fetch` / `callAPI` 的維護畫面。
+* MyBatis Mapper 直接撰寫 SQL 的企業系統。
+* 需要判斷「畫面物件、API request、查詢結果、資料表資料」是否應拆開命名的情境。
+
+== 核心結論
+
+`Model` 是泛稱，不應長期承載所有責任。 +
+若同一個 class 同時放查詢條件、表單欄位、資料表欄位、列表顯示欄位與登入狀態，雖然程式可以執行，但後續會難以判斷該物件的真實用途。
+
+建議以用途拆分：
+
+* Request DTO：前端送入 API 的資料。
+* Response DTO：API 回傳前端的資料。
+* Query Row / List Item DTO：查詢列表的一列資料。
+* Entity：資料表的一筆資料。
+* Mapper / DAO：資料庫存取。
+* Service：業務規則、交易、權限與資料組合。
+
+== 名詞說明
+
+[cols="18%,24%,38%,20%", options="header"]
+|===
+|名詞 |主要用途 |說明 |常見命名
+
+|DTO
+|資料傳輸
+|Data Transfer Object。重點是「某個 API 或某個流程需要傳遞的資料」，不一定對應資料表。
+|`*Request`、`*Response`、`*ListItem`、`*QueryRow`
+
+|Request DTO
+|API 輸入
+|Controller 接收前端 JSON 時使用，欄位應只保留這支 API 需要的輸入。
+|`UserAdminQueryRequest`、`UserAdminSaveRequest`
+
+|Response DTO
+|API 輸出
+|Controller 回傳前端時使用，欄位應只保留畫面需要顯示或處理的資料。
+|`UserAdminQueryResponse`
+
+|Query Row DTO
+|查詢結果列
+|Mapper 查詢列表時回傳的一列資料。若 SQL 有 join、alias、計算欄位，通常比 Entity 更適合。
+|`UserAdminListItem`、`UserAdminQueryRow`
+
+|Entity
+|資料表資料
+|對應資料表的一筆資料，欄位通常接近 table column，不應混入畫面查詢條件。
+|`UserAccountEntity`
+
+|DAO
+|資料存取
+|Data Access Object。負責查詢、寫入、更新、刪除資料庫。
+|`*Dao`
+
+|Mapper
+|MyBatis 資料存取
+|MyBatis 專案中的 Mapper 通常就是 DAO 角色，負責 SQL 與資料映射。
+|`UserAdminMapper`
+
+|Repository
+|資料集合抽象
+|常見於 Spring Data JPA 或領域模型。若專案使用 MyBatis，通常不必為了名詞再包一層 Repository。
+|`UserAccountRepository`
+
+|Service
+|業務邏輯
+|處理權限、交易、規則、資料補值、跨資料表流程，並呼叫 Mapper / Repository。
+|`UserAdminService`
+
+|Model
+|泛稱
+|可指 Entity、DTO、Form、ViewModel 或畫面模型。若專案全部放在 `model` 套件，需靠 class 命名補足用途。
+|`UserAdminForm`
+
+|ViewModel
+|畫面狀態模型
+|MVVM 中供 View 綁定的畫面狀態。傳統 jQuery / 原生 JS 專案中，通常由 JavaScript 物件與頁面狀態共同扮演。
+|`user-admin.js` 內的 state / form object
+|===
+
+== MVC 與 MVVM 對照
+
+=== MVC 對照
+
+[cols="20%,35%,45%", options="header"]
+|===
+|MVC 角色 |在 Spring Web 中的對應 |說明
+
+|Model
+|DTO、Entity、Service、Mapper
+|後端資料、業務規則與資料庫存取的總稱。嚴格分層時，仍應再拆 DTO / Entity / Service / Mapper。
+
+|View
+|HTML / Thymeleaf
+|負責畫面結構、欄位、按鈕、表格與區塊。
+
+|Controller
+|Spring MVC Controller
+|接收 request，呼叫 Service，回傳 JSON 或頁面。
+|===
+
+=== MVVM 對照
+
+[cols="20%,35%,45%", options="header"]
+|===
+|MVVM 角色 |在傳統維護畫面中的對應 |說明
+
+|View
+|HTML / Thymeleaf
+|畫面 DOM 結構。
+
+|ViewModel
+|JavaScript
+|收集欄位、控制畫面狀態、呼叫 API、處理回傳結果並更新畫面。
+
+|Model
+|後端 DTO / Service / Mapper / Entity
+|真正的資料、業務規則與資料庫存取。
+|===
+
+== 從畫面到資料庫的流程
+
+=== 整體分層流程圖
+
+[source,text]
+----
+使用者
+  ↓ 操作畫面
+HTML / Thymeleaf（user-admin.html）
+  ↓ DOM event
+JavaScript（user-admin.js）
+  ↓ fetch JSON
+Spring MVC Controller（UserAdminController）
+  ↓ bind request body
+Request DTO（UserAdminQueryRequest）
+  ↓ 呼叫業務流程
+Service（UserAdminService）
+  ↓ 查詢 / 寫入
+Mapper / DAO（UserAdminMapper）
+  ↓ SQL
+Database（APP_USER / APP_ORGAN）
+  ↓ row data
+Query Row DTO / Entity
+  ↓ 組合回傳資料
+Response DTO（UserAdminQueryResponse）
+  ↓ JSON response
+JavaScript 更新畫面
+----
+
+=== 查詢 API 循序流程圖
+
+[source,text]
+----
+HTML（user-admin.html）
+  ↓ 使用者按下查詢
+JS（user-admin.js）
+  ↓ 收集查詢欄位
+Controller（UserAdminController）
+  ↓ JSON 轉 request DTO
+Request DTO（UserAdminQueryRequest）
+  ↓ queryAll(request, currentUser)
+Service（UserAdminService）
+  ↓ 權限與查詢範圍判斷
+Mapper / DAO（UserAdminMapper）
+  ↓ SELECT ...
+DB（APP_*）
+  ↓ ResultSet
+Mapper / DAO
+  ↓ List<UserAdminListItem>
+Service
+  ↓ 補業務欄位
+Controller
+  ↓ 包裝 state / msg / objList
+JS
+  ↓ 渲染列表
+HTML
+----
+
+== 建議分層命名
+
+[cols="22%,28%,50%", options="header"]
+|===
+|用途 |建議命名 |說明
+
+|查詢條件
+|`UserAdminQueryRequest`
+|只放查詢 API 會接收的欄位，例如 `empNo`、`empName`、`organNo`、`groupNos`。
+
+|新增帳號輸入
+|`UserAdminCreateRequest`
+|只放新增需要的欄位，例如帳號、姓名、密碼、單位、群組。
+
+|修改帳號輸入
+|`UserAdminUpdateRequest`
+|只放修改需要的欄位。若修改不允許改密碼，就不應放密碼欄位。
+
+|列表資料
+|`UserAdminListItem`
+|只放列表要顯示的欄位，例如帳號、姓名、機關名稱、停用狀態、最近登入時間。
+
+|資料表資料
+|`UserAccountEntity`
+|對應 `APP_USER` table，欄位接近資料表 column。
+
+|資料庫存取
+|`UserAdminMapper`
+|MyBatis SQL 介面，負責 select / insert / update / delete。
+
+|業務服務
+|`UserAdminService`
+|處理權限、交易、密碼規則、資料補值與 Mapper 呼叫。
+|===
+
+== 不建議全部放同一個 Model 的原因
+
+若把查詢條件、表單輸入、查詢結果、資料表欄位都放在同一個 `UserAdminForm`，會產生下列問題：
+
+* 無法從 class 名稱判斷用途。
+* Controller 接收資料時，可能不小心接受不該由前端傳入的欄位。
+* Mapper 查詢結果若有 join 欄位或 alias 欄位，會讓 Form model 越來越膨脹。
+* 新增、修改、查詢共用同一物件時，欄位是否必填會變得難判斷。
+* 回傳資料與資料表資料混在一起時，容易讓前端依賴不穩定欄位。
+
+`Model` 套件可以保留，但 class 命名要能說明用途。例如：
+
+[source,text]
+----
+com.example.model.sys.sa.UserAdminQueryRequest
+com.example.model.sys.sa.UserAdminListItem
+com.example.model.sys.sa.UserAdminSaveRequest
+com.example.model.sys.sa.UserAccountEntity
+----
+
+== Map 回傳與 DTO 回傳的差異
+
+[cols="22%,39%,39%", options="header"]
+|===
+|項目 |`List<Map<String, Object>>` |`List<UserAdminListItem>`
+
+|優點
+|改動快，SQL alias 可直接回前端，舊維護畫面相容性高。
+|型別明確，欄位可追蹤，JavaDoc 與 IDE 提示較完整。
+
+|缺點
+|欄位名稱靠字串，改名不容易被編譯器抓到。
+|需要建立 DTO 與 mapping，舊畫面若依賴大寫 key 可能要同步調整。
+
+|適用情境
+|既有舊功能、欄位很動態、短期先求穩定。
+|新功能、重要 API、會長期維護的列表或對外介面。
+|===
+
+== 實務建議
+
+=== 舊功能
+
+既有功能若已大量使用 `FeatureForm + List<Map<String, Object>>`，不建議一次全部重構。 +
+可以先維持既有行為，待該功能要大幅調整時，再從查詢結果開始拆成 `ListItem` 或 `QueryRow`。
+
+=== 新功能
+
+新功能建議從一開始就拆清楚：
+
+[source,text]
+----
+Controller  接收 Request DTO，回傳 Response DTO
+Service     處理業務規則
+Mapper      負責 SQL
+Entity      對應資料表
+ListItem    對應列表查詢結果
+----
+
+=== MyBatis 專案
+
+使用 MyBatis 時，通常 `Mapper` 已經扮演 DAO。除非有下列需求，否則不必硬再包一層 Repository：
+
+* 同一個業務資料需要跨多個 Mapper 組合。
+* 想隔離 MyBatis，未來可能換成 JPA 或其他資料存取技術。
+* 想讓 Service 不直接知道 SQL Mapper 的細節。
+
+== SYSSA001 範例對照
+
+[cols="25%,35%,40%", options="header"]
+|===
+|目前常見寫法 |建議拆分 |說明
+
+|`UserAdminForm`
+|`UserAdminQueryRequest`
+|查詢條件，不放新增 / 修改 / 查詢結果欄位。
+
+|`UserAdminForm`
+|`UserAdminSaveRequest`
+|新增或修改帳號資料。若新增與修改規則不同，可再拆 `CreateRequest` / `UpdateRequest`。
+
+|`List<Map<String, Object>>`
+|`List<UserAdminListItem>`
+|列表回傳資料。適合放 `organSName`、`logindt`、`pwdExpectedExpireDate` 等畫面欄位。
+
+|`APP_USER`
+|`UserAccountEntity`
+|資料表資料，不放 `q_` 查詢條件，也不放畫面專用欄位。
+
+|`UserAdminMapper`
+|維持 `UserAdminMapper`
+|MyBatis Mapper 已經是 DAO 角色。
+|===
+
+== 判斷原則
+
+新增或調整 class 時，可用下列問題判斷命名：
+
+* 這個物件是前端送進來的嗎？是，優先命名 `*Request`。
+* 這個物件是 API 回給前端的嗎？是，優先命名 `*Response` 或 `*ListItem`。
+* 這個物件是否一對一接近資料表？是，優先命名 `*Entity`。
+* 這個物件是否只負責 SQL？是，放在 Mapper / DAO。
+* 這個物件是否處理規則、權限、交易？是，放在 Service。
+
+若一個 class 同時符合多個答案，通常代表它需要拆分。

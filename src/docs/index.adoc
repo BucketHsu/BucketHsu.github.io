@@ -1,0 +1,90 @@
+= BucketHsu 技術筆記
+Bucket.Hsu
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 大綱
+:toclevels: 2
+:doctype: book
+:chapter-label:
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+:stylesheet: stylesheets/colony.css
+:last-update-label!:
+
+== 說明
+
+這裡整理個人可公開的工程筆記，內容以日後查閱、排查與實務判斷為主。
+
+筆記來源可能由個人工作筆記整理而來；公開前已去除公司名稱、內部 IP、真實帳密、客戶資訊與不可公開專案代號。
+
+== Network
+
+網路協定、連線分層、加密通道與檔案分享協定相關筆記。
+
+[cols="35%,45%,20%", options="header"]
+|===
+|文件 |重點 |連結
+
+|TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異
+|整理 TCP、TLS、SMB/CIFS、NFS 的分層概念、版本差異與連線失敗排查方向。
+|link:network/tls-tcp-smb-cifs-nfs.html[開啟]
+|===
+
+== Kubernetes
+
+Kubernetes 部署、服務導流、Storage 與實務排查筆記。
+
+[cols="35%,45%,20%", options="header"]
+|===
+|文件 |重點 |連結
+
+|Kubernetes Ingress-nginx 導入與問題排除筆記
+|整理 Ingress-nginx、NodePort、ClusterIP、forwarded headers 與多層 proxy 導流問題。
+|link:k8s/ingress-nginx-troubleshooting.html[開啟]
+
+|Kubernetes PV 由 Local 改為 CIFS / SMB CSI 筆記
+|整理 local PV 改為 SMB CSI PV/PVC 的設定、資料搬移、驗證與 rollback 重點。
+|link:k8s/pv-local-to-cifs.html[開啟]
+|===
+
+== Java
+
+Java Web 分層、資料物件命名與企業應用常見架構筆記。
+
+[cols="35%,45%,20%", options="header"]
+|===
+|文件 |重點 |連結
+
+|Java MVC / MVVM 分層與 DTO、DAO、Entity、Repository 名詞說明
+|整理 MVC / MVVM、DTO、Entity、DAO、Mapper、Repository、Service 的用途與命名差異。
+|link:java/java-layering-dto-dao-entity.html[開啟]
+|===
+
+== Frontend
+
+前端 HTML 結構、語意化元素與可維護性筆記。
+
+[cols="35%,45%,20%", options="header"]
+|===
+|文件 |重點 |連結
+
+|HTML5 語意化 Element 使用規範
+|整理常見 HTML5 語意化元素、使用情境與取代 `div` 的判斷方式。
+|link:frontend/html5-semantic-elements.html[開啟]
+|===
+
+== Security
+
+Web 安全 Header、瀏覽器安全規則與常見弱點名詞筆記。
+
+[cols="35%,45%,20%", options="header"]
+|===
+|文件 |重點 |連結
+
+|資安名詞與 Web 安全 Header 說明
+|整理 COOP、COEP、CORP、CSP、HSTS、CORS、Cookie 與常見 Web 弱點名詞。
+|link:security/web-security-headers.html[開啟]
+|===

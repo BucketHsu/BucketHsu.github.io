@@ -21,3 +21,12 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+
+### BucketHsu GitHub Pages ###
+target/
+.idea/
+*.iml
+
+### OS ###
+.DS_Store
+Thumbs.db
