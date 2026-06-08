@@ -97,14 +97,72 @@
                         </goals>
                         <configuration>
                             <outputDirectory>${project.build.directory}/generated-docs</outputDirectory>
+                            <overwrite>true</overwrite>
                             <resources>
                                 <resource>
                                     <directory>${project.basedir}/src/docs</directory>
                                     <includes>
                                         <include>.nojekyll</include>
+                                        <include>img/**</include>
                                         <include>stylesheets/**</include>
                                         <include>images/**</include>
                                         <include>**/images/**</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/src/docs/img</directory>
+                                    <targetPath>container/img</targetPath>
+                                    <includes>
+                                        <include>*.svg</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/src/docs/img</directory>
+                                    <targetPath>frontend/img</targetPath>
+                                    <includes>
+                                        <include>*.svg</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/src/docs/img</directory>
+                                    <targetPath>java/img</targetPath>
+                                    <includes>
+                                        <include>*.svg</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/src/docs/img</directory>
+                                    <targetPath>k8s/img</targetPath>
+                                    <includes>
+                                        <include>*.svg</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/src/docs/img</directory>
+                                    <targetPath>network/img</targetPath>
+                                    <includes>
+                                        <include>*.svg</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/src/docs/img</directory>
+                                    <targetPath>reference/img</targetPath>
+                                    <includes>
+                                        <include>*.svg</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/src/docs/img</directory>
+                                    <targetPath>security/img</targetPath>
+                                    <includes>
+                                        <include>*.svg</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/src/docs/img</directory>
+                                    <targetPath>tools/img</targetPath>
+                                    <includes>
+                                        <include>*.svg</include>
                                     </includes>
                                 </resource>
                             </resources>
