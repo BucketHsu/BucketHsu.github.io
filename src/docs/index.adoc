@@ -13,6 +13,7 @@ Bucket.Hsu
 :source-highlighter: highlight.js
 :stylesheet: stylesheets/colony.css
 :last-update-label!:
+:nofooter:
 
 == 說明
 

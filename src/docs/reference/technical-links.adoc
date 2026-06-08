@@ -14,8 +14,11 @@ Bucket.Hsu
 :figure-caption: 圖
 :source-highlighter: highlight.js
 :stylesheet: ../stylesheets/colony.css
+:index-link: ../index.html
 :last-update-label!:
+:nofooter:
 
+== 常用連結
 
 * link:https://mvnrepository.com/[icon:external-link[set=fas] MVN Reposityory ^]
 * link:https://www.webjars.org/[icon:external-link[set=fas] WebJars ^]
@@ -28,4 +31,3 @@ Bucket.Hsu
 * link:https://sweetalert2.github.io/[icon:external-link[set=fas] SweetAlert2官方 ^]
 * link:https://animate.style/[icon:external-link[set=fas] Animate.css官方 ^]
 * link:https://tlcl.github.io/[icon:external-link[set=fas] Linux 命令列大全 ^]
-

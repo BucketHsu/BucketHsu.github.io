@@ -13,10 +13,6 @@ V1.0, 2026-04-16
 :sourcedir:
 :saltdir:
 :authors: Bucket.Hsu
-
-
-
-
 :doctype: book
 :media: prepress
 :chapter-signifier: 章
@@ -25,11 +21,9 @@ V1.0, 2026-04-16
 :figure-caption: 圖
 :source-highlighter: highlight.js
 :stylesheet: ../stylesheets/colony.css
-
-
-
-
+:index-link: ../index.html
 :last-update-label!:
+:nofooter:
 
 == 主流 CLI 工具比較（2026 現況）
 

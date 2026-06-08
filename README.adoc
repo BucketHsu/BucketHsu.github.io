@@ -6,6 +6,8 @@ Bucket.Hsu
 
 這個 repository 是 `https://buckethsu.github.io/` 的 AsciiDoc 靜態筆記來源。
 
+AsciiDoc 會透過 Maven 與 `spring-asciidoctor-backends` 的 `spring-html` backend 產生靜態 HTML，輸出後再由 GitHub Pages 發布。
+
 == 本機編譯
 
 [source,bash]
@@ -22,7 +24,7 @@ target/generated-docs/
 
 == GitHub Pages
 
-推送到 `main` 後，GitHub Actions 會編譯 AsciiDoc 並發布 `target/generated-docs/` 到 GitHub Pages。
+推送到 `main` 後，GitHub Actions 會使用 Maven 編譯 AsciiDoc，並發布 `target/generated-docs/` 到 GitHub Pages。
 
 == 授權與使用限制
 

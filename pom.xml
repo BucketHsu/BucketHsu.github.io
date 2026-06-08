@@ -17,6 +17,7 @@
         <asciidoctorj.version>3.0.1</asciidoctorj.version>
         <asciidoctorj.diagram.version>3.1.0</asciidoctorj.diagram.version>
         <jruby.version>9.4.12.0</jruby.version>
+        <spring-asciidoctor-backends.version>0.0.7</spring-asciidoctor-backends.version>
         <maven.resources.plugin.version>3.3.1</maven.resources.plugin.version>
     </properties>
 
@@ -42,11 +43,17 @@
                         <artifactId>asciidoctorj-diagram</artifactId>
                         <version>${asciidoctorj.diagram.version}</version>
                     </dependency>
+                    <dependency>
+                        <groupId>io.spring.asciidoctor.backends</groupId>
+                        <artifactId>spring-asciidoctor-backends</artifactId>
+                        <version>${spring-asciidoctor-backends.version}</version>
+                    </dependency>
                 </dependencies>
                 <configuration>
                     <sourceDirectory>${project.basedir}/src/docs</sourceDirectory>
                     <outputDirectory>${project.build.directory}/generated-docs</outputDirectory>
-                    <backend>html5</backend>
+                    <backend>spring-html</backend>
+                    <embedAssets>true</embedAssets>
                     <relativeBaseDir>true</relativeBaseDir>
                     <preserveDirectories>true</preserveDirectories>
                     <requires>
@@ -55,11 +62,15 @@
                     <attributes>
                         <icons>font</icons>
                         <iconfont-remote>true</iconfont-remote>
-                        <source-highlighter>highlight.js</source-highlighter>
+                        <data-uri>true</data-uri>
+                        <source-highlighter>highlightjs</source-highlighter>
+                        <docinfo>shared</docinfo>
+                        <linkcss>true</linkcss>
+                        <stylesdir>stylesheets</stylesdir>
+                        <stylesheet>colony.css</stylesheet>
                         <sectanchors>true</sectanchors>
                         <idprefix/>
                         <idseparator>-</idseparator>
-                        <last-update-label/>
                     </attributes>
                 </configuration>
                 <executions>
@@ -93,6 +104,7 @@
                                         <include>.nojekyll</include>
                                         <include>stylesheets/**</include>
                                         <include>images/**</include>
+                                        <include>**/images/**</include>
                                     </includes>
                                 </resource>
                             </resources>
