@@ -146,6 +146,10 @@ Web 安全 Header、瀏覽器安全規則與常見弱點名詞筆記。
 |資安名詞與 Web 安全 Header 說明
 |整理 COOP、COEP、CORP、CSP、HSTS、CORS、Cookie 與常見 Web 弱點名詞。
 |link:security/web-security-headers.html[開啟]
+
+|加密、Hash、HMAC 與簽章基礎說明
+|整理對稱加密、非對稱加密、Hash、HMAC、數位簽章、憑證、JWT、密碼儲存與常見誤解。
+|link:security/web-crypto-basics.html[開啟]
 |===
 
 == Tools
