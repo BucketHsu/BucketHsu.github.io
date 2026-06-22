@@ -117,6 +117,10 @@ Java Web 分層、資料物件命名與企業應用常見架構筆記。
 |整理 MVC / MVVM、DTO、Entity、DAO、Mapper、Repository、Service 的用途與命名差異。
 |link:java/java-layering-dto-dao-entity.html[開啟]
 
+|字元、字集與編碼整理
+|整理 ASCII、ISO-8859-1、Big5、MS950、UTF-8、UTF-16、Java String、資料庫、網頁與 PDF 報表之間的編碼邊界與常見亂碼排查方式。
+|link:java/character-encoding-guide.html[開啟]
+
 |Tomcat server.xml 設定
 |整理 Tomcat HTTP / HTTPS Connector、TLS 憑證格式、keystore / PEM 寫法與 server.xml 實務設定。
 |link:java/tomcat-server-xml.html[開啟]
