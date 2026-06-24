@@ -154,6 +154,10 @@ Web 安全 Header、瀏覽器安全規則與常見弱點名詞筆記。
 |加密、Hash、HMAC 與簽章基礎說明
 |整理對稱加密、非對稱加密、Hash、HMAC、數位簽章、憑證、JWT、密碼儲存與常見誤解。
 |link:security/web-crypto-basics.html[開啟]
+
+|數位憑證觀念與 Web Server 部署指南
+|整理常見憑證格式副檔名（cer/crt, p12/pfx）、CSR 申請、憑證鏈順序，以及 Tomcat、Spring Boot、Nginx、IIS、Apache、HAProxy 的 HTTPS 部署設定與常用指令。
+|link:security/digital-certificates-guide.html[開啟]
 |===
 
 == Tools
