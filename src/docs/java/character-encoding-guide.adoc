@@ -596,32 +596,225 @@ new String(HexUtil.toByteArray(hexValue), "MS950")
 
 修正後才能讓 Java `String` 保留對應的 Unicode 私用區或擴充字碼位，後續造字圖片流程才有機會正確處理。
 
-== b5ToCp 與 b5eToCp 對照表
+== Big5 自造字區間、MS950 與 Unicode 對應
 
-有些舊系統會保留 Big5 對照表，例如：
+Big5 自造字不是 Unicode 已統一定義的標準字元。Big5 byte、Unicode 碼位及字型 glyph 必須使用同一版對照，否則同一個碼值可能顯示成不同字，或完全無法顯示。
 
-[cols="28%,72%", options="header"]
+本章所稱「Big5 自造字區」需區分下列兩種範圍：
+
+* 全字庫所列 Big5 使用者造字區共有 3 段、5,809 碼。
+* Windows code page 950 的 EUDC 範圍另包含 `C6A1-C8FE`，共有 4 段、6,217 碼。
+
+兩者不可只以「Big5」概括。Big5-1984、Big5-ETen、Big5-2003、Microsoft CP950、Java `Big5` 與 Java `MS950` 對擴充區的處理可能不同。
+
+=== Big5 雙位元碼的排列方式
+
+Big5 中文及全形字元通常使用 2 bytes：
+
+* 第一個 byte 為 lead byte，常見範圍是 `81-FE`。
+* 第二個 byte 為 trail byte，可使用 `40-7E` 或 `A1-FE`。
+* `7F` 及 `80-A0` 不在一般 Big5 trail byte 範圍內。
+* 一個完整 lead byte 可排列 `63 + 94 = 157` 個雙位元碼。
+
+因此 `FA40-FEFE` 並不是把 `FA40` 到 `FEFE` 的所有十六進位值都算進去；每一列都要跳過無效的 trail byte。
+
+=== Big5 使用者造字區
+
+全字庫所列的 Big5 使用者造字區如下：
+
+[cols="24%,18%,22%,36%", options="header"]
 |===
-|檔案 |用途
+|區段 |Big5 範圍 |可用碼數 |說明
 
-|`b5ToCp.properties`
-|標準 Big5 byte 碼對應 Unicode code point，例如 `A140=3000`、`A147=FF1A`。
+|第一段
+|`FA40-FEFE`
+|785
+|早期造字最常見的高碼區。
 
-|`b5eToCp.properties`
-|Big5 擴充區 byte 碼對應 Unicode code point，例如 `8140=7E27`。`b5e` 可理解為 Big5 Extension。
+|第二段
+|`8E40-A0FE`
+|2,983
+|低 lead byte 擴充區。
+
+|第三段
+|`8140-8DFE`
+|2,041
+|低 lead byte 擴充區。
+
+|合計
+|3 段
+|5,809
+|各段均依 Big5 合法 trail byte 計算。
 |===
 
-這類表適合用於自行查表轉碼，例如：
+參考：link:https://www.cns11643.gov.tw/pageView.jsp?ID=9&SN=&la=0&lang=tw[全字庫－中文碼介紹]。
+
+=== Windows CP950 EUDC 與 Java MS950 對應
+
+Microsoft 對 code page 950 宣告的 EUDC 範圍是 `8140-8DFE`、`8E40-A0FE`、`C6A1-C8FE`、`FA40-FEFE`。其中 `C6A1-C8FE` 有 408 碼，因此 Windows EUDC 範圍合計 6,217 碼。
+
+Java `MS950` 會把這 4 段依下列順序映射到 Unicode 基本多文種平面（BMP）的私用區。UTF-8 欄位是該 Unicode 區間兩端編碼後的 bytes，不是另一份造字對照表。
+
+[cols="18%,12%,20%,25%,25%", options="header"]
+|===
+|Big5 / MS950 bytes |碼數 |Java `MS950` 解碼結果 |UTF-8 起點 |UTF-8 終點
+
+|`FA40-FEFE`
+|785
+|`U+E000-U+E310`
+|`EE 80 80`
+|`EE 8C 90`
+
+|`8E40-A0FE`
+|2,983
+|`U+E311-U+EEB7`
+|`EE 8C 91`
+|`EE BA B7`
+
+|`8140-8DFE`
+|2,041
+|`U+EEB8-U+F6B0`
+|`EE BA B8`
+|`EF 9A B0`
+
+|`C6A1-C8FE`
+|408
+|`U+F6B1-U+F848`
+|`EF 9A B1`
+|`EF A1 88`
+
+|合計
+|6,217
+|`U+E000-U+F848`
+|`EE 80 80`
+|`EF A1 88`
+|===
+
+參考：link:https://learn.microsoft.com/en-us/windows/win32/intl/eudccoderange[Microsoft EUDCCodeRange]。上表的 Unicode 對應亦可由 Java `MS950` charset 驗證。
+
+典型轉換如下：
 
 [source,text]
 ----
-Big5 bytes A1 47
-  -> 查 b5ToCp.properties
-  -> A147=FF1A
-  -> Unicode U+FF1A，全形冒號
+MS950 bytes FA 40
+  -> Java MS950 decode
+  -> Unicode U+E000
+  -> UTF-8 bytes EE 80 80
+
+MS950 bytes 81 40
+  -> Java MS950 decode
+  -> Unicode U+EEB8
+  -> UTF-8 bytes EE BA B8
 ----
 
-但若 Java / JVM 已提供可用 charset，例如 `MS950` 可正確解碼目前資料，通常不需要自行查表。查表方式適合處理 Java 內建 charset 無法涵蓋、或需要完全依舊系統碼表重現的情境。
+Unicode BMP 私用區的完整範圍是 `U+E000-U+F8FF`，共有 6,400 個碼位；Java `MS950` 上述映射使用到 `U+F848`，尚有 `U+F849-U+F8FF` 共 183 個碼位未由這 4 段 MS950 bytes 對應。私用區只保留碼位，不規定字義及字形；`U+E000` 在不同機關、專案或字型中可能代表完全不同的字。
+
+參考：link:https://www.unicode.org/faq/private_use.html[Unicode 私用字元說明]。
+
+=== `C6A1-C8FE` 的相容性風險
+
+`C6A1-C8FE` 是最需要特別確認的區段。它在不同 Big5 衍生版本中可能是符號、日文假名、保留區或 EUDC，不能只看 bytes 就判斷字義。
+
+例如在 Java 中：
+
+[cols="22%,30%,48%", options="header"]
+|===
+|bytes |charset |解碼結果
+
+|`C6 A1`
+|`Big5`
+|`U+30FE`，日文片假名重複記號。
+
+|`C6 A1`
+|`MS950`
+|`U+F6B1`，Unicode 私用區碼位。
+|===
+
+所以自造字資料不可在 `Big5`、`MS950`、Big5-HKSCS 或瀏覽器的 `big5` 解碼器之間任意替換。正式轉換前至少要保存並確認：
+
+* 原始 Big5 / MS950 bytes。
+* 使用的 charset 名稱與 Java / 作業系統版本。
+* 造字對照表版本。
+* 配套字型檔及其版本或雜湊值。
+
+=== `kaiu.ttf` 與 `EUDC.TTE` 的差別
+
+常見造字套件可能同時提供完整中文字型與獨立 EUDC 字型。獨立檔案的副檔名可能是 `.TTE`，其內容仍屬 TrueType 字型資料，但用途與完整的 `.ttf` 中文字型不同。
+
+以下為整合造字版本常見的檔案差異；實際涵蓋範圍仍應以各檔案的 cmap 檢查結果為準：
+
+[cols="18%,20%,22%,40%", options="header"]
+|===
+|檔案 |字型家族 |cmap 涵蓋範圍 |通常用途
+
+|`kaiu.ttf`
+|`DFKai-SB`／標楷體
+|一般拉丁文、符號、常用中文字及 `U+E000-U+F848`
+|完整楷體字型，可直接指定為畫面或 PDF 字型；整合造字版本可能已把 MS950 EUDC 對應的私用區 glyph 併入字型。
+
+|`MingLiU.ttf`
+|`MingLiU`／細明體
+|一般拉丁文、符號、常用中文字及 `U+E000-U+F848`
+|完整明體字型，結構與整合造字版 `kaiu.ttf` 類似，但字形風格不同。
+
+|`EUDC.TTE`
+|`EUDC`
+|通常只涵蓋 Unicode 私用區，例如 `U+E000-U+F848` 或 `U+E000-U+F8FF`
+|獨立的 EUDC 字型，通常由 Windows GDI 經登錄設定連結到目前字型；不是用來單獨顯示一般中英文的完整字型。
+|===
+
+部分 Windows 造字安裝程式會設定下列使用者登錄，將獨立 EUDC 字型設為 code page 950 的預設造字字型：
+
+[source,text]
+----
+HKEY_CURRENT_USER\EUDC\950
+  SystemDefaultEUDCFont=<EUDC 字型檔路徑>
+----
+
+Windows GDI 顯示私用區字元時，會先尋找目前字型的關聯 EUDC 字型，找不到時再查 `SystemDefaultEUDCFont`。因此文字本身即使已是 `U+E000`，仍要有內容相符的 EUDC 字型才看得到正確字形。參考：link:https://learn.microsoft.com/en-us/windows/win32/intl/eudc[Microsoft EUDC 登錄設定]。
+
+=== Windows、Java、Web 與 PDF 的顯示差異
+
+[cols="20%,32%,48%", options="header"]
+|===
+|環境 |字型取得方式 |注意事項
+
+|Windows 傳統 GDI 程式
+|可使用 `HKEY_CURRENT_USER\EUDC\950` 的字型連結
+|需確認非 Unicode 程式語言、code page 950、登錄值及 EUDC 檔案路徑一致。
+
+|Java AWT / Swing
+|Java 邏輯字型 fallback、作業系統字型或程式明確載入
+|不應假設所有 JVM 都會完全沿用 Windows EUDC 登錄。可用 `Font.createFont(...)` 載入明確字型後測試。
+
+|瀏覽器
+|CSS `font-family`、`@font-face`、`woff` 或 `woff2`
+|伺服器送出 UTF-8 只保證碼位正確，不保證用戶端具備相同 PUA glyph。
+
+|PDF / JasperReports / iText
+|報表指定或嵌入的字型
+|通常不會自動套用 Windows EUDC 字型連結。應明確使用含該 PUA glyph 的完整字型，或配置字型 fallback / 圖片替換。
+|===
+
+若 PDF 同時包含一般中文字及自造字，使用已含 `U+E000-U+F848` 的完整 `kaiu.ttf` 或 `MingLiU.ttf`，通常比只嵌入 `EUDC.TTE` 容易維持單一字型流程；但仍須先確認 glyph 對照與原系統相同，並確認字型授權是否允許部署及嵌入。
+
+=== 自造字轉 Unicode 的處理原則
+
+私用區轉成 UTF-8，只是把私用區碼位改用 UTF-8 bytes 保存，並沒有把自造字變成 Unicode 標準字。
+
+[source,text]
+----
+FA40 -> U+E000 -> EE 80 80
+----
+
+上例只能保證碼位可通過 UTF-8 系統傳輸。接收端若沒有同一套字型，`U+E000` 仍可能顯示空白、方框或另一個字。
+
+若全字庫或 Unicode 已收錄該字，長期做法應建立經確認的「原始 MS950 bytes / PUA 碼位 / 正式 Unicode 碼位」對照，再逐字遷移。不可直接用碼位位移或字型外觀猜測正式 Unicode，因為：
+
+* 同一個 PUA 碼位可由不同單位定義成不同字。
+* 同一字可能已有 BMP、CJK Extension B 以上的補充平面碼位，或異體字序列。
+* 補充平面字元在 Java `String` 中使用 surrogate pair，不能只用單一 `char` 處理。
+* 轉成正式 Unicode 後，仍要確認網頁與 PDF 字型具有對應 glyph。
 
 == 常見錯誤與正確寫法
 
