@@ -171,4 +171,8 @@ Web 安全 Header、瀏覽器安全規則與常見弱點名詞筆記。
 |AI CLI 注意事項
 |整理 Codex、Claude Code、Gemini CLI 等工具使用策略，以及 Spec / Skill 對 CLI 成本與結果穩定性的影響。
 |link:tools/ai-cli-notes.html[開啟]
+
+|套件依賴更新流程
+|整理 pnpm、npm、Maven 與 Gradle 的版本盤點、套件更新、lockfile 處理、建置測試、異動檢視與提交流程。
+|link:tools/dependency-update-guide.html[開啟]
 |===
