@@ -6,34 +6,53 @@ Bucket.Hsu
 
 這個 repository 是 `https://buckethsu.github.io/` 的技術筆記來源。
 
+== 文件網站入口
+
+* GitHub Pages：`https://buckethsu.github.io/`
+* Antora 首頁：`docs/modules/ROOT/pages/index.adoc`
+* Antora 導覽：`docs/modules/ROOT/nav.adoc`
+* 文件撰寫規範：`docs/modules/ROOT/pages/contributing/writing-style.adoc`
+
+== 建置路徑
+
 目前文件同時保留兩條建置路徑：
 
 * Maven + `asciidoctor-maven-plugin` + `spring-asciidoctor-backends`：
   產生既有單頁 HTML 文件，方便維持原本 AsciiDoc 輸出流程。
 * Antora：
-  產生接近 Spring 官方文件風格的多頁文件網站，作為 GitHub Pages 的站點輸出。
+  產生多頁文件網站，作為 GitHub Pages 的站點輸出。
 
 == 快速啟動
 
 [source,bash]
 ----
-mvn -B -DskipTests generate-resources
 npm ci
+mvn -B -DskipTests generate-resources
 npm run docs:site
 ----
 
-== 文件網站入口
-
-* GitHub Pages：`https://buckethsu.github.io/`
-* Antora 來源入口：`docs/modules/ROOT/pages/index.adoc`
-* Antora 導覽設定：`docs/modules/ROOT/nav.adoc`
-
 == 本機建置
+
+只產生 Maven AsciiDoc HTML：
 
 [source,bash]
 ----
 mvn -B -DskipTests generate-resources
+----
+
+只產生 Antora 文件網站：
+
+[source,bash]
+----
+npm ci
 npm run docs:antora
+----
+
+完整產生 GitHub Pages 使用的站點內容：
+
+[source,bash]
+----
+npm run docs:site
 ----
 
 建置後會產生：
@@ -48,13 +67,29 @@ target/generated-docs/site/
 
 推送到 `main` 後，GitHub Actions 會先驗證 Maven AsciiDoc 建置，再建立 Antora 文件網站，最後發布 `target/generated-docs/site/` 到 GitHub Pages。
 
+workflow 位置：
+
+[source,text]
+----
+.github/workflows/pages.yml
+----
+
+== 新增或調整文件
+
+新增文件時，通常需要同步確認：
+
+* 文件是否放在 `docs/modules/ROOT/pages/` 底下的合適分類目錄。
+* `docs/modules/ROOT/nav.adoc` 是否需要加入導覽連結。
+* `docs/modules/ROOT/pages/index.adoc` 是否需要加入首頁分類表格。
+* 文字風格是否符合文件撰寫規範。
+
 == 開發者常用指令
 
 [source,bash]
 ----
 git status
-mvn -B -DskipTests generate-resources
 npm ci
+mvn -B -DskipTests generate-resources
 npm run docs:antora
 npm run docs:site
 ----
@@ -68,7 +103,3 @@ npm run docs:site
 公開 repository 仍可能依 GitHub 服務功能被瀏覽與 fork；這不代表取得上述再利用授權。
 
 第三方樣式表、圖片或外部元件仍依其原始授權或權利聲明使用。
-
-== 文件來源原則
-
-公開內容只保留可對外分享的通用技術筆記。搬移既有個人筆記時，需先移除公司名稱、內部 IP、真實帳密、客戶資訊、專案代號與不可公開截圖。
