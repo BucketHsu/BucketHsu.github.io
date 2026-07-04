@@ -1,33 +1,97 @@
 = 架構
 Bucket.Hsu
+:experimental:
+:icons: font
+:sectnums:
 :toc: left
 :toc-title: 目錄
-:toclevels: 2
+:toclevels: 3
+:source-highlighter: highlight.js
 :stylesheet: assets/files/stylesheets/colony.css
 :last-update-label!:
 :nofooter:
 
-本頁整理目前文件站的主題分區，作為閱讀順序與知識地圖入口。
+本頁整理本站的文件站架構、主題分類與建置發布流程，作為理解整體文件組織的入口。
 
-== 應用程式分層
+== 文件站架構
 
-* xref:java/java-layering-dto-dao-entity.adoc[Java MVC MVVM 分層與 DTO DAO Entity Repository 名詞說明]
-* xref:java/character-encoding-guide.adoc[字元、字集與編碼整理]
-* xref:frontend/html5-semantic-elements.adoc[HTML5 語意化 Element 使用規範]
+本站以 Antora 作為主要文件網站產生工具，並由 GitHub Pages 發布靜態網站。
 
-== 基礎設施與部署面
+[cols="30%,70%", options="header"]
+|===
+|位置 |用途
 
-* xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異]
-* xref:container/docker-compose-notes.adoc[Docker Compose 整理]
-* xref:java/tomcat-server-xml.adoc[TomcatServerXML設定]
-* xref:k8s/pv-local-to-cifs.adoc[Kubernetes PV 由 Local 改為 CIFS（SMB CSI）變更紀錄]
+|`docs/antora.yml`
+|定義 Antora component 名稱、標題、版本與導覽檔。
 
-== 安全面
+|`docs/modules/ROOT/nav.adoc`
+|定義左側導覽結構。
 
-* xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header 說明]
-* xref:security/web-crypto-basics.adoc[加密、Hash、HMAC 與簽章基礎說明]
-* xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
+|`docs/modules/ROOT/pages/`
+|放置主要 AsciiDoc 文件內容。
 
-== TODO
+|`docs/modules/ROOT/assets/`
+|放置圖片、樣式與其他靜態資源。
 
-* 目前文件內容仍以技術筆記為主，尚未拆成更細的架構決策文件。
+|`antora-playbook.yml`
+|定義站台標題、來源位置、UI bundle 與 AsciiDoc 屬性。
+
+|`.github/workflows/pages.yml`
+|負責建置文件並部署到 GitHub Pages。
+|===
+
+== 主題分類架構
+
+目前內容依查閱情境分成下列主題：
+
+[cols="30%,70%", options="header"]
+|===
+|分類 |內容定位
+
+|Reference
+|外部連結、工具小抄、名詞對照、代碼表與綜合參考資料。
+
+|Java 與前端
+|Java Web 分層、資料物件命名、字元編碼、Tomcat 與前端 HTML 結構。
+
+|網路與容器
+|網路協定、TLS、SMB/CIFS、NFS、Docker Compose 與容器互動式 shell 排查。
+
+|Kubernetes
+|CKAD 練習、Ingress-nginx、Storage 與 PV/PVC 遷移紀錄。
+
+|安全與工具
+|Web 安全 Header、加密與簽章、數位憑證、AI CLI 與套件更新流程。
+
+|文件維護
+|本站文件撰寫、導覽與維護規範。
+|===
+
+== 閱讀入口
+
+若只是查閱內容，建議從以下入口開始：
+
+* xref:getting-started.adoc[快速開始]
+* xref:index.adoc[首頁]
+* xref:deployment.adoc[部署]
+* xref:security.adoc[安全]
+* xref:troubleshooting.adoc[疑難排解]
+
+== 建置與發布流程
+
+本站保留 Maven AsciiDoc 與 Antora 兩條建置路徑。
+
+. Maven 先驗證既有 AsciiDoc HTML 產出。
+. Antora 產生 GitHub Pages 使用的多頁文件網站。
+. GitHub Actions 將 `target/generated-docs/site/` 發布到 GitHub Pages。
+
+主要指令請參考 repository 根目錄的 `README.adoc`。
+
+== 內容維護原則
+
+新增或調整文件時，建議遵守下列原則：
+
+* 依主題放在合適目錄，避免把所有筆記集中在單一文件。
+* 重要入口頁應同步更新首頁與側邊導覽。
+* 技術內容以可查閱、可排查、可重複操作為主。
+* 文件格式與用語請參考 xref:contributing/writing-style.adoc[文件撰寫規範]。

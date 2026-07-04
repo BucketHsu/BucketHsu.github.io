@@ -1,13 +1,17 @@
 = 安全
 Bucket.Hsu
+:experimental:
+:icons: font
+:sectnums:
 :toc: left
 :toc-title: 目錄
-:toclevels: 2
+:toclevels: 3
+:source-highlighter: highlight.js
 :stylesheet: assets/files/stylesheets/colony.css
 :last-update-label!:
 :nofooter:
 
-本頁整理目前與安全、加密、憑證部署相關的主要文件。
+本頁整理與 Web 安全、加密、簽章與憑證部署相關的文件入口。
 
 == Web 安全
 

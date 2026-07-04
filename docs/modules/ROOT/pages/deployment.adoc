@@ -1,13 +1,17 @@
 = 部署
 Bucket.Hsu
+:experimental:
+:icons: font
+:sectnums:
 :toc: left
 :toc-title: 目錄
-:toclevels: 2
+:toclevels: 3
+:source-highlighter: highlight.js
 :stylesheet: assets/files/stylesheets/colony.css
 :last-update-label!:
 :nofooter:
 
-本頁整理與部署、執行環境、容器與 Kubernetes 相關的入口。
+本頁整理與部署、執行環境、容器與 Kubernetes 相關的文件入口。
 
 == 容器與本機環境
 
@@ -16,11 +20,11 @@ Bucket.Hsu
 
 == Java 與 Web Server
 
-* xref:java/tomcat-server-xml.adoc[TomcatServerXML設定]
+* xref:java/tomcat-server-xml.adoc[Tomcat server.xml 設定]
 * xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
 
 == Kubernetes
 
 * xref:k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除筆記]
 * xref:k8s/pv-local-to-cifs.adoc[Kubernetes PV 由 Local 改為 CIFS（SMB CSI）變更紀錄]
-* xref:k8s/ckad-practice-notes.adoc[CKAD考古題與練習題]
+* xref:k8s/ckad-practice-notes.adoc[CKAD 考古題與練習題]

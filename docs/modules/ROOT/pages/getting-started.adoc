@@ -1,39 +1,37 @@
 = 快速開始
 Bucket.Hsu
+:experimental:
+:icons: font
+:sectnums:
 :toc: left
 :toc-title: 目錄
 :toclevels: 2
+:source-highlighter: highlight.js
 :stylesheet: assets/files/stylesheets/colony.css
 :last-update-label!:
 :nofooter:
 
-這裡整理本專案文件站的入口、建置方式與常用路徑，方便第一次進來時快速定位。
+這裡整理本站的閱讀入口與主題分區，方便第一次進來時快速定位。
 
-== 文件入口
+== 第一次閱讀
 
-* xref:index.adoc[首頁]
-* xref:architecture.adoc[架構]
-* xref:deployment.adoc[部署]
-* xref:security.adoc[安全]
-* xref:troubleshooting.adoc[疑難排解]
+如果只是想快速掌握內容，建議依照下面順序閱讀：
 
-== 本機建置
+. xref:index.adoc[首頁]：查看本站整理的主要主題。
+. xref:architecture.adoc[架構]：理解文件分類與技術主題地圖。
+. xref:deployment.adoc[部署]：查找容器、Web Server 與 Kubernetes 相關筆記。
+. xref:security.adoc[安全]：查找 Web 安全、加密與憑證相關筆記。
+. xref:troubleshooting.adoc[疑難排解]：查找常見問題與排查方向。
 
-[source,bash]
-----
-mvn -B -DskipTests generate-resources
-npm ci
-npm run docs:antora
-----
+== 依主題查找
 
-== 產出位置
-
-* Maven AsciiDoc HTML：`target/generated-docs/asciidoc/`
-* Antora 文件網站：`target/generated-docs/site/`
-
-== 內容分區
-
-* Java 與前端：xref:java/java-layering-dto-dao-entity.adoc[Java 分層]、xref:frontend/html5-semantic-elements.adoc[HTML5 語意化]
+* Java 與前端：xref:java/java-layering-dto-dao-entity.adoc[Java 分層]、xref:java/character-encoding-guide.adoc[字元編碼]、xref:frontend/html5-semantic-elements.adoc[HTML5 語意化]
 * 網路與部署：xref:network/tls-tcp-smb-cifs-nfs.adoc[網路協定]、xref:container/docker-compose-notes.adoc[Docker Compose]、xref:k8s/ingress-nginx-troubleshooting.adoc[Ingress-nginx]
 * 安全：xref:security/web-security-headers.adoc[安全 Header]、xref:security/web-crypto-basics.adoc[加密基礎]、xref:security/digital-certificates-guide.adoc[憑證部署]
 * 工具與參考：xref:tools/ai-cli-notes.adoc[AI CLI]、xref:tools/dependency-update-guide.adoc[套件更新]、xref:reference/technical-links.adoc[參考連結]
+
+== 文件站維護
+
+如果要新增或調整本站內容，請先參考 xref:contributing/writing-style.adoc[文件撰寫規範]。
+
+建置指令與 GitHub Pages 發布流程請參考 repository 根目錄的 `README.adoc`。
