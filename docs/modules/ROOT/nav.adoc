@@ -29,3 +29,5 @@
 ** xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
 ** xref:tools/ai-cli-notes.adoc[AI-CLI注意事項]
 ** xref:tools/dependency-update-guide.adoc[套件依賴更新流程]
+* 文件維護
+** xref:contributing/writing-style.adoc[文件撰寫規範]
