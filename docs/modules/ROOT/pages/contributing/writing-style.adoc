@@ -1,0 +1,176 @@
+= 文件撰寫規範
+Bucket.Hsu
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本頁整理本站新增與調整文件時的基本規範，目標是讓內容容易閱讀、方便維護，並避免放入公開讀者不需要知道的資訊。
+
+== 文件定位
+
+每篇文件應先確認用途，再決定放置位置與標題。
+
+[cols="30%,70%", options="header"]
+|===
+|類型 |建議內容
+
+|主題說明
+|整理觀念、名詞、架構與判斷原則。
+
+|操作筆記
+|整理可重複使用的操作步驟、指令、驗證方式與常見錯誤。
+
+|參考資料
+|整理外部連結、名詞對照、代碼表與工具速查。
+
+|排查紀錄
+|整理問題現象、可能原因、檢查方式、修正方式與後續注意事項。
+|===
+
+== 標題與章節
+
+* 文件標題使用一個 `=`。
+* 主要章節使用 `==`。
+* 子章節使用 `===`，避免層級過深。
+* 標題盡量使用名詞或短句。
+* 同一篇文件內的用語要一致。
+
+== 頁首屬性
+
+一般文件建議使用下列頁首格式：
+
+[source,asciidoc]
+----
+= 文件標題
+Bucket.Hsu
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:last-update-label!:
+:nofooter:
+----
+
+== 文字風格
+
+* 以查閱、排查、維護為主要目的。
+* 公開讀者不需要知道的整理來源、搬移過程與暫存檔名，不放進正式內容。
+* 優先使用台灣常用語。
+* 一段文字只說明一個重點，避免過長。
+* 操作步驟要能被重複執行，必要時補上驗證方式。
+* 不確定的內容要標示限制或待確認，不寫成肯定句。
+
+== 表格
+
+表格用於整理對照、決策、指令速查與差異比較。
+
+[source,asciidoc]
+----
+[cols="35%,65%", options="header"]
+|===
+|欄位 |說明
+
+|範例
+|說明內容。
+|===
+----
+
+首頁文件列表建議維持兩欄：
+
+[source,asciidoc]
+----
+[cols="35%,65%", options="header"]
+|===
+|文件 |重點
+
+|xref:example.adoc[文件名稱]
+|一句話說明文件重點。
+|===
+----
+
+== 程式碼與指令
+
+指令區塊使用對應語言標記：
+
+[source,asciidoc]
+----
+[source,bash]
+....
+npm ci
+npm run docs:site
+....
+----
+
+常用語言標記：
+
+* `source,java`
+* `source,javascript`
+* `source,xml`
+* `source,yaml`
+* `source,sql`
+* `source,text`
+
+== 注意事項區塊
+
+需要補充說明時，可使用 AsciiDoc 區塊。
+
+[source,asciidoc]
+----
+[NOTE]
+====
+補充說明。
+====
+
+[WARNING]
+====
+需要特別注意的限制或影響。
+====
+----
+
+== 連結
+
+站內文件使用 `xref`：
+
+[source,asciidoc]
+----
+xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header 說明]
+----
+
+外部網站使用一般連結，並讓連結文字能說明目的：
+
+[source,asciidoc]
+----
+https://docs.antora.org/[Antora 官方文件]
+----
+
+== 新增文件檢查清單
+
+新增文件後，請確認：
+
+* 檔案已放在合適的分類目錄。
+* 標題、頁首屬性與章節層級一致。
+* `docs/modules/ROOT/nav.adoc` 已加入必要導覽。
+* `docs/modules/ROOT/pages/index.adoc` 已加入首頁分類表格，或確認不需要出現在首頁。
+* 指令、連結與 xref 可正常建置。
+* 內容沒有放入公開讀者不需要知道的整理來源或內部脈絡。
+
+== 建置驗證
+
+提交前建議至少執行：
+
+[source,bash]
+----
+npm ci
+mvn -B -DskipTests generate-resources
+npm run docs:site
+----
