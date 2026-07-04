@@ -1,0 +1,255 @@
+= HTML5 語意化 Element 使用規範
+V1.0.0, 2026-04-16
+:experimental:
+:icons: font
+:icon-set: fas
+:sectnums:
+:toc: left
+:toc-title: 大綱
+:toclevels: 3
+:imagesdir: ../../assets/images
+:sourcedir: uml
+:saltdir: salt
+:authors: Bucket.Hsu
+:doctype: book
+:chapter-label: 章
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:index-link: ../index.html
+:last-update-label!:
+:nofooter:
+
+== 說明
+本文件用於規範前端開發時 HTML5 語意化元素的使用方式，避免過度使用 `div`，提升：
+
+- 可讀性
+- 可維護性
+- SEO（搜尋引擎理解）
+- 無障礙（Accessibility）
+
+'''
+
+== HTML5 語意化 Element 使用建議
+
+[cols="1,2,3,3", options="header"]
+|===
+| Element
+| 用途
+| 適用情境
+| 取代 div 的建議
+
+| header
+| 頁面或區塊的標頭
+| 網站頂部、文章標題區
+| 不要用 div class="header"
+
+| nav
+| 導覽列
+| 主選單、側邊選單、breadcrumb
+| menu / sidebar 請改用 nav
+
+| main
+| 頁面主要內容
+| 每頁唯一主內容區
+| 不要用 div id="content"
+
+| section
+| 主題區塊
+| 一個有標題的內容區
+| 比 div 更語意化分段
+
+| article
+| 獨立內容
+| 文章、貼文、卡片
+| 可單獨存在的內容
+
+| aside
+| 側邊內容
+| 側欄、推薦文章、廣告
+| sidebar 不要用 div
+
+| footer
+| 頁尾
+| 網站底部、區塊底部
+| 不要用 div class="footer"
+
+| h1 ~ h6
+| 標題
+| 各層級標題
+| 不要用 div + CSS 模擬
+
+| p
+| 段落文字
+| 一般文字內容
+| 不要全部用 div 包字
+
+| ul / ol / li
+| 清單
+| 選單、列表、步驟
+| 不要用 div 模擬 list
+
+| table
+| 表格資料
+| 報表、資料列表
+| DataTable 類型一定用 table
+
+| form
+| 表單
+| 輸入資料
+| 不要用 div 包 input
+
+| label
+| 表單標籤
+| input 對應說明
+| 提升 UX 與可點擊性
+
+| button
+| 按鈕
+| 觸發行為
+| 不要用 div + onclick
+
+| a
+| 連結
+| 導頁、跳轉
+| 不要用 div 模擬 link
+
+| figure / figcaption
+| 圖片與說明
+| 圖表、圖片區
+| 圖片區塊語意化
+
+| time
+| 時間
+| 日期、時間顯示
+| 提供 machine-readable 格式
+
+| mark
+| 標記文字
+| 搜尋關鍵字 highlight
+| 不要只用 span + class
+
+| strong / em
+| 強調語意
+| 重點、語氣
+| 不只是視覺粗體
+
+| span
+| 行內無語意容器
+| 小範圍 styling
+| 比 div 更適合 inline
+
+| div
+| 無語意容器
+| 純 layout / grouping
+| 最後手段再用
+|===
+'''
+
+== 使用原則（重要）
+
+=== 1. 何時使用 div
+`div` 並非禁止使用，但應限制在以下情境：
+
+- 純版面配置（flex / grid）
+- JavaScript 操作節點（例如 data-*）
+- 無語意的群組容器
+
+判斷原則：
+
+[quote]
+____
+這個區塊是否有語意？
+有 → 使用語意化 element
+沒有 → 才使用 div
+____
+
+'''
+
+=== 2. Bootstrap / AdminLTE 使用建議
+
+既有框架（Bootstrap 4、AdminLTE）常見大量使用 div：
+
+[source,html]
+----
+<div class="card">
+  <div class="card-header">標題</div>
+  <div class="card-body">內容</div>
+</div>
+----
+
+建議改寫為：
+
+[source,html]
+----
+<article class="card">
+  <header class="card-header">標題</header>
+  <section class="card-body">內容</section>
+</article>
+----
+
+原則：
+
+- 保留 CSS class
+- 調整 HTML tag 為語意化元素
+- 不影響既有 JS 與樣式
+
+'''
+
+=== 3. React / 前後端分離影響
+
+語意化 HTML 在以下情境更重要：
+
+- React / Vue（JSX 結構清晰）
+- SSR（SEO 直接依賴 HTML 結構）
+- API-driven UI（權限控制更清楚）
+
+'''
+
+== 常見錯誤與修正
+
+[cols="2,2", options="header"]
+|===
+| 錯誤寫法
+| 正確寫法
+
+| div 當按鈕
+| button
+
+| div 當連結
+| a
+
+| div 包整頁
+| header + main + footer
+
+| div 模擬清單
+| ul / li
+
+| div 當標題
+| h1 ~ h6
+|===
+
+'''
+
+== 開發規範（可作為 Code Review 檢查項目）
+
+- 禁止使用 div 模擬 button / link
+- 每頁必須存在一個 main
+- header / footer 必須語意正確
+- 清單資料必須使用 ul / ol
+- 表格資料必須使用 table
+- 表單 input 必須搭配 label
+- 標題不可使用 div 模擬
+
+'''
+
+== 結論
+
+語意化 HTML 並非為了「寫得漂亮」，而是：
+
+- 讓系統可理解（SEO / AI / 爬蟲）
+- 讓人好維護（團隊開發）
+- 讓未來轉型（React / SSR）更容易
+
+`div` 不是錯，但不應該是預設選項。

@@ -1,0 +1,20 @@
+site:
+  title: BucketHsu 技術筆記
+  url: https://buckethsu.github.io/
+  start_page: bucket-hsu-notes::index.adoc
+
+content:
+  sources:
+    - url: .
+      branches: HEAD
+      start_path: docs
+
+ui:
+  bundle:
+    url: ./docs/ui
+
+asciidoc:
+  attributes:
+    page-pagination: ''
+    source-highlighter: highlightjs
+    icons: font

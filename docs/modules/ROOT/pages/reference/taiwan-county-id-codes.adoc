@@ -1,0 +1,356 @@
+= 台灣縣市英文、代碼與身分證字號對照表
+Bucket.Hsu
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 大綱
+:toclevels: 1
+:imagesdir: ../../assets/images
+:authors: Bucket.Hsu
+:doctype: book
+:chapter-label:
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:index-link: ../index.html
+:last-update-label!:
+:nofooter:
+
+== 縣市與代碼對照
+
+NOTE: 桃園市 ISO 3166-2 代碼應為 `TW-TAO`；`TW-KHH` 為高雄市代碼。
+
+[cols="1,1,1,2,2,1,1,1,1", options="header"]
+|===
+|縣／市
+|分類
+|常見中文簡稱
+|英文名稱（通用拼音）
+|英文名稱（漢語拼音）
+|代碼 ISO 3166-2
+|城市代碼
+|英文縮寫
+|身分證字號代碼
+
+|基隆市
+|市
+|基
+|Keelung City
+|Jilong City
+|TW-KEE
+|KLU
+|KEL
+|C
+
+|新北市
+|直轄市
+|新北
+|New Taipei City
+|Xinbei City
+|TW-NWT
+|TPH
+|NTPC
+|F
+
+|臺北市
+|直轄市
+|北市
+|Taipei City
+|Taipei City
+|TW-TPE
+|TPE
+|TPE
+|A
+
+|桃園市
+|直轄市
+|桃
+|Taoyuan City
+|Taoyuan City
+|TW-TAO
+|TYC
+|TYN
+|H
+
+|新竹縣
+|縣
+|竹縣
+|Hsinchu County
+|Xinzhu County
+|TW-HSQ
+|HSH
+|HSZ
+|J
+
+|新竹市
+|市
+|竹市
+|Hsinchu City
+|Xinzhu City
+|TW-HSZ
+|HSC
+|HSZ
+|O
+
+|苗栗市
+|市
+|
+|Miaoli City
+|Miaoli City
+|
+|MAC
+|ZMI
+|
+
+|苗栗縣
+|縣
+|苗
+|Miaoli County
+|Miaoli County
+|TW-MIA
+|MAL
+|ZMI
+|K
+
+|臺中市
+|直轄市
+|中市
+|Taichung City
+|Taizhong City
+|TW-TXG
+|TXG
+|TXG
+|B
+
+|彰化縣
+|縣
+|彰
+|Changhua County
+|Zhanghua County
+|TW-CHA
+|CWH
+|CHW
+|N
+
+|彰化市
+|市
+|
+|Changhua City
+|Zhanghua City
+|
+|CWS
+|CHW
+|
+
+|南投市
+|市
+|
+|Nantou City
+|Nantou City
+|
+|NTC
+|NTC
+|
+
+|南投縣
+|縣
+|投
+|Nantou County
+|Nantou County
+|TW-NAN
+|NTO
+|NTC
+|M
+
+|雲林縣
+|縣
+|雲
+|Yunlin County
+|Yunlin County
+|TW-YUN
+|YLH
+|YUN
+|P
+
+|嘉義縣
+|縣
+|嘉縣
+|Chiayi County
+|Jiayi County
+|TW-CYQ
+|CHY
+|CYI
+|Q
+
+|嘉義市
+|市
+|嘉市
+|Chiayi City
+|Jiayi City
+|TW-CYI
+|CYI
+|CYI
+|I
+
+|臺南市
+|直轄市
+|南市
+|Tainan City
+|Tainan City
+|TW-TNN
+|TNN
+|TNN
+|D
+
+|高雄市
+|直轄市
+|高市
+|Kaohsiung City
+|Gaoxiong City
+|TW-KHH
+|KHH
+|KHH
+|E
+
+|屏東縣
+|縣
+|屏
+|Pingtung County
+|Pingtung County
+|TW-PIF
+|IUH
+|PIF
+|T
+
+|屏東市
+|市
+|
+|Pingtung City
+|Pingtung City
+|
+|PTS
+|PIF
+|
+
+|宜蘭縣
+|縣
+|宜
+|Yilan County
+|Yilan County
+|TW-ILA
+|ILN
+|ILA
+|G
+
+|宜蘭市
+|市
+|
+|Yilan City
+|Yilan City
+|
+|ILC
+|ILA
+|
+
+|花蓮縣
+|縣
+|花
+|Hualien County
+|Hualian County
+|TW-HUA
+|HWA
+|HUN
+|U
+
+|花蓮市
+|市
+|
+|Hualien City
+|Hualian City
+|
+|HWC
+|HUN
+|
+
+|臺東市
+|市
+|
+|Taitung City
+|Taidong City
+|
+|TTC
+|TTT
+|
+
+|臺東縣
+|縣
+|東
+|Taitung County
+|Taidong County
+|TW-TTT
+|TTT
+|TTT
+|V
+
+|澎湖縣
+|縣
+|澎
+|Penghu County
+|Penghu County
+|TW-PEN
+|PEH
+|PEH
+|X
+
+|綠島
+|島嶼
+|
+|Green Island
+|Lüdao
+|
+|GNI
+|GNI
+|
+
+|蘭嶼
+|島嶼
+|
+|Orchid Island
+|Lanyu
+|
+|KYD
+|KYD
+|
+
+|金門縣
+|縣
+|金
+|Kinmen County
+|Jinmen County
+|TW-KIN
+|KMN
+|KNH
+|W
+
+|馬祖
+|島嶼
+|
+|Matsu
+|Matsu
+|
+|MZW
+|MFK
+|
+
+|連江縣
+|縣
+|連
+|Lienchiang County
+|Lianjiang County
+|TW-LIE
+|LNN
+|LNN
+|Z
+|===

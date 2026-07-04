@@ -1,0 +1,3 @@
+static_files:
+  - css/site.css
+  - js/theme.js

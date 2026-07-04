@@ -1,0 +1,556 @@
+= 數位憑證觀念與 Web Server 部署指南
+V1.0.0, 2026-06-24
+:experimental:
+:icons: font
+:icon-set: fas
+:sectnums:
+:toc: left
+:toc-title: 大綱
+:toclevels: 3
+:imagesdir: ../../assets/images
+:sourcedir: uml
+:saltdir: salt
+:authors: Bucket.Hsu
+:doctype: book
+:chapter-label: 章
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:index-link: ../index.html
+:last-update-label!:
+:nofooter:
+
+== 說明
+
+本文件整理數位憑證（Digital Certificate）的基礎觀念、常見檔案格式副檔名對照（如 `cer`、`crt`、`p12`、`pfx` 的實質關聯與差異），並詳細記錄如何在主流伺服器與反向代理（Tomcat、Spring Boot、Nginx、IIS、Apache、HAProxy）部署 HTTPS/TLS 憑證。
+
+適用情境：
+
+* 數位憑證檔案格式與名詞查閱。
+* 正式與測試憑證申請流程（CSR 欄位規則、憑證鏈串鏈順序）。
+* 各伺服器 HTTPS 設定範例與疑難排排查。
+
+== 數位憑證基礎概念
+
+在 HTTPS 或是 TLS 加密連線的握手（Handshake）過程中，伺服器必須向用戶端（例如瀏覽器）證明自己的身份。這套信任體系是建立在**非對稱金鑰（Asymmetric Cryptography）**與**憑證授權機構（CA, Certificate Authority）**之上。
+
+=== 公鑰與私鑰的關係
+
+* **私鑰（Private Key）**：
+** 伺服器端獨自保有的機密金鑰，**絕對不能外流**。
+** 用於解密由公鑰加密的資料，或在數位簽章時證明伺服器的身份。
+* **公鑰（Public Key）**：
+** 可以公開給所有人的金鑰。
+** 被打包在憑證（Certificate）之中，供用戶端加密敏感資料，或用來驗證伺服器的數位簽章。
+
+=== 為什麼需要憑證鏈（Certificate Chain）？
+
+如果每個伺服器都使用自簽憑證（Self-Signed Certificate），瀏覽器將無法分辨這張憑證是由真正的網站擁有者產生，還是由中間人攻擊者（Man-in-the-Middle）偽造。因此，我們必須透過公認的「根憑證」來建立信任。
+
+為了安全起見，受信任的憑證體系採用分層結構：
+
+[literal]
+根憑證 Root CA (內建於作業系統/瀏覽器，高度防護)
+      │
+      ▼
+中繼憑證 Intermediate CA (由根憑證授權，日常簽發使用)
+      │
+      ▼
+伺服器憑證 End-Entity Cert (網站實際使用的憑證，如 www.example.com)
+
+
+. **根憑證（Root CA）**：
+* 這是信任的源頭。其憑證通常是自簽的（Self-Signed），且高度受保護，通常處於「實體離線」狀態，絕不直接用來簽發一般網站的憑證。
+* 根憑證會內建在主流的作業系統（如 Windows, macOS）、瀏覽器（如 Chrome, Firefox）以及 Java 執行環境（JRE/JDK 的 `cacerts`）中。
+. **中繼憑證（Intermediate CA）**：
+* 由根憑證簽發並授權的中間機構憑證。
+* 負責對一般企業或網站進行審核並簽發憑證。中繼憑證可以有多層。這樣做的好處是，如果中繼憑證的金鑰洩漏，只需撤銷該中繼憑證，而不需要廢棄整張根憑證。
+. **伺服器憑證（End-Entity / Server Certificate）**：
+* 網站實際安裝的憑證，與網站的網域（CN/SAN）綁定。
+* 由中繼憑證所簽發。
+
+[IMPORTANT]
+====
+當用戶端連線到伺服器時，伺服器必須**同時傳送伺服器憑證與中繼憑證**。用戶端會循著 `伺服器憑證 -> 中繼憑證 -> 根憑證` 的順序一步步驗證。如果伺服器部署時漏掉了中繼憑證，即使伺服器憑證本身是真的，部分瀏覽器或行動裝置（如 Android APP 或 Java 用戶端）也會因為找不到完整的信任鏈而顯示「憑證鏈不完整」或安全警告。
+====
+
+== 常見憑證檔案格式與副檔名對照
+
+實務上常遇到各式各樣的憑證副檔名，如 `.crt`、`.cer`、`.pem`、`.p12`、`.pfx` 等。其實，許多不同的副檔名代表的是**完全相同的內容**或**包裝格式**。
+
+=== 憑證格式快速對照表
+
+[cols="15%,15%,20%,50%", options="header"]
+|===
+|副檔名 |編碼格式 |是否包含私鑰 |說明
+
+|`.crt`
+|PEM 或 DER
+|否
+|憑證檔。在 Linux / Apache / Nginx 環境中極為常見，通常是 PEM 格式。
+
+|`.cer`
+|PEM 或 DER
+|否
+|憑證檔。在 Windows 環境極為常見，常為 DER 格式。**與 `.crt` 內容本質上完全相同**。
+
+|`.pem`
+|PEM
+|可包含
+|以 Base64 格式儲存的 ASCII 文字檔。可單獨存憑證、私鑰，或將憑證鍵與私鑰全部打包在同一個檔案中。
+
+|`.key`
+|PEM 或 DER
+|是
+|私鑰檔本身。最常以 PEM 格式的文字檔呈現。
+
+|`.p12`
+|PKCS#12
+|是（必含）
+|個人資訊交換格式（二進位）。將伺服器憑證、中繼憑證與私鑰，用密碼加密保護後打包成單一檔案。
+
+|`.pfx`
+|PKCS#12
+|是（必含）
+|Windows / IIS 常用副檔名。**與 `.p12` 格式完全相同**，兩者可改副檔名互換。
+
+|`.jks` / `.keystore`
+|Java 專有
+|可包含
+|Java KeyStore 格式。Java 生態系（Tomcat, Spring Boot）專用之憑證與私鑰庫。
+|===
+
+=== 關鍵格式解析與釐清
+
+==== `.cer` 與 `.crt` 的關係
+
+* **本質相同**：`.cer` 與 `.crt` 都是「憑證本身」（X.509 憑證檔），**都不包含私鑰**。
+* **副檔名習慣**：
+** **`.cer`** 常見於 Windows 系統。雙擊該檔案，Windows 會彈出憑證檢視器視窗。
+** **`.crt`** 常用於 Linux / Unix、Nginx、Apache 環境。
+* **編碼相容性**：不論是 `.cer` 還是 `.crt`，都可以是二進位的 DER 編碼，也可以是 Base64 的 PEM 編碼。若在 Linux 下遇到 `.cer` 無法直接用 cat 閱讀，通常是因為它是 DER 編碼，此時可透過 OpenSSL 轉換為 PEM。
+
+==== `.p12` 與 `.pfx` 的關係
+
+* **完全等價**：**`.p12` 與 `.pfx` 檔案格式本質上是完全相同的**，都是實作了 **PKCS#12** 標準的二進位封裝檔。
+* **封裝內容**：它們是一個「保險箱」，同時打包了**伺服器憑證、私鑰（Private Key）以及整個中繼憑證鏈**。為了防範私鑰外洩，PKCS#12 檔案在匯出時**必須設定保護密碼**，匯入時也必須輸入對應密碼才能存取私鑰。
+* **使用情境**：
+** **`.pfx`** (Personal Information Exchange)：微軟 IIS、Windows 系統與某些硬體 WAF / 負載平衡器慣用的副檔名。
+** **`.p12`**：OpenSSL、跨平台應用、以及 Java（JDK 9+ 預設 keystore 格式）慣用的副檔名。
+** 若在 IIS 匯入時看不到 `.p12` 檔案，只需將檔案副檔名由 `.p12` 直接重新命名為 `.pfx` 即可匯入，內容完全不需做任何檔案轉換。
+
+==== `.pem` 格式
+
+* 這是 **Privacy Enhanced Mail** 的縮寫，特徵是使用 ASCII 字元儲存，可用文字編輯器打開，檔案頂部與底部有明確的標籤分隔線，例如：
+** 憑證：`-----BEGIN CERTIFICATE-----` 與 `-----END CERTIFICATE-----`
+** 私鑰：`-----BEGIN PRIVATE KEY-----` 或 `-----BEGIN RSA PRIVATE KEY-----`
+* PEM 具有極強的相容性，Nginx 與 Apache 預設都是使用 PEM 格式的檔案。
+
+== 憑證申請與簽發流程 (CSR)
+
+正式環境的憑證通常向商業憑證中心（CA，如 TWCA、中華電信、GlobalSign、DigiCert）或免費機構（Let's Encrypt）申請。
+
+=== 1. 建立金鑰對與 CSR
+
+在伺服器端（或憑證管理工具，例如 CertForge）先產生私鑰，再利用私鑰產生 **CSR (Certificate Signing Request，憑證申請請求檔)**。
+
+CSR 的欄位填寫規則如下：
+
+[cols="20%,15%,15%,50%", options="header"]
+|===
+|欄位名稱 |縮寫 |可否中文 |填寫建議與規則
+
+|**Common Name**
+|`CN`
+|不建議
+|網站的主機網域名稱（FQDN），例如 `www.example.com`。
+
+|**Subject Alternative Name**
+|`SAN`
+|不可
+|**主旨替代名稱**。現行瀏覽器（如 Chrome）強制檢查此欄位。可以填寫多個網域或 IP，例如 `example.com,www.example.com,10.10.1.20`。
+
+|**Organization**
+|`O`
+|可
+|組織或機關名稱。例如：`新北市政府地政局` 或 `Company Co., Ltd.`。
+
+|**Organizational Unit**
+|`OU`
+|可
+|部門名稱。例如：`地政資訊科` 或 `IT Department`。
+
+|**Locality**
+|`L`
+|可
+|城市或地區名稱。例如：`板橋區` 或 `Banciao`。
+
+|**State or Province**
+|`ST`
+|可
+|省份、州或縣市名稱。例如：`台灣` 或 `Taiwan`。**同批申請的憑證建議格式統一**。
+
+|**Country**
+|`C`
+|不可
+|國家/地區國碼。**固定 2 碼英文**，台灣請填 `TW`。
+|===
+
+[WARNING]
+====
+私鑰（`.key` 或 JKS 中的 PrivateKeyEntry）在整個過程中**絕不能**傳送給 CA。你只需把產出的 `.csr` 檔案上傳給 CA 即可。
+====
+
+=== 2. 匯入串鏈與 server.cer
+
+當 CA 審核通過後，會提供網站憑證（通常命名為 `server.cer`、`server.crt`）以及中繼憑證檔。在 Java 環境中，我們必須把這些憑證，依照**憑證鏈的順序**依次匯入原先產生 CSR 的 Keystore 中，以確保信任鏈正確。
+
+==== 常見憑證中心（CA）串鏈匯入順序
+
+* **中華電信 (CHT) 機構憑證鏈**：
++
+若使用中華電信通用型/政府專用型憑證，其信任鏈長度較長，常見的順序為：
++
+[source,text]
+----
+ROOTeCA_64.crt (CHT 根憑證) -> eCA1-to-HRCA1.crt (交叉憑證) -> OVTLSCA1 (中繼憑證) -> server.cer (伺服器憑證)
+----
++
+實務上在 keystore 中，需先匯入 `ROOTeCA`，再匯入 `eCA1-to-HRCA1`，再匯入 `OVTLSCA1`，最後將 `server.cer` 匯入原本的別名（Alias）中。
+
+* **台灣網路認證 (TWCA) 憑證鏈**：
++
+常見順序較為精簡：
++
+[source,text]
+----
+root.cer (TWCA 根憑證) -> uca.cer (中繼憑證) -> server.cer (伺服器憑證)
+----
+
+== 常用 OpenSSL 與 keytool 指令
+
+在管理與部署憑證時，常需要在不同格式之間進行轉換。以下是常用指令整理。
+
+=== OpenSSL 憑證與私鑰操作
+
+==== 1) 產生私鑰與自簽憑證（一併產生）
+[source,bash]
+----
+# 產生 RSA 2048 私鑰與 365 天有效期的自簽憑證
+openssl req -newkey rsa:2048 -nodes -keyout server.key -x509 -days 365 -out server.crt
+----
+
+==== 2) 由私鑰產生 CSR（搭配設定檔設定 SAN）
+[source,bash]
+----
+openssl req -new -key server.key -out server.csr -config openssl.cnf
+----
+
+==== 3) 檢視 CSR 內容是否正確
+[source,bash]
+----
+openssl req -in server.csr -noout -text
+----
+
+==== 4) 檢視 CRT 憑證到期日與主旨
+[source,bash]
+----
+openssl x509 -in server.crt -noout -subject -issuer -dates -serial
+----
+
+==== 5) 檢視憑證內的 SAN (Subject Alternative Name)
+[source,bash]
+----
+openssl x509 -in server.crt -noout -text | grep -i "Alternative Name" -A 1
+----
+
+==== 6) 憑證與私鑰打包成 P12/PFX（供 IIS / WAF / Tomcat 部署）
+[source,bash]
+----
+# -certfile 後方可帶入中繼憑證檔，將其合併打包
+openssl pkcs12 -export -inkey server.key -in server.crt -certfile chain.pem -out server.p12 -name tomcat
+----
+
+==== 7) 從 P12/PFX 中還原/拆出 PEM 憑證與私鑰
+[source,bash]
+----
+# 拆出不含私鑰的憑證檔
+openssl pkcs12 -in server.p12 -clcerts -nokeys -out server.crt
+
+# 拆出解密後（無密碼保護）的私鑰檔
+openssl pkcs12 -in server.p12 -nocerts -nodes -out server.key
+----
+
+=== Java Keytool 操作
+
+Java 內建的 `keytool` 用於管理 `.jks` 與 `.keystore` 檔案。
+
+==== 1) 檢視 Keystore 中的內容與 Alias 清單
+[source,bash]
+----
+keytool -list -v -keystore server.jks
+----
+
+==== 2) 將 P12 / PFX 轉換為 JKS 格式
+[source,bash]
+----
+keytool -importkeystore -srckeystore server.p12 -srcstoretype PKCS12 -destkeystore server.jks -deststoretype JKS
+----
+
+==== 3) 將 JKS 轉換為 PKCS12 格式（Java 9+ 推薦）
+[source,bash]
+----
+keytool -importkeystore -srckeystore server.jks -srcstoretype JKS -destkeystore server.p12 -deststoretype PKCS12
+----
+
+== Web Server 部署 HTTPS 實務
+
+不同 Web Server 所支援的憑證格式不同。以下為詳細設定參考。
+
+=== Tomcat 部署
+
+Tomcat 支援 JKS、PKCS12 或是 PEM 格式的憑證。以下為 `conf/server.xml` 設定範例。
+
+==== Tomcat 8.5 / 9.0 傳統設定方式
+
+使用傳統的 Connector 屬性設定 JKS：
+
+[source,xml]
+----
+<Connector port="8443"
+           protocol="org.apache.coyote.http11.Http11NioProtocol"
+           maxThreads="200"
+           SSLEnabled="true"
+           scheme="https"
+           secure="true"
+           clientAuth="false"
+           sslProtocol="TLS"
+           keystoreFile="C:/certforge/ssl/server.jks"
+           keystorePass="TOMCAT"
+           keyAlias="NTPCWEBSSL" />
+----
+
+若使用 PKCS12 (`.p12` 或 `.pfx`），需額外指定 `keystoreType="PKCS12"`：
+
+[source,xml]
+----
+<Connector port="8443"
+           protocol="org.apache.coyote.http11.Http11NioProtocol"
+           SSLEnabled="true"
+           scheme="https"
+           secure="true"
+           keystoreType="PKCS12"
+           keystoreFile="C:/certforge/ssl/server.p12"
+           keystorePass="TOMCAT"
+           keyAlias="tomcat" />
+----
+
+==== Tomcat 10 / 11 巢狀 `SSLHostConfig` 設定方式
+
+Tomcat 10 及 Tomcat 11 建議改用巢狀的 `<SSLHostConfig>` 與 `<Certificate>` 元件來配置憑證。
+
+##### 寫法 A：使用 JKS Keystore
+[source,xml]
+----
+<Connector port="8443"
+           protocol="org.apache.coyote.http11.Http11NioProtocol"
+           SSLEnabled="true"
+           scheme="https"
+           secure="true">
+    <SSLHostConfig hostName="_default_">
+        <Certificate certificateKeystoreFile="C:/certforge/ssl/server.jks"
+                     certificateKeystorePassword="TOMCAT"
+                     certificateKeystoreType="JKS"
+                     certificateKeyAlias="tomcat" />
+    </SSLHostConfig>
+</Connector>
+----
+
+##### 寫法 B：使用 PKCS12 (`.p12` / `.pfx`）
+[source,xml]
+----
+<Connector port="8443"
+           protocol="org.apache.coyote.http11.Http11NioProtocol"
+           SSLEnabled="true"
+           scheme="https"
+           secure="true">
+    <SSLHostConfig hostName="_default_">
+        <Certificate certificateKeystoreFile="C:/certforge/ssl/server.p12"
+                     certificateKeystorePassword="TOMCAT"
+                     certificateKeystoreType="PKCS12"
+                     certificateKeyAlias="tomcat" />
+    </SSLHostConfig>
+</Connector>
+----
+
+##### 寫法 C：直接使用 PEM 檔案（不需打包 keystore）
+Tomcat 10+ 允許直接設定私鑰文字檔與憑證文字檔，設定方式非常類似 Nginx。
+[source,xml]
+----
+<Connector port="8443"
+           protocol="org.apache.coyote.http11.Http11NioProtocol"
+           SSLEnabled="true"
+           scheme="https"
+           secure="true">
+    <SSLHostConfig hostName="_default_">
+        <Certificate certificateFile="C:/certforge/ssl/server.crt"
+                     certificateKeyFile="C:/certforge/ssl/server.key"
+                     certificateChainFile="C:/certforge/ssl/chain.crt"
+                     type="RSA" />
+    </SSLHostConfig>
+</Connector>
+----
+
+[CAUTION]
+.Tomcat 10/11 常見錯誤：No SSLHostConfig element was found with the hostName [_default_]
+====
+在新版 Tomcat 中，若啟用 `SSLEnabled="true"`，但依然使用舊版 Tomcat 8.5 的屬性設定（直接將 `keystoreFile` 寫在 `<Connector>` 上），Tomcat 啟動時常會拋出上述異常。這是因為新版 Tomcat 預設以 `<SSLHostConfig>` 來尋找對應的預設 hostName。修正方法是**必須**使用巢狀 `<SSLHostConfig hostName="_default_">` 結構。
+====
+
+=== Spring Boot 部署
+
+Spring Boot 內部嵌入了 Tomcat，其設定通常寫在 `application.yml` 或 `application.properties` 中。
+
+==== 使用 PKCS12 格式（`.p12` 或 `.pfx`）- 推薦
+[source,yaml]
+----
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    key-store: file:/opt/certforge/ssl/server.p12
+    key-store-type: PKCS12
+    key-store-password: TOMCAT
+    key-alias: tomcat
+----
+
+==== 使用 JKS 格式（`.jks` 或 `.keystore`）
+[source,yaml]
+----
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    key-store: file:/opt/certforge/ssl/server.jks
+    key-store-type: JKS
+    key-store-password: TOMCAT
+    key-alias: NTPCWEBSSL
+----
+
+[TIP]
+====
+在 `key-store` 的路徑中，使用 `file:` 前綴可以指定作業系統中的實體絕對路徑。若使用 `classpath:`，則會從 jar 包內部的 resources 目錄讀取（較不利於憑證過期時的動態更換）。
+====
+
+=== Nginx 部署
+
+Nginx 使用 PEM 格式之憑證檔案（`.crt` 或 `.pem`）與未加密私鑰（`.key`）。
+
+==== 1) 憑證鏈準備
+在部署前，必須將**伺服器憑證檔**與**中繼憑證檔**合併為同一個檔案（伺服器憑證內容在前，中繼憑證在後）：
+[source,bash]
+----
+cat server.crt chain.pem > fullchain.pem
+----
+
+==== 2) Nginx 設定檔範例
+[source,nginx]
+----
+server {
+    listen 443 ssl http2;
+    server_name demo.example.gov.tw;
+
+    # 憑證與私鑰路徑
+    ssl_certificate      /etc/nginx/ssl/fullchain.pem;
+    ssl_certificate_key  /etc/nginx/ssl/server.key;
+
+    # 安全性設定
+    ssl_protocols        TLSv1.2 TLSv1.3;
+    ssl_ciphers          HIGH:!aNULL:!MD5;
+    ssl_session_timeout  10m;
+    ssl_session_cache    shared:SSL:10m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+----
+
+=== IIS 部署
+
+微軟 Windows IIS 伺服器必須使用 PKCS#12（`.pfx` 或 `.p12`）格式來匯入憑證。
+
+==== 方法 A：使用 PowerShell 指令匯入（適合自動化部署）
+[source,powershell]
+----
+# 設定 PFX 密碼與檔案路徑
+$pwd = ConvertTo-SecureString "TOMCAT" -AsPlainText -Force
+Import-PfxCertificate `
+  -FilePath "C:\certforge\ssl\NTPCWEBSSL_tomcat.pfx" `
+  -CertStoreLocation "Cert:\LocalMachine\My" `
+  -Password $pwd
+----
+
+==== 方法 B：使用 IIS 管理員 UI 界面操作
+
+1. 打開 **IIS 管理員**，點擊左側樹狀目錄的根節點（伺服器名稱）。
+2. 在中間的功能區雙擊 **伺服器憑證** (Server Certificates)。
+3. 在右側的「控制」面板中，點擊 **匯入...** (Import)。
+4. 選擇你的 `.pfx` 或 `.p12` 檔案，輸入當初匯出時設定的密碼，並點擊確定。
+5. 匯入完成後，點擊左側選單的具體網站（例如 Default Web Site），點擊右側的 **繫結...** (Bindings)。
+6. 新增一個繫結，將類型設為 `https`，Port 為 `443`，並在下方的 SSL 憑證下拉選單中，選擇剛才匯入的憑證名稱。
+
+=== Apache httpd 部署
+
+Apache 使用 `mod_ssl` 模組來提供 HTTPS 支援。設定通常放置於 `conf.d/ssl.conf` 中。
+
+[source,xml]
+----
+<VirtualHost *:443>
+    ServerName demo.example.gov.tw
+    SSLEngine on
+    
+    # 伺服器憑證檔
+    SSLCertificateFile      "/etc/httpd/ssl/server.crt"
+    # 私鑰檔
+    SSLCertificateKeyFile   "/etc/httpd/ssl/server.key"
+    # 中繼憑證鏈檔
+    SSLCertificateChainFile "/etc/httpd/ssl/chain.pem"
+
+    ProxyPass        / http://127.0.0.1:8080/
+    ProxyPassReverse / http://127.0.0.1:8080/
+</VirtualHost>
+----
+
+=== HAProxy / 負載平衡器部署
+
+HAProxy 將**憑證鏈與私鑰合併為單一個 PEM 檔案**來載入。
+
+==== 1) 合併檔案
+將伺服器憑證、中繼憑證以及私鑰依序寫入同一個檔案中：
+[source,bash]
+----
+cat server.crt chain.pem server.key > demo.example.gov.tw.pem
+----
+
+==== 2) HAProxy 設定檔範例 (`haproxy.cfg`)
+[source,haproxy]
+----
+frontend https_in
+    bind *:443 ssl crt /etc/haproxy/certs/demo.example.gov.tw.pem alpn h2,http/1.1
+    mode http
+    option forwardfor
+    http-request set-header X-Forwarded-Proto https
+    default_backend app_nodes
+
+backend app_nodes
+    mode http
+    balance roundrobin
+    server app1 10.0.0.11:8080 check
+    server app2 10.0.0.12:8080 check
+----

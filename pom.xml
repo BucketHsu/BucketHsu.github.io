@@ -19,6 +19,9 @@
         <jruby.version>9.4.12.0</jruby.version>
         <spring-asciidoctor-backends.version>0.0.7</spring-asciidoctor-backends.version>
         <maven.resources.plugin.version>3.3.1</maven.resources.plugin.version>
+        <docs.source.directory>${project.basedir}/docs/modules/ROOT/pages</docs.source.directory>
+        <docs.output.directory>${project.build.directory}/generated-docs/asciidoc</docs.output.directory>
+        <docs.assets.directory>${project.basedir}/docs/modules/ROOT/assets</docs.assets.directory>
     </properties>
 
     <build>
@@ -50,8 +53,8 @@
                     </dependency>
                 </dependencies>
                 <configuration>
-                    <sourceDirectory>${project.basedir}/src/docs</sourceDirectory>
-                    <outputDirectory>${project.build.directory}/generated-docs</outputDirectory>
+                    <sourceDirectory>${docs.source.directory}</sourceDirectory>
+                    <outputDirectory>${docs.output.directory}</outputDirectory>
                     <backend>spring-html</backend>
                     <embedAssets>true</embedAssets>
                     <relativeBaseDir>true</relativeBaseDir>
@@ -96,73 +99,19 @@
                             <goal>copy-resources</goal>
                         </goals>
                         <configuration>
-                            <outputDirectory>${project.build.directory}/generated-docs</outputDirectory>
+                            <outputDirectory>${docs.output.directory}</outputDirectory>
                             <overwrite>true</overwrite>
                             <resources>
                                 <resource>
-                                    <directory>${project.basedir}/src/docs</directory>
+                                    <directory>${docs.assets.directory}</directory>
+                                    <includes>
+                                        <include>**/*</include>
+                                    </includes>
+                                </resource>
+                                <resource>
+                                    <directory>${project.basedir}/docs</directory>
                                     <includes>
                                         <include>.nojekyll</include>
-                                        <include>img/**</include>
-                                        <include>stylesheets/**</include>
-                                        <include>images/**</include>
-                                        <include>**/images/**</include>
-                                    </includes>
-                                </resource>
-                                <resource>
-                                    <directory>${project.basedir}/src/docs/img</directory>
-                                    <targetPath>container/img</targetPath>
-                                    <includes>
-                                        <include>*.svg</include>
-                                    </includes>
-                                </resource>
-                                <resource>
-                                    <directory>${project.basedir}/src/docs/img</directory>
-                                    <targetPath>frontend/img</targetPath>
-                                    <includes>
-                                        <include>*.svg</include>
-                                    </includes>
-                                </resource>
-                                <resource>
-                                    <directory>${project.basedir}/src/docs/img</directory>
-                                    <targetPath>java/img</targetPath>
-                                    <includes>
-                                        <include>*.svg</include>
-                                    </includes>
-                                </resource>
-                                <resource>
-                                    <directory>${project.basedir}/src/docs/img</directory>
-                                    <targetPath>k8s/img</targetPath>
-                                    <includes>
-                                        <include>*.svg</include>
-                                    </includes>
-                                </resource>
-                                <resource>
-                                    <directory>${project.basedir}/src/docs/img</directory>
-                                    <targetPath>network/img</targetPath>
-                                    <includes>
-                                        <include>*.svg</include>
-                                    </includes>
-                                </resource>
-                                <resource>
-                                    <directory>${project.basedir}/src/docs/img</directory>
-                                    <targetPath>reference/img</targetPath>
-                                    <includes>
-                                        <include>*.svg</include>
-                                    </includes>
-                                </resource>
-                                <resource>
-                                    <directory>${project.basedir}/src/docs/img</directory>
-                                    <targetPath>security/img</targetPath>
-                                    <includes>
-                                        <include>*.svg</include>
-                                    </includes>
-                                </resource>
-                                <resource>
-                                    <directory>${project.basedir}/src/docs/img</directory>
-                                    <targetPath>tools/img</targetPath>
-                                    <includes>
-                                        <include>*.svg</include>
                                     </includes>
                                 </resource>
                             </resources>

@@ -1,0 +1,795 @@
+= 加密、Hash、HMAC 與簽章基礎說明
+V1.0.0, 2026-06-14
+:experimental:
+:icons: font
+:icon-set: fas
+:sectnums:
+:toc: left
+:toc-title: 大綱
+:toclevels: 3
+:imagesdir: ../../assets/images
+:sourcedir: uml
+:saltdir: salt
+:authors: Bucket.Hsu
+:doctype: book
+:chapter-label: 章
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:index-link: ../index.html
+:last-update-label!:
+:nofooter:
+
+== 說明
+
+本文件整理 Web 系統與後端開發常見的密碼學名詞，重點放在對稱加密、非對稱加密、Hash、HMAC、數位簽章、憑證，以及實務上容易混淆的 Base64、salt、IV、JWT 與 HTTPS。
+
+適用情境：
+
+* Spring Boot / Java 後端開發。
+* JWT、API 簽章、第三方系統介接。
+* 密碼儲存、敏感資料加密、檔案加密。
+* 弱掃、原碼檢測或資安文件需要說明加密機制時。
+
+== 核心觀念
+
+加密、Hash、HMAC、簽章解決的是不同問題，不能互相取代。
+
+[cols="20%,30%,25%,25%", options="header"]
+|===
+|類型 |主要用途 |是否可還原 |常見例子
+
+|對稱加密
+|保護資料機密性
+|可以，需同一把金鑰解密
+|AES、ChaCha20
+
+|非對稱加密
+|金鑰交換、加密少量資料
+|可以，需私鑰解密
+|RSA、ECIES
+
+|Hash
+|產生資料摘要、比對資料是否改變
+|不可以
+|SHA-256、SHA-512
+
+|HMAC
+|確認資料完整性與來源可信
+|不可以
+|HMAC-SHA256、HMAC-SHA512
+
+|數位簽章
+|確認資料未被竄改，且可驗證簽署者身分
+|不可以
+|RSA-SHA256、ECDSA、EdDSA
+|===
+
+簡單判斷：
+
+* 需要「加密後日後還原」：使用加密。
+* 只需要「比對資料是否一樣」：使用 Hash。
+* 需要「防止資料被竄改，且雙方共享 secret」：使用 HMAC。
+* 需要「別人能驗證是我簽的，但不能偽造」：使用數位簽章。
+* 密碼儲存不要用一般 Hash，應使用密碼雜湊演算法，例如 bcrypt、scrypt、Argon2、PBKDF2。
+
+== 名詞總覽
+
+[cols="18%,32%,50%", options="header"]
+|===
+|名詞 |中文說明 |重點
+
+|Plaintext
+|明文
+|尚未加密的原始資料，例如身分證字號、API request body、檔案內容。
+
+|Ciphertext
+|密文
+|加密後的資料。沒有正確金鑰通常無法解讀。
+
+|Key
+|金鑰
+|加解密或 HMAC 使用的秘密資料。金鑰外洩通常比程式碼外洩更嚴重。
+
+|Secret
+|密鑰 / 秘密值
+|泛指不能公開的值，例如 JWT HMAC secret、API secret、資料庫加密 key。
+
+|IV
+|初始化向量
+|對稱加密某些模式需要的隨機值，通常不必保密，但不可亂用或重複使用。
+
+|Nonce
+|一次性隨機值
+|部分演算法或協定要求每次不可重複，用來避免重放或加密結果重複。
+
+|Salt
+|鹽值
+|密碼雜湊時加入的隨機值，目的是避免相同密碼產生相同結果，並降低彩虹表攻擊效果。
+
+|Pepper
+|額外秘密值
+|系統額外保存的秘密值，可搭配密碼雜湊使用。與 salt 不同，pepper 應保密。
+
+|Digest
+|摘要
+|Hash 後的結果，例如 SHA-256 digest。
+
+|MAC
+|訊息驗證碼
+|Message Authentication Code，用來驗證訊息完整性與共享秘密持有者。
+
+|Signature
+|數位簽章
+|使用私鑰簽署，使用公鑰驗證。
+
+|Certificate
+|憑證
+|用來把公鑰與身分綁定，例如 HTTPS 伺服器憑證。
+
+|Base64
+|編碼
+|只是一種文字表示方式，不是加密，也不是 Hash。
+|===
+
+== 對稱加密
+
+=== 說明
+
+對稱加密是指加密與解密使用同一把金鑰。
+
+[source,text]
+----
+明文 + 金鑰  -> 加密 -> 密文
+密文 + 同金鑰 -> 解密 -> 明文
+----
+
+常見用途：
+
+* 加密資料庫中的敏感欄位。
+* 加密檔案內容。
+* 系統內部保存可還原的機敏資料。
+* HTTPS 連線建立後，大量資料傳輸主要依賴對稱加密。
+
+=== 常見演算法
+
+[cols="20%,30%,50%", options="header"]
+|===
+|演算法 |狀態 |說明
+
+|AES
+|建議使用
+|目前常見且成熟的對稱加密演算法。實務常用 AES-GCM。
+
+|ChaCha20-Poly1305
+|建議使用
+|常見於 TLS 與行動裝置情境，效能與安全性良好。
+
+|DES
+|不建議使用
+|金鑰長度太短，已不安全。
+
+|3DES
+|不建議新系統使用
+|舊系統可能仍存在，但新系統不應採用。
+
+|RC4
+|不可使用
+|已知不安全。
+|===
+
+=== 建議模式
+
+[cols="22%,28%,50%", options="header"]
+|===
+|模式 |建議程度 |說明
+
+|AES-GCM
+|優先建議
+|同時提供加密與完整性驗證，屬於 AEAD 模式。
+
+|AES-CBC + HMAC
+|可用但較麻煩
+|CBC 本身只提供加密，不提供完整性驗證，需正確搭配 HMAC。
+
+|AES-ECB
+|不可使用
+|相同明文區塊會產生相同密文區塊，容易洩漏資料模式。
+|===
+
+=== 實務提醒
+
+* 不要把 key 寫死在程式碼或前端 JavaScript。
+* IV / nonce 通常可以和密文一起存，但必須依演算法規則產生與使用。
+* 同一把 key 不應無限制長期使用，重要系統需規劃 key rotation。
+* 若使用 AES-GCM，nonce 不可在同一把 key 下重複。
+* 加密只能保護機密性，不等於有權限控管。
+
+== 非對稱加密
+
+=== 說明
+
+非對稱加密使用一組金鑰：公鑰與私鑰。
+
+* 公鑰可以公開。
+* 私鑰必須保密。
+* 用公鑰加密的資料，通常只有對應私鑰可以解密。
+* 用私鑰簽章的資料，可用對應公鑰驗證。
+
+[source,text]
+----
+加密用途：
+明文 + 公鑰 -> 加密 -> 密文
+密文 + 私鑰 -> 解密 -> 明文
+
+簽章用途：
+資料 + 私鑰 -> 簽章
+資料 + 簽章 + 公鑰 -> 驗證
+----
+
+=== 常見用途
+
+[cols="25%,75%", options="header"]
+|===
+|用途 |說明
+
+|HTTPS / TLS
+|用於身分驗證與金鑰交換，實際大量資料傳輸通常改用對稱加密。
+
+|JWT 非對稱簽章
+|例如 RS256、ES256。發 token 的系統用私鑰簽章，驗 token 的系統用公鑰驗證。
+
+|第三方 API 簽章
+|由呼叫端用私鑰簽署 request，接收端用公鑰驗證來源與內容。
+
+|金鑰交換
+|雙方協商出後續對稱加密要使用的 session key。
+|===
+
+=== 常見演算法
+
+[cols="20%,30%,50%", options="header"]
+|===
+|演算法 |用途 |說明
+
+|RSA
+|加密、簽章
+|成熟且常見，但 key 較長、效能較差。常見於憑證與舊系統。
+
+|ECDSA
+|簽章
+|橢圓曲線簽章，常見於 ES256。
+
+|EdDSA
+|簽章
+|現代簽章演算法，例如 Ed25519。
+
+|ECDH
+|金鑰交換
+|用於協商共享秘密，不是直接拿來加密資料內容。
+|===
+
+=== 實務提醒
+
+* 私鑰不可放在前端或公開 repo。
+* 非對稱加密不適合直接加密大量資料，通常只處理 key 或簽章。
+* 多系統驗證 JWT 時，RS256 / ES256 通常比 HS256 好管理，因為驗證端只需要公鑰。
+* 私鑰外洩時，需立即替換金鑰並停用舊 key。
+
+== Hash
+
+=== 說明
+
+Hash 是把任意長度資料轉成固定長度摘要。
+
+[source,text]
+----
+資料 -> Hash -> 摘要
+----
+
+Hash 的特性：
+
+* 不可逆，不能從摘要還原原文。
+* 相同輸入會得到相同輸出。
+* 輸入只要有微小改變，輸出通常會大幅不同。
+* 好的 Hash 演算法應難以找到碰撞。
+
+=== 常見用途
+
+[cols="25%,75%", options="header"]
+|===
+|用途 |說明
+
+|檔案完整性檢查
+|下載檔案後比對 SHA-256，確認檔案是否被改過。
+
+|資料指紋
+|針對資料產生摘要，方便快速比對是否異動。
+
+|簽章前摘要
+|數位簽章通常不是直接簽整份大資料，而是先 hash 後再簽摘要。
+
+|密碼儲存
+|不可直接使用一般 Hash，應使用 bcrypt、scrypt、Argon2、PBKDF2 等密碼雜湊演算法。
+|===
+
+=== 常見演算法
+
+[cols="20%,30%,50%", options="header"]
+|===
+|演算法 |狀態 |說明
+
+|SHA-256
+|建議使用
+|常見且目前仍適合一般完整性檢查。
+
+|SHA-512
+|建議使用
+|輸出較長，也常見於完整性檢查。
+
+|SHA-1
+|不建議使用
+|已有碰撞攻擊，不應用於安全目的。
+
+|MD5
+|不可用於安全目的
+|只能在非安全場景做弱校驗或舊系統相容，不可用於簽章、密碼或安全驗證。
+|===
+
+=== 實務提醒
+
+* Hash 不是加密，不能解密。
+* Hash 不需要 key；只要知道原文，任何人都能算出同樣摘要。
+* 若要驗證訊息未被竄改且只有雙方能產生正確結果，應使用 HMAC，不是單純 Hash。
+* 儲存密碼時，不要用 `SHA-256(password)` 這種方式。
+
+== HMAC
+
+=== 說明
+
+HMAC 是 Keyed-Hash Message Authentication Code。它是使用 secret key 搭配 Hash 產生的訊息驗證碼。
+
+[source,text]
+----
+資料 + secret key -> HMAC -> MAC 值
+----
+
+HMAC 用來確認：
+
+* 資料沒有被竄改。
+* 產生 HMAC 的人知道同一把 secret key。
+
+但 HMAC 不提供：
+
+* 加密功能。
+* 不可否認性。
+* 公開驗證能力。
+
+=== 常見用途
+
+[cols="25%,75%", options="header"]
+|===
+|用途 |說明
+
+|JWT HS256 / HS512
+|JWT 使用共享 secret 簽章，驗證端也需要同一把 secret。
+
+|Webhook 簽章
+|第三方服務用 shared secret 對 payload 產生 HMAC，接收端重新計算後比對。
+
+|API Request 簽章
+|呼叫端針對 method、path、timestamp、body 產生 HMAC，接收端驗證請求未被竄改。
+
+|Cookie / Token 防竄改
+|伺服器產生資料與 MAC，收到後驗證是否被修改。
+|===
+
+=== HMAC 與 Hash 差異
+
+[cols="25%,37%,38%", options="header"]
+|===
+|項目 |Hash |HMAC
+
+|是否使用 secret key
+|否
+|是
+
+|是否可防竄改
+|只能檢查資料是否異動，但任何人都能重算
+|可以，因為攻擊者不知道 secret key
+
+|是否加密
+|否
+|否
+
+|常見用途
+|檔案摘要、資料指紋
+|API 簽章、JWT HS256、Webhook 驗證
+|===
+
+=== 實務提醒
+
+* HMAC secret 必須夠長、隨機，不能用簡單字串。
+* 驗證 HMAC 時應使用 constant-time comparison，避免 timing attack。
+* HMAC 不會隱藏資料內容，payload 仍然可能是明文。
+* 若多個系統都拿同一把 secret，一個系統外洩就會影響所有系統。
+
+== 數位簽章
+
+=== 說明
+
+數位簽章使用非對稱金鑰。
+
+* 簽署者使用私鑰簽章。
+* 驗證者使用公鑰驗證。
+* 驗證者不需要知道私鑰。
+
+[source,text]
+----
+資料 + 私鑰 -> 簽章
+資料 + 簽章 + 公鑰 -> 驗證成功 / 失敗
+----
+
+=== 數位簽章與 HMAC 差異
+
+[cols="25%,37%,38%", options="header"]
+|===
+|項目 |HMAC |數位簽章
+
+|金鑰型態
+|共享 secret
+|私鑰簽章、公鑰驗證
+
+|驗證者是否可偽造
+|可以，因為驗證者也有 secret
+|不行，驗證者只有公鑰
+
+|適合情境
+|內部系統、雙方共享 secret
+|多系統驗證、第三方介接、公開驗證
+
+|JWT 常見演算法
+|HS256、HS512
+|RS256、ES256、EdDSA
+|===
+
+=== 實務提醒
+
+* 簽章不是加密，資料本身仍可能被看見。
+* 簽章能證明資料未被竄改與簽署者持有私鑰。
+* 驗證公鑰來源要可信，否則可能被替換成攻擊者的公鑰。
+
+== Base64
+
+=== 說明
+
+Base64 是編碼，不是加密。
+
+用途是把二進位資料轉成可放在文字環境中的格式，例如 HTTP、JSON、JWT、URL、設定檔。
+
+[source,text]
+----
+hello -> aGVsbG8=
+----
+
+任何人都可以把 Base64 decode 回原始資料。
+
+=== 常見誤解
+
+[cols="35%,65%", options="header"]
+|===
+|誤解 |正確理解
+
+|Base64 是加密
+|Base64 只是編碼，沒有安全性。
+
+|JWT 看起來亂碼所以資料是加密的
+|多數 JWT 只是 Base64URL 編碼加簽章，payload 通常可直接解碼閱讀。
+
+|把密碼 Base64 後儲存就安全
+|不安全。Base64 可直接還原，不可用於密碼儲存。
+|===
+
+== 密碼儲存
+
+=== 正確方向
+
+密碼儲存不應使用一般加密，也不應使用單純 SHA-256 / SHA-512。
+
+建議使用：
+
+* Argon2
+* bcrypt
+* scrypt
+* PBKDF2
+
+這類演算法特性：
+
+* 會使用 salt。
+* 計算成本較高，可降低暴力破解速度。
+* 驗證時重新計算並比對結果，不需要也不應還原原始密碼。
+
+=== 不建議作法
+
+[source,text]
+----
+password
+Base64(password)
+MD5(password)
+SHA-256(password)
+AES_encrypt(password)
+----
+
+說明：
+
+* 明文儲存最危險。
+* Base64 可直接還原。
+* MD5 / SHA-256 太快，不適合密碼儲存。
+* 可逆加密代表系統若 key 外洩，密碼可能被全部還原。
+
+== JWT 與加密 / 簽章
+
+=== JWT 結構
+
+JWT 通常由三段組成：
+
+[source,text]
+----
+header.payload.signature
+----
+
+常見 JWT 是 JWS，也就是「簽章」而不是「加密」。
+
+[cols="20%,80%", options="header"]
+|===
+|區段 |說明
+
+|Header
+|描述演算法與 token 型態，例如 `alg: HS256`。
+
+|Payload
+|放 claims，例如使用者 ID、角色、iat、exp。通常只是 Base64URL，可被解碼閱讀。
+
+|Signature
+|用 secret 或 private key 對 header + payload 簽章，用來驗證 token 未被竄改。
+|===
+
+=== HS256 與 RS256
+
+[cols="25%,37%,38%", options="header"]
+|===
+|項目 |HS256 |RS256
+
+|類型
+|HMAC
+|數位簽章
+
+|金鑰
+|同一把 shared secret
+|私鑰簽章，公鑰驗證
+
+|驗證端是否能簽 token
+|可以，因為有 secret
+|不行，驗證端只有公鑰
+
+|適合情境
+|單一系統或少數可信系統
+|多系統驗證、權責分離、SSO 類情境
+|===
+
+=== JWT 實務提醒
+
+* 不要把密碼、身分證號、存摺帳號等敏感資料放進 JWT payload。
+* JWT 簽章只能防竄改，不會隱藏 payload。
+* JWT 必須檢查 `exp`、`iat`、`iss`、`aud` 等必要 claims。
+* HS256 secret 必須夠長、隨機，不能使用簡單字串。
+* 使用 RS256 時，私鑰只放在簽發 token 的服務，其他服務只保存公鑰。
+
+== HTTPS / TLS 與憑證
+
+=== HTTPS 做了什麼
+
+HTTPS 主要提供：
+
+* 伺服器身分驗證。
+* 傳輸內容加密。
+* 傳輸資料完整性保護。
+
+TLS 實務上通常會同時使用非對稱與對稱機制：
+
+* 連線建立時，用憑證與金鑰交換確認身分並協商 session key。
+* 後續大量資料傳輸使用對稱加密，效能較好。
+
+=== 憑證的角色
+
+憑證不是私鑰。
+
+憑證主要包含：
+
+* 網域名稱。
+* 公鑰。
+* 簽發者資訊。
+* 有效期限。
+* 憑證用途。
+
+私鑰必須留在伺服器端妥善保管，不應與憑證混為一談。
+
+== 常見場景選擇
+
+[cols="32%,35%,33%", options="header"]
+|===
+|需求 |建議方式 |原因
+
+|資料庫敏感欄位需要日後還原
+|AES-GCM
+|需要可逆加密與完整性保護。
+
+|檔案下載後確認未被修改
+|SHA-256
+|只需比對摘要，不需要還原。
+
+|Webhook 驗證內容未被竄改
+|HMAC-SHA256
+|雙方共享 secret，可驗證 payload。
+
+|多個系統都要驗證同一顆 JWT
+|RS256 / ES256
+|簽發端保管私鑰，驗證端只需要公鑰。
+
+|儲存使用者密碼
+|bcrypt / Argon2 / PBKDF2
+|密碼不可還原，且需增加暴力破解成本。
+
+|API request 防重放
+|HMAC + timestamp + nonce
+|除了驗證內容，還需限制請求時間與一次性值。
+
+|前端需要保存登入狀態
+|HttpOnly Secure Cookie + 後端驗證
+|降低 token 被 JavaScript 讀取風險。
+
+|機敏資料傳輸
+|HTTPS
+|保護傳輸中的機密性與完整性。
+|===
+
+== Java / Spring Boot 實作提醒
+
+=== AES-GCM 方向
+
+[source,java]
+----
+// 示意：實務上 key 應由安全來源取得，例如 KMS、環境變數、Secret Manager。
+// IV / nonce 應使用 SecureRandom 產生，且同一把 key 下不可重複。
+Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+----
+
+提醒：
+
+* 不要使用 `AES/ECB/PKCS5Padding`。
+* 不要自行設計加密格式。
+* key、iv、ciphertext、tag 的保存格式要明確定義。
+
+=== HMAC 方向
+
+[source,java]
+----
+Mac mac = Mac.getInstance("HmacSHA256");
+SecretKeySpec keySpec = new SecretKeySpec(secretBytes, "HmacSHA256");
+mac.init(keySpec);
+byte[] result = mac.doFinal(messageBytes);
+----
+
+提醒：
+
+* secretBytes 不應由簡單字串直接 `.getBytes()` 產生。
+* 驗證時避免直接使用一般字串比較，應使用 constant-time comparison。
+
+=== 密碼雜湊方向
+
+Spring Security 常見方向：
+
+[source,java]
+----
+PasswordEncoder encoder = new BCryptPasswordEncoder();
+String hash = encoder.encode(rawPassword);
+boolean matches = encoder.matches(rawPassword, hash);
+----
+
+提醒：
+
+* 不要自己寫密碼 Hash 流程。
+* 不要把密碼加密後可逆保存。
+* 密碼重設應使用一次性 token，且 token 需有有效期限。
+
+== 常見誤解
+
+[cols="38%,62%", options="header"]
+|===
+|誤解 |正確理解
+
+|Hash 可以解密
+|Hash 不可逆，不能解密。
+
+|Base64 是加密
+|Base64 只是編碼，任何人都能 decode。
+
+|JWT 有簽章，所以 payload 是安全機密
+|簽章只能防竄改，多數 JWT payload 可直接解碼閱讀。
+
+|HMAC 可以加密資料
+|HMAC 只能驗證完整性與 shared secret，不會隱藏資料內容。
+
+|HTTPS 之後就不用做資料加密
+|HTTPS 保護傳輸中資料；資料庫落地、log、備份仍可能需要額外保護。
+
+|密碼用 SHA-256 存就安全
+|一般 Hash 太快，不適合密碼儲存，應使用 bcrypt、Argon2、scrypt 或 PBKDF2。
+
+|非對稱加密比較安全，所以所有資料都用 RSA 加密
+|非對稱加密效能較差，通常不直接加密大量資料。
+
+|公鑰要保密
+|公鑰可以公開；真正必須保密的是私鑰。
+
+|salt 要保密
+|salt 通常不需要保密；pepper 才應保密。
+
+|加密就等於有權限控管
+|加密保護資料內容，不代表使用者有權存取資料。權限仍需後端檢查。
+|===
+
+== 導入建議
+
+=== 優先確認需求
+
+導入前先確認：
+
+* 是要防止資料被看見，還是防止資料被竄改？
+* 資料日後是否需要還原？
+* 驗證者是否也允許產生簽章？
+* 金鑰要由誰保存？
+* 金鑰外洩時如何替換？
+* 是否有舊系統或第三方介接相容問題？
+
+=== 建議基準
+
+[cols="30%,70%", options="header"]
+|===
+|項目 |建議
+
+|對稱加密
+|優先使用 AES-GCM 或成熟函式庫封裝。
+
+|Hash
+|安全用途避免 MD5、SHA-1，完整性檢查可用 SHA-256 以上。
+
+|HMAC
+|使用 HMAC-SHA256 或 HMAC-SHA512，secret 需高強度隨機。
+
+|JWT
+|單一系統可用 HS256；跨系統驗證建議 RS256 / ES256。
+
+|密碼儲存
+|使用 bcrypt、Argon2、scrypt 或 PBKDF2。
+
+|金鑰保存
+|避免寫死於程式碼，應使用環境變數、Secret Manager、KMS 或受控設定。
+
+|傳輸保護
+|正式環境一律使用 HTTPS，並正確設定憑證與 HSTS。
+|===
+
+== 參考資料
+
+* https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html[OWASP - Cryptographic Storage Cheat Sheet]
+* https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html[OWASP - Password Storage Cheat Sheet]
+* https://cheatsheetseries.owasp.org/cheatsheets/Key_Management_Cheat_Sheet.html[OWASP - Key Management Cheat Sheet]
+* https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html[OWASP - JSON Web Token for Java Cheat Sheet]
+* https://developer.mozilla.org/en-US/docs/Glossary/Symmetric-key_cryptography[MDN - Symmetric-key cryptography]
+* https://developer.mozilla.org/en-US/docs/Glossary/Public-key_cryptography[MDN - Public-key cryptography]
+* https://developer.mozilla.org/en-US/docs/Glossary/Hash_function[MDN - Hash function]
+* https://developer.mozilla.org/en-US/docs/Glossary/Base64[MDN - Base64]
+* https://docs.oracle.com/en/java/javase/17/docs/api/java.base/javax/crypto/Cipher.html[Java Cipher API]
+* https://docs.oracle.com/en/java/javase/17/docs/api/java.base/javax/crypto/Mac.html[Java Mac API]

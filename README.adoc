@@ -4,27 +4,60 @@ Bucket.Hsu
 :toc-title: 目錄
 :toclevels: 2
 
-這個 repository 是 `https://buckethsu.github.io/` 的 AsciiDoc 靜態筆記來源。
+這個 repository 是 `https://buckethsu.github.io/` 的技術筆記來源。
 
-AsciiDoc 會透過 Maven 與 `spring-asciidoctor-backends` 的 `spring-html` backend 產生靜態 HTML，輸出後再由 GitHub Pages 發布。
+目前文件同時保留兩條建置路徑：
 
-== 本機編譯
+* Maven + `asciidoctor-maven-plugin` + `spring-asciidoctor-backends`：
+  產生既有單頁 HTML 文件，方便維持原本 AsciiDoc 輸出流程。
+* Antora：
+  產生接近 Spring 官方文件風格的多頁文件網站，作為 GitHub Pages 的站點輸出。
+
+== 快速啟動
 
 [source,bash]
 ----
 mvn -B -DskipTests generate-resources
+npm ci
+npm run docs:site
 ----
 
-編譯後 HTML 會產生在：
+== 文件網站入口
+
+* GitHub Pages：`https://buckethsu.github.io/`
+* Antora 來源入口：`docs/modules/ROOT/pages/index.adoc`
+* Antora 導覽設定：`docs/modules/ROOT/nav.adoc`
+
+== 本機建置
+
+[source,bash]
+----
+mvn -B -DskipTests generate-resources
+npm run docs:antora
+----
+
+建置後會產生：
 
 [source,text]
 ----
-target/generated-docs/
+target/generated-docs/asciidoc/
+target/generated-docs/site/
 ----
 
 == GitHub Pages
 
-推送到 `main` 後，GitHub Actions 會使用 Maven 編譯 AsciiDoc，並發布 `target/generated-docs/` 到 GitHub Pages。
+推送到 `main` 後，GitHub Actions 會先驗證 Maven AsciiDoc 建置，再建立 Antora 文件網站，最後發布 `target/generated-docs/site/` 到 GitHub Pages。
+
+== 開發者常用指令
+
+[source,bash]
+----
+git status
+mvn -B -DskipTests generate-resources
+npm ci
+npm run docs:antora
+npm run docs:site
+----
 
 == 授權與使用限制
 

@@ -1,0 +1,79 @@
+= 地政名詞英文對照
+Bucket.Hsu
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 大綱
+:toclevels: 1
+:imagesdir: ../../assets/images
+:authors: Bucket.Hsu
+:doctype: book
+:chapter-label:
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:index-link: ../index.html
+:last-update-label!:
+:nofooter:
+
+== 名詞對照
+
+[width="100%", cols="2,3",options="header"]
+|===
+| 中文 | 英文
+
+| 遺產分割協議書 | Contract concerning succession
+| 地籍總歸戶冊（卡） | General registers of landowners
+| 囑託登記 | Registration of request
+| 地籍圖 | Cadastral map
+| 權利價值 | The value of right of land for compensation
+| 地籍測量 | Cadastral survey
+| 繼承登記 | Registration of inheritance
+| 地籍 | Cadastre
+| 管理者變更登記 | Registration of changes in administrator
+| 地價評議委員會 | Land evaluation committee
+| 圖根測量 | Supplementary control
+| 地價稅 | Land value tax
+| 農業用地 | Agricultural land
+| 地段圖 | Parcelary plan
+| 農牧用地 | Farming and grazing lands
+| 地政機關 | Land office
+| 畸零地 | Odd lot
+| 地役權 | Easement
+| 義務人 | Obligor
+| 地上權 | Superficies
+| 登記清冊 | Registration lists
+| 全球定位系統 | Global Positioning System (GPS)
+| 申報地價 | Declared land value
+| 田賦 | Agricultural land tax
+| 永佃權 | Permanent lease
+| 公告土地現值 | Current land value
+| 公有土地 | Public land
+| 建築改良物 | Constructional improvements
+| 不動產 | Real estate
+| 抵押權 | Mortgage
+| 所有權 | Ownership
+| 典權 | Dien
+| 住址變更登記 | Registration of change in domicile
+| 自用住宅用地 | Owner-occupied residential land
+| 收件簿 | Records of applications received
+| 土地登記 | Land registration
+| 土地登記簿 | Land register
+| 三角測量 | Triangulation
+| 乙種建築用地 | Type B building lands
+| 土地所有權狀 | Land ownership certificate
+| 土地所有權人 | Landowners
+| 土地改良物 | Improvement on land
+| 行政區 | District
+| 段 | Section
+| 小段 | Subsection
+| 地號 | Land serial no
+| 建號 | Building serial no
+| 面積 | Area
+| 公告土地現值 | Announced Current Land Value
+| 登記日期 | Date of registration
+| 登記原因 | Cause of registration
+| 登記簿謄本 | Land/Building Register Transcript
+|===

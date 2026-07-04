@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{page.title}} | {{site.title}}</title>
+    <script>
+      (function () {
+        var savedTheme;
+        try {
+          savedTheme = localStorage.getItem('docs-theme');
+        } catch (error) {
+          savedTheme = null;
+        }
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.dataset.theme = savedTheme || (prefersDark ? 'dark' : 'light');
+      }());
+    </script>
+    <link rel="stylesheet" href="{{uiRootPath}}/static/css/site.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="topbar__brand" href="{{{relativize site.homeUrl}}}">
+        <span class="topbar__mark" aria-hidden="true">B</span>
+        <span>{{site.title}}</span>
+      </a>
+      <div class="topbar__actions">
+        <span class="topbar__meta">Reference Documentation</span>
+        <button class="theme-toggle" type="button" aria-label="切換深淺色模式" aria-pressed="false">
+          <span class="theme-toggle__icon" aria-hidden="true"></span>
+          <span class="theme-toggle__label">深色模式</span>
+        </button>
+      </div>
+    </header>
+    <div class="site-shell">
+      <aside class="site-nav">
+        <div class="site-nav__heading">
+          <span>文件導覽</span>
+          <span class="site-nav__version">Latest</span>
+        </div>
+        <nav class="site-nav__menu">
+          <ul class="nav-list">
+            {{> nav-tree items=page.navigation}}
+          </ul>
+        </nav>
+      </aside>
+      <main class="site-main">
+        <details class="mobile-nav">
+          <summary>文件導覽</summary>
+          <nav aria-label="行動版文件導覽">
+            <ul class="nav-list">
+              {{> nav-tree items=page.navigation}}
+            </ul>
+          </nav>
+        </details>
+        <div class="site-header__crumbs" aria-label="頁面路徑">
+            {{#if page.breadcrumbs}}
+              {{#each page.breadcrumbs}}
+                <a href="{{{relativize url}}}">{{content}}</a>
+              {{/each}}
+            {{else}}
+              <a href="{{{relativize site.homeUrl}}}">首頁</a>
+            {{/if}}
+        </div>
+        <article class="doc">
+          <header class="doc__header">
+          <h1>{{page.title}}</h1>
+          </header>
+          {{{page.contents}}}
+        </article>
+      </main>
+    </div>
+    <script src="{{uiRootPath}}/static/js/theme.js"></script>
+  </body>
+</html>

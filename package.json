@@ -1,0 +1,13 @@
+{
+  "name": "bucket-hsu-notes-docs",
+  "private": true,
+  "scripts": {
+    "docs:antora": "antora antora-playbook.yml --clean --to-dir target/generated-docs/site --log-failure-level=error",
+    "docs:nojekyll": "node -e \"require('node:fs').mkdirSync('target/generated-docs/site',{recursive:true});require('node:fs').writeFileSync('target/generated-docs/site/.nojekyll','')\"",
+    "docs:site": "npm run docs:antora && npm run docs:nojekyll"
+  },
+  "devDependencies": {
+    "@antora/cli": "3.1.12",
+    "@antora/site-generator": "3.1.12"
+  }
+}

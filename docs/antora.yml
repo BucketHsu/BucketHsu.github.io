@@ -1,0 +1,5 @@
+name: bucket-hsu-notes
+title: BucketHsu 技術筆記
+version: ~
+nav:
+  - modules/ROOT/nav.adoc

@@ -1,0 +1,33 @@
+= 架構
+Bucket.Hsu
+:toc: left
+:toc-title: 目錄
+:toclevels: 2
+:stylesheet: assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本頁整理目前文件站的主題分區，作為閱讀順序與知識地圖入口。
+
+== 應用程式分層
+
+* xref:java/java-layering-dto-dao-entity.adoc[Java MVC MVVM 分層與 DTO DAO Entity Repository 名詞說明]
+* xref:java/character-encoding-guide.adoc[字元、字集與編碼整理]
+* xref:frontend/html5-semantic-elements.adoc[HTML5 語意化 Element 使用規範]
+
+== 基礎設施與部署面
+
+* xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異]
+* xref:container/docker-compose-notes.adoc[Docker Compose 整理]
+* xref:java/tomcat-server-xml.adoc[TomcatServerXML設定]
+* xref:k8s/pv-local-to-cifs.adoc[Kubernetes PV 由 Local 改為 CIFS（SMB CSI）變更紀錄]
+
+== 安全面
+
+* xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header 說明]
+* xref:security/web-crypto-basics.adoc[加密、Hash、HMAC 與簽章基礎說明]
+* xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
+
+== TODO
+
+* 目前文件內容仍以技術筆記為主，尚未拆成更細的架構決策文件。
