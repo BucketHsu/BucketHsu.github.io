@@ -1,0 +1,31 @@
+* xref:index.adoc[首頁]
+* xref:getting-started.adoc[快速開始]
+* xref:architecture.adoc[架構]
+* xref:database.adoc[資料庫]
+* xref:deployment.adoc[部署]
+* xref:security.adoc[安全]
+* xref:troubleshooting.adoc[疑難排解]
+* 參考資料
+** xref:reference/technical-links.adoc[技術相關參考網頁]
+** xref:reference/misc-notes.adoc[其餘說明]
+** xref:reference/land-office-terms-en.adoc[地政名詞英文對照]
+** xref:reference/taiwan-county-id-codes.adoc[台灣縣市英文、代碼與身分證字號對照表]
+* Java 與前端
+** xref:java/java-layering-dto-dao-entity.adoc[Java MVC MVVM 分層與 DTO DAO Entity Repository 名詞說明]
+** xref:java/character-encoding-guide.adoc[字元、字集與編碼整理]
+** xref:java/tomcat-server-xml.adoc[TomcatServerXML設定]
+** xref:frontend/html5-semantic-elements.adoc[HTML5 語意化 Element 使用規範]
+* 網路與容器
+** xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異]
+** xref:container/docker-compose-notes.adoc[Docker Compose 整理]
+** xref:container/container-shell-backspace.adoc[使用 sh 進入 container 時 Backspace 無法使用]
+* Kubernetes
+** xref:k8s/ckad-practice-notes.adoc[CKAD考古題與練習題]
+** xref:k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除筆記]
+** xref:k8s/pv-local-to-cifs.adoc[Kubernetes PV 由 Local 改為 CIFS（SMB CSI）變更紀錄]
+* 安全與工具
+** xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header 說明]
+** xref:security/web-crypto-basics.adoc[加密、Hash、HMAC 與簽章基礎說明]
+** xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
+** xref:tools/ai-cli-notes.adoc[AI-CLI注意事項]
+** xref:tools/dependency-update-guide.adoc[套件依賴更新流程]

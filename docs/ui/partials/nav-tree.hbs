@@ -1,0 +1,14 @@
+{{#each items}}
+  <li class="nav-item">
+    {{#if url}}
+      <a href="{{{relativize url}}}">{{content}}</a>
+    {{else}}
+      <span>{{content}}</span>
+    {{/if}}
+    {{#if items}}
+      <ul class="nav-list nav-list--nested">
+        {{> nav-tree items=items}}
+      </ul>
+    {{/if}}
+  </li>
+{{/each}}

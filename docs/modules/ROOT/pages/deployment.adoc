@@ -1,0 +1,26 @@
+= 部署
+Bucket.Hsu
+:toc: left
+:toc-title: 目錄
+:toclevels: 2
+:stylesheet: assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本頁整理與部署、執行環境、容器與 Kubernetes 相關的入口。
+
+== 容器與本機環境
+
+* xref:container/docker-compose-notes.adoc[Docker Compose 整理]
+* xref:container/container-shell-backspace.adoc[使用 sh 進入 container 時 Backspace 無法使用]
+
+== Java 與 Web Server
+
+* xref:java/tomcat-server-xml.adoc[TomcatServerXML設定]
+* xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
+
+== Kubernetes
+
+* xref:k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除筆記]
+* xref:k8s/pv-local-to-cifs.adoc[Kubernetes PV 由 Local 改為 CIFS（SMB CSI）變更紀錄]
+* xref:k8s/ckad-practice-notes.adoc[CKAD考古題與練習題]

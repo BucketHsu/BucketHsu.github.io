@@ -1,0 +1,510 @@
+= TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異
+V1.0.0, 2026-06-08
+:experimental:
+:icons: font
+:icon-set: fas
+:sectnums:
+:toc: left
+:toc-title: 大綱
+:toclevels: 3
+:imagesdir: ../../assets/images
+:sourcedir: uml
+:saltdir: salt
+:authors: Bucket.Hsu
+:doctype: book
+:chapter-label: 章
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:index-link: ../index.html
+:last-update-label!:
+:nofooter:
+
+== TLS 通道
+
+TLS 通道是程式與伺服器之間的加密通訊管道。 +
+以 Java 程式連線 SQL Server 為例，JDBC Driver 會先建立底層網路連線，再依連線設定與伺服器能力建立 TLS 加密通道。
+
+[source, text]
+----
+Java 程式  ←→  TLS 加密通道  ←→  SQL Server
+----
+
+TLS 主要用途：
+
+* 加密傳輸資料。
+* 避免帳號、密碼、SQL 查詢、查詢結果被明文傳送。
+* 透過憑證確認伺服器身分。
+* 連線前會進行 TLS handshake，協商 TLS 版本與加密演算法。
+
+實務上若 TLS handshake 失敗，上層通常只會看到「資料庫連線失敗」或「DataSource 建立失敗」，不一定會直接顯示是 TLS 版本或憑證問題。
+
+== TLS 版本
+
+SSL / TLS 版本脈絡如下：
+
+[cols="20%,25%,55%", options="header"]
+|===
+|版本 |狀態 |說明
+
+|SSL 2.0
+|已淘汰
+|非常舊的 SSL 版本，已不應使用。
+
+|SSL 3.0
+|已淘汰
+|已知安全風險，已不應使用。
+
+|TLS 1.0
+|舊版，已不建議使用
+|部分舊系統仍可能只能協商此版本。
+
+|TLS 1.1
+|舊版，已不建議使用
+|比 TLS 1.0 新，但目前也不建議使用。
+
+|TLS 1.2
+|目前仍常見
+|企業系統與舊版伺服器仍常見的主力版本。
+
+|TLS 1.3
+|較新版本
+|較新的 TLS 版本，握手流程與安全性都有改善。
+|===
+
+注意事項：
+
+* TLS 沒有 TLS 2.0、TLS 3.0。
+* 以前印象中的 2.0、3.0 多半是指 SSL 2.0、SSL 3.0。
+* `TLSv1` 通常指 TLS 1.0。
+
+== Java 連舊 SQL Server 的 TLS 問題
+
+新版 Java，例如 Java 25，預設可能停用 `TLSv1` / `TLSv1.1` 這類舊協定。
+
+若舊版 SQL Server 2012 只能協商 `TLSv1`，可能形成下列情境：
+
+[source, text]
+----
+Java 25 禁止 TLSv1
+SQL Server 2012 只支援或只成功協商 TLSv1
+所以 TLS handshake 失敗
+導致 JDBC 連線失敗
+----
+
+錯誤表面可能出現在：
+
+* DataSource 初始化。
+* Spring Bean 建立。
+* SqlSessionFactory 建立。
+* MyBatis 初始化。
+
+但實際原因可能是底層 TLS 通道建立失敗。排查時不要只看 Spring 或 MyBatis 的最外層錯誤，應往下追 JDBC Driver、TLS handshake 與 JDK Security 設定。
+
+== application.yml 與 JDK Security 的差異
+
+`application.yml` 或 JDBC URL 主要控制 JDBC Driver 行為，例如：
+
+* 資料庫位置。
+* 帳號密碼。
+* 是否加密。
+* 是否信任伺服器憑證。
+
+但 `TLSv1` 是否允許使用，是 JDK Security 層級決定。
+
+[cols="30%,70%", options="header"]
+|===
+|設定位置 |主要用途
+
+|`application.yml` / JDBC URL
+|告訴 JDBC Driver 怎麼連，例如 host、port、database、帳密、`encrypt`、`trustServerCertificate`。
+
+|JDK Security
+|決定 `TLSv1` 這種舊協定能不能被 Java 使用。
+|===
+
+簡單對照：
+
+[source, text]
+----
+application.yml / JDBC URL = 告訴 JDBC Driver 怎麼連
+JDK Security = 決定 TLSv1 這種舊協定能不能被 Java 使用
+----
+
+如果 `TLSv1` 已經被 JDK 禁用，只改 JDBC URL 通常無法解決。
+
+== java.security.properties 的用途
+
+若本機開發必須暫時允許 `TLSv1`，可使用 Java Security 補充設定檔，例如：
+
+[source, text]
+----
+dev/java-security-legacy-tls.properties
+----
+
+啟動時搭配：
+
+[source, shell]
+----
+-Djava.security.properties=dev/java-security-legacy-tls.properties
+-Djdk.tls.client.protocols=TLSv1
+----
+
+[cols="35%,65%", options="header"]
+|===
+|設定 |說明
+
+|`-Djava.security.properties=...`
+|載入 Java Security 補充設定，讓 `TLSv1` 不再被 JDK 完全禁止。
+
+|`-Djdk.tls.client.protocols=TLSv1`
+|指定 Java Client 端嘗試使用 `TLSv1`。
+
+|`application.yml`
+|設定 Spring Boot / JDBC Driver 的資料庫連線資訊。
+|===
+
+`jdk.tls.disabledAlgorithms` 是 Java Security Property，不是一般 System Property。
+
+不建議直接寫成：
+
+[source, shell]
+----
+-Djdk.tls.disabledAlgorithms=...
+----
+
+應透過下列方式載入設定檔：
+
+[source, shell]
+----
+-Djava.security.properties=dev/java-security-legacy-tls.properties
+----
+
+補充設定檔的重點是調整 JDK Security Policy；`application.yml` 則只負責應用程式與 JDBC Driver 的連線設定。
+
+== TCP
+
+TCP 全名是 Transmission Control Protocol，中文常稱為傳輸控制協定。
+
+TCP 是傳輸層協定，負責在兩台主機之間建立可靠、有順序、可確認送達的資料傳輸連線。
+
+Java 程式連 SQL Server 的分層可簡化如下：
+
+[source, text]
+----
+Java 程式
+  ↓
+JDBC Driver
+  ↓
+TLS 加密通道
+  ↓
+TCP 連線
+  ↓
+SQL Server
+----
+
+[cols="20%,80%", options="header"]
+|===
+|層級 |責任
+
+|JDBC
+|負責資料庫連線與 SQL Server 溝通。
+
+|TLS
+|負責加密與驗證通訊內容。
+
+|TCP
+|負責兩台主機之間可靠傳送資料。
+
+|IP
+|負責把資料封包送到目標主機。
+|===
+
+TCP 特性：
+
+* 需要先建立連線。
+* 傳輸資料有順序。
+* 封包遺失時會重送。
+* 會確認資料是否成功送達。
+* 適合需要可靠傳輸的服務。
+
+常見 TCP 服務與 Port：
+
+[cols="35%,20%,45%", options="header"]
+|===
+|服務 |Port |說明
+
+|HTTP
+|80
+|未加密 Web 連線。
+
+|HTTPS
+|443
+|HTTP over TLS。
+
+|SQL Server
+|1433
+|SQL Server 預設連線 Port。
+
+|SMB / CIFS
+|445
+|Windows 分享資料夾常見 Port。
+
+|NFS
+|2049
+|NFS 常見 Port。
+|===
+
+== TCP 與 TLS 的關係
+
+TCP 與 TLS 是不同層級：
+
+[cols="20%,80%", options="header"]
+|===
+|層級 |責任
+
+|TCP
+|負責可靠傳輸。
+
+|TLS
+|負責加密與驗證通訊內容。
+|===
+
+HTTP over TLS 的分層：
+
+[source, text]
+----
+HTTP
+  ↓
+TLS
+  ↓
+TCP
+  ↓
+IP
+----
+
+JDBC 連 SQL Server 的分層：
+
+[source, text]
+----
+JDBC / SQL Server Protocol
+  ↓
+TLS
+  ↓
+TCP
+  ↓
+IP
+----
+
+資料庫連線失敗時，可分層判斷：
+
+[cols="20%,80%", options="header"]
+|===
+|層級 |常見問題
+
+|TCP 層
+|目標 IP 不通、Port 沒開、防火牆擋住、服務沒啟動。
+
+|TLS 層
+|TLS 版本不相容、憑證不被信任、加密演算法被停用。
+
+|JDBC 層
+|帳號密碼錯誤、資料庫名稱錯誤、JDBC URL 設定錯誤。
+|===
+
+排查順序建議先確認 TCP 是否能連，再看 TLS handshake，最後才判斷 JDBC 設定與資料庫帳號權限。
+
+== CIFS / SMB
+
+CIFS / SMB 是網路檔案分享協定，常見於 Windows 分享資料夾。
+
+簡單區分：
+
+* CIFS / SMB：偏 Windows 世界。
+* NFS：偏 Linux / Unix 世界。
+
+Linux 掛 Windows 分享資料夾常用：
+
+[source, shell]
+----
+mount -t cifs
+----
+
+`/etc/fstab` 範例：
+
+[source, text]
+----
+//fileserver.example.local/share  /mnt/share  cifs  credentials=/etc/samba/cred-share,vers=3.0,iocharset=utf8,_netdev,nofail  0  0
+----
+
+== SMB / CIFS 版本
+
+`vers=` 指的是 SMB 協定版本，不是 TLS 版本。
+
+[cols="20%,35%,45%", options="header"]
+|===
+|設定 |版本 |說明
+
+|`vers=1.0`
+|SMB 1.0 / CIFS
+|非常舊，不建議使用。
+
+|`vers=2.0`
+|SMB 2.0
+|較舊版本。
+
+|`vers=2.1`
+|SMB 2.1
+|Windows 7 / Windows Server 2008 R2 常見。
+
+|`vers=3.0`
+|SMB 3.0
+|Windows 8 / Windows Server 2012 常見。
+
+|`vers=3.02`
+|SMB 3.02
+|Windows 8.1 / Windows Server 2012 R2 常見。
+
+|`vers=3.1.1`
+|SMB 3.1.1
+|Windows 10 / Windows Server 2016 之後常見。
+|===
+
+建議從新到舊測試：
+
+[source, text]
+----
+vers=3.1.1
+vers=3.0
+vers=2.1
+vers=2.0
+vers=1.0
+----
+
+除非不得已，不建議使用 `vers=1.0`。SMB 1.0 / CIFS 已非常老舊，實務上應優先確認 Server 是否能升級或啟用較新 SMB 版本。
+
+== CIFS 與 NFS 差異
+
+[cols="25%,35%,40%", options="header"]
+|===
+|項目 |CIFS / SMB |NFS
+
+|常見環境
+|Windows 分享資料夾、NAS
+|Linux / Unix 主機、NAS
+
+|Linux 掛載類型
+|`cifs`
+|`nfs`
+
+|權限模型
+|帳號、密碼、網域、Windows ACL
+|UID、GID、Linux 權限
+
+|常見 Port
+|TCP 445
+|TCP/UDP 2049
+
+|適合情境
+|Linux 掛 Windows 分享資料夾
+|Linux 主機之間共享目錄
+|===
+
+實務排查時，CIFS / SMB 常見問題多半落在帳密、網域、SMB 版本、Windows 分享權限或 ACL。 +
+NFS 則常見於 UID / GID 不一致、export 設定、Client IP 未允許或檔案權限不符。
+
+== CIFS 權限重點
+
+CIFS 通常使用帳號密碼或網域帳號登入。
+
+不建議直接把帳密寫在 `/etc/fstab`，應使用 `credentials` 檔。
+
+`/etc/fstab` 範例：
+
+[source, text]
+----
+//fileserver.example.local/share  /mnt/share  cifs  credentials=/etc/samba/cred-share,vers=3.0,uid=jboss,gid=jboss,file_mode=0640,dir_mode=0750,iocharset=utf8,_netdev,nofail  0  0
+----
+
+`credentials` 檔內容：
+
+[source, text]
+----
+username=帳號
+password=密碼
+domain=網域或主機名稱
+----
+
+權限設定：
+
+[source, shell]
+----
+chmod 600 /etc/samba/cred-share
+----
+
+排查 CIFS 掛載失敗時，建議確認：
+
+* TCP 445 是否可連。
+* `vers=` 是否符合 Server 支援的 SMB 版本。
+* 帳號、密碼、網域是否正確。
+* Windows 分享權限與 NTFS ACL 是否都允許。
+* Linux 掛載後的 `uid`、`gid`、`file_mode`、`dir_mode` 是否符合應用程式執行帳號。
+
+== NFS 權限重點
+
+NFS 主要看 UID / GID。
+
+如果 Server 與 Client 的帳號名稱相同，但 UID / GID 不同，權限仍可能不正確。
+
+範例：
+
+[source, text]
+----
+Server 上 jboss UID = 1001
+Client 上 jboss UID = 2001
+----
+
+此時掛載後權限可能不符合預期。因為 NFS 判斷權限時重點是數字 UID / GID，不是帳號名稱文字。
+
+排查 NFS 權限時，建議確認：
+
+* Server export 是否允許 Client IP。
+* Client 是否能連到 NFS Port。
+* Server 與 Client 的 UID / GID 是否一致。
+* 目錄擁有者與 Linux 權限是否允許讀寫。
+* 是否有 `root_squash`、`no_root_squash` 等 export 行為影響。
+
+== 簡單記法
+
+[cols="28%,72%", options="header"]
+|===
+|名詞 |記法
+
+|TCP
+|可靠傳輸連線，負責資料有順序、可重送、可確認送達。
+
+|TLS
+|建立在 TCP 之上的加密通道，負責加密與驗證。
+
+|TLSv1 / TLSv1.1
+|舊版 TLS，已不建議使用。
+
+|Java 25
+|預設禁止 `TLSv1`，因此連舊 SQL Server 可能失敗。
+
+|application.yml
+|設定 JDBC Driver 怎麼連。
+
+|java.security.properties
+|設定 JDK 安全政策，決定 `TLSv1` 能不能被使用。
+
+|CIFS / SMB
+|適合 Linux 掛 Windows 分享資料夾，通常走 TCP 445。
+
+|NFS
+|適合 Linux 主機之間共享目錄，常用 TCP 2049。
+
+|SMB `vers=3.0` / `vers=3.1.1`
+|這是 SMB/CIFS 版本，不是 TLS 版本。
+|===

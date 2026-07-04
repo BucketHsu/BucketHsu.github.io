@@ -1,0 +1,27 @@
+= 疑難排解
+Bucket.Hsu
+:toc: left
+:toc-title: 目錄
+:toclevels: 2
+:stylesheet: assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本頁先收斂目前 repo 內比較偏問題排查與故障分析的文件入口。
+
+== 容器與 shell
+
+* xref:container/container-shell-backspace.adoc[使用 sh 進入 container 時 Backspace 無法使用]
+
+== Kubernetes
+
+* xref:k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除筆記]
+* xref:k8s/pv-local-to-cifs.adoc[Kubernetes PV 由 Local 改為 CIFS（SMB CSI）變更紀錄]
+
+== 編碼與相容性
+
+* xref:java/character-encoding-guide.adoc[字元、字集與編碼整理]
+
+== TODO
+
+* `reference/misc-notes.adoc` 仍有不少排查型內容，後續可再拆分成更明確的 troubleshooting 主題頁。

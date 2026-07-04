@@ -1,0 +1,370 @@
+= Kubernetes PV 由 Local 改為 CIFS（SMB CSI）變更紀錄
+V1.0, 2026-04
+:experimental:
+:icons: font
+:icon-set: fas
+:sectnums:
+:toc: left
+:toc-title: 大綱
+:toclevels: 3
+:imagesdir: ../../assets/images
+:sourcedir: uml
+:saltdir: salt
+:authors: Bucket.Hsu
+:doctype: book
+:chapter-label:
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:index-link: ../index.html
+:last-update-label!:
+:nofooter:
+:icons: font
+:icon-set: fas
+:iconfont-remote: true
+:iconfont-fontawesome:
+
+== 一、變更目的
+
+原應用系統之 PersistentVolume 使用 local path（綁定單一 node），存在以下問題：
+
+* 無法跨 node 共用
+* 不利於 Deployment 多副本（replicas）運作
+* 無法將資料集中於檔案伺服器管理
+* node 故障時資料不可用
+
+此變更目的為：
+
+* 將 storage 改為 CIFS（SMB）遠端檔案伺服器
+* 使用 Kubernetes SMB CSI Driver 管理 volume
+* 支援 ReadWriteMany（多節點共享）
+* 提升系統可用性與資料集中管理能力
+
+'''
+
+== 二、影響範圍
+
+=== 受影響系統
+
+* 範例應用系統（Deployment：sample-app）
+
+=== 受影響資源
+
+* PersistentVolume（pv-logs、pv-upload）
+* PersistentVolumeClaim（pvc-logs、pvc-upload）
+* Deployment（volume 掛載）
+
+=== 影響內容
+
+* logs 掛載來源改為 CIFS（但不搬舊資料）
+* upload 掛載來源改為 CIFS（需搬資料）
+* Deployment volume 改掛新 PVC
+
+'''
+
+== 三、變更內容
+
+=== 3.1 安裝 SMB CSI Driver
+
+[source,bash]
+----
+curl -skSL https://raw.githubusercontent.com/kubernetes-csi/csi-driver-smb/v1.20.1/deploy/install-driver.sh | bash -s v1.20.1 --
+----
+
+=== 驗證
+
+[source,bash]
+----
+kubectl get csidriver
+kubectl get pods -n kube-system | grep -i smb
+----
+
+'''
+
+=== 3.2 建立 SMB Secret
+
+[source,bash]
+----
+kubectl create secret generic smb-secret \
+  --from-literal=username=example_user \
+  --from-literal=password='change-me-password'
+----
+
+'''
+
+=== 3.3 建立新的 PV/PVC
+
+==== PV（logs）
+
+[source,yaml]
+----
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-logs-smb
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  csi:
+    driver: smb.csi.k8s.io
+    volumeHandle: pv-logs-smb
+    volumeAttributes:
+      source: "//fileserver.example.local/shared-volume"
+      subDir: "sample-app-data/logs"
+    nodeStageSecretRef:
+      name: smb-secret
+      namespace: default
+----
+
+==== PV（upload）
+
+[source,yaml]
+----
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-upload-smb
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  csi:
+    driver: smb.csi.k8s.io
+    volumeHandle: pv-upload-smb
+    volumeAttributes:
+      source: "//fileserver.example.local/shared-volume"
+      subDir: "sample-app-data/upload"
+    nodeStageSecretRef:
+      name: smb-secret
+      namespace: default
+----
+
+==== PVC（logs）
+
+[source,yaml]
+----
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-logs-smb
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: ""
+  volumeName: pv-logs-smb
+----
+
+==== PVC（upload）
+
+[source,yaml]
+----
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-upload-smb
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ""
+  volumeName: pv-upload-smb
+----
+
+'''
+
+=== 3.4 修改 Deployment
+
+[source,yaml]
+----
+volumes:
+  - name: log-volume
+    persistentVolumeClaim:
+      claimName: pvc-logs-smb
+  - name: upload-volume
+    persistentVolumeClaim:
+      claimName: pvc-upload-smb
+----
+
+'''
+
+== 四、資料搬移
+
+=== 4.1 搬移策略
+
+* logs：不搬移（由新系統重新產生）
+* upload：需搬移
+
+'''
+
+=== 4.2 搬移步驟
+
+==== 1. 停止服務
+
+[source,bash]
+----
+kubectl scale deploy sample-app --replicas=0
+----
+
+==== 2. 進入 node
+
+[source,bash]
+----
+p exec -it worker1 bash
+----
+
+==== 3. 掛載 CIFS
+
+[source,bash]
+----
+mkdir -p /mnt/migrate
+
+mount -t cifs //fileserver.example.local/shared-volume /mnt/migrate \
+  -o username=example_user,password='change-me-password',vers=3.0
+----
+
+==== 4. 搬移 upload
+
+[source,bash]
+----
+cp -a /opt/local/upload/. /mnt/migrate/sample-app-data/upload/
+----
+
+==== 5. 驗證
+
+[source,bash]
+----
+find /opt/local/upload | wc -l
+find /mnt/migrate/sample-app-data/upload | wc -l
+----
+
+==== 6. 清理
+
+[source,bash]
+----
+umount /mnt/migrate
+rmdir /mnt/migrate
+exit
+----
+
+==== 7. 啟動服務
+
+[source,bash]
+----
+kubectl scale deploy sample-app --replicas=2
+----
+
+'''
+
+== 五、驗證結果
+
+=== 5.1 Pod 狀態
+
+[source,bash]
+----
+kubectl get pod
+----
+
+應為：
+
+* 所有 Pod 為 Running
+* READY 為 1/1
+
+'''
+
+=== 5.2 Volume 掛載驗證
+
+[source,bash]
+----
+kubectl exec -it deploy/sample-app -- ls -al /app/logs
+kubectl exec -it deploy/sample-app -- ls -al /app/upload
+----
+
+確認：
+
+* logs 可正常寫入
+* upload 資料存在且可讀取
+
+'''
+
+=== 5.3 CSI Driver 狀態
+
+[source,bash]
+----
+kubectl get csidriver
+kubectl get pods -n kube-system | grep smb
+----
+
+應顯示：
+
+* smb.csi.k8s.io 存在
+* controller / node 均為 Running
+
+'''
+
+== 六、回復方案（Rollback）
+
+若發生問題，可回復至舊架構：
+
+=== 1. 修改 Deployment
+
+改回：
+
+[source,yaml]
+----
+claimName: pvc-logs
+claimName: pvc-upload
+----
+
+=== 2. 重新部署
+
+[source,bash]
+----
+kubectl apply -f deployment.yaml
+kubectl rollout status deploy/sample-app
+----
+
+=== 3. 確認服務恢復
+
+[source,bash]
+----
+kubectl get pod
+----
+
+'''
+
+== 七、風險與注意事項
+
+* CIFS 帳號需確認權限正確（範例為 example_user）
+* node 必須支援 CIFS（已驗證）
+* CSI driver 未啟動會導致 Pod 卡在 ContainerCreating
+* 搬移期間需停機避免資料不一致
+* CIFS 網路品質會影響 I/O 效能
+
+'''
+
+== 八、結論
+
+此變更已完成：
+
+* local PV → SMB CSI PV
+* 支援多 node 共用（RWX）
+* upload 資料已成功搬移
+* 系統運作正常
+
+後續建議：
+
+* 持續觀察 CIFS I/O 效能
+* 評估是否導入 storage class 動態 provisioning

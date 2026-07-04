@@ -24,6 +24,7 @@ TestResults.xml
 
 ### BucketHsu GitHub Pages ###
 target/
+node_modules/
 .idea/
 *.iml
 

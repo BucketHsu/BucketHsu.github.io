@@ -23,6 +23,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
       - name: Install Graphviz
         run: sudo apt-get update && sudo apt-get install -y graphviz
 
@@ -33,8 +39,14 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Build AsciiDoc
+      - name: Install Antora dependencies
+        run: npm ci
+
+      - name: Build AsciiDoc HTML
         run: mvn -B -DskipTests generate-resources
+
+      - name: Build Antora site
+        run: npm run docs:site
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -42,7 +54,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: target/generated-docs
+          path: target/generated-docs/site
 
   deploy:
     environment:
