@@ -17,9 +17,17 @@ Bucket.Hsu
 
 == 說明
 
-這裡整理個人可公開的工程筆記，內容以日後查閱、排查與實務判斷為主。
+這裡整理可公開的工程筆記，內容以日後查閱、排查與實務判斷為主。
 
-筆記來源可能由個人工作筆記整理而來；公開前已去除公司名稱、內部 IP、真實帳密、客戶資訊與不可公開專案代號。
+== 建議閱讀路線
+
+第一次進入本站時，建議先看整體入口，再依主題查找需要的內容。
+
+. xref:getting-started.adoc[快速開始]
+. xref:architecture.adoc[架構]
+. xref:deployment.adoc[部署]
+. xref:security.adoc[安全]
+. xref:troubleshooting.adoc[疑難排解]
 
 == 文件入口
 
@@ -40,7 +48,7 @@ Bucket.Hsu
 
 == Reference
 
-由個人 `note.adoc` 拆分出的綜合參考筆記，適合查閱常用指令、工具小抄、名詞對照與公開資料表。
+綜合參考筆記，適合查閱常用指令、工具小抄、名詞對照與公開資料表。
 
 [cols="35%,65%", options="header"]
 |===
