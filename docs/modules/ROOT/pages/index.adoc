@@ -42,146 +42,127 @@ Bucket.Hsu
 
 由個人 `note.adoc` 拆分出的綜合參考筆記，適合查閱常用指令、工具小抄、名詞對照與公開資料表。
 
-[cols="35%,45%,20%", options="header"]
+[cols="35%,65%", options="header"]
 |===
-|文件 |重點 |連結
+|文件 |重點
 
-|技術相關參考網頁
+|xref:reference/technical-links.adoc[技術相關參考網頁]
 |整理 Maven、AsciiDoc、PlantUML、Font Awesome、SweetAlert2、Linux 命令列等常用參考連結。
-|xref:reference/technical-links.adoc[開啟]
 
-|其餘說明
+|xref:reference/misc-notes.adoc[其餘說明]
 |整理 HTTP、Linux、Git、Curl、JavaScript、Maven、Docker、Kubernetes、SQL、AI CLI 等綜合小抄。
-|xref:reference/misc-notes.adoc[開啟]
 
-|地政名詞英文對照
+|xref:reference/land-office-terms-en.adoc[地政名詞英文對照]
 |整理常見地政名詞的中英文對照，作為文件撰寫與系統欄位命名參考。
-|xref:reference/land-office-terms-en.adoc[開啟]
 
-|台灣縣市英文、代碼與身分證字號對照表
+|xref:reference/taiwan-county-id-codes.adoc[台灣縣市英文、代碼與身分證字號對照表]
 |整理台灣縣市英文名稱、行政區代碼與身分證字號首碼等公開資料對照。
-|xref:reference/taiwan-county-id-codes.adoc[開啟]
 |===
 
 == Network
 
 網路協定、連線分層、加密通道與檔案分享協定相關筆記。
 
-[cols="35%,45%,20%", options="header"]
+[cols="35%,65%", options="header"]
 |===
-|文件 |重點 |連結
+|文件 |重點
 
-|TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異
+|xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異]
 |整理 TCP、TLS、SMB/CIFS、NFS 的分層概念、版本差異與連線失敗排查方向。
-|xref:network/tls-tcp-smb-cifs-nfs.adoc[開啟]
 |===
 
 == Container
 
 Container、Docker Compose、互動式 shell 與容器環境排查筆記。
 
-[cols="35%,45%,20%", options="header"]
+[cols="35%,65%", options="header"]
 |===
-|文件 |重點 |連結
+|文件 |重點
 
-|Docker Compose 整理
+|xref:container/docker-compose-notes.adoc[Docker Compose 整理]
 |整理 Docker Compose 常用功能、環境變數、healthcheck、volume、network、NFS/CIFS 掛載等範例。
-|xref:container/docker-compose-notes.adoc[開啟]
 
-|使用 sh 進入 container 時 Backspace 無法使用
+|xref:container/container-shell-backspace.adoc[使用 sh 進入 container 時 Backspace 無法使用]
 |整理 container 內使用 `sh` 時 Backspace 異常的原因與 `stty erase`、`TERM`、`bash` 解法。
-|xref:container/container-shell-backspace.adoc[開啟]
 |===
 
 == Kubernetes
 
 Kubernetes 部署、服務導流、Storage 與實務排查筆記。
 
-[cols="35%,45%,20%", options="header"]
+[cols="35%,65%", options="header"]
 |===
-|文件 |重點 |連結
+|文件 |重點
 
-|CKAD 考古題與練習題
+|xref:k8s/ckad-practice-notes.adoc[CKAD 考古題與練習題]
 |整理 CKAD 準備資源、練習題、kubectl create 常用指令、常見 YAML 範本與考場操作小抄。
-|xref:k8s/ckad-practice-notes.adoc[開啟]
 
-|Kubernetes Ingress-nginx 導入與問題排除筆記
+|xref:k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除筆記]
 |整理 Ingress-nginx、NodePort、ClusterIP、forwarded headers 與多層 proxy 導流問題。
-|xref:k8s/ingress-nginx-troubleshooting.adoc[開啟]
 
-|Kubernetes PV 由 Local 改為 CIFS / SMB CSI 筆記
+|xref:k8s/pv-local-to-cifs.adoc[Kubernetes PV 由 Local 改為 CIFS / SMB CSI 筆記]
 |整理 local PV 改為 SMB CSI PV/PVC 的設定、資料搬移、驗證與 rollback 重點。
-|xref:k8s/pv-local-to-cifs.adoc[開啟]
 |===
 
 == Java
 
 Java Web 分層、資料物件命名與企業應用常見架構筆記。
 
-[cols="35%,45%,20%", options="header"]
+[cols="35%,65%", options="header"]
 |===
-|文件 |重點 |連結
+|文件 |重點
 
-|Java MVC / MVVM 分層與 DTO、DAO、Entity、Repository 名詞說明
+|xref:java/java-layering-dto-dao-entity.adoc[Java MVC / MVVM 分層與 DTO、DAO、Entity、Repository 名詞說明]
 |整理 MVC / MVVM、DTO、Entity、DAO、Mapper、Repository、Service 的用途與命名差異。
-|xref:java/java-layering-dto-dao-entity.adoc[開啟]
 
-|字元、字集與編碼整理
+|xref:java/character-encoding-guide.adoc[字元、字集與編碼整理]
 |整理 ASCII、ISO-8859-1、Big5、MS950、UTF-8、UTF-16、Java String、資料庫、網頁與 PDF 報表之間的編碼邊界與常見亂碼排查方式。
-|xref:java/character-encoding-guide.adoc[開啟]
 
-|Tomcat server.xml 設定
+|xref:java/tomcat-server-xml.adoc[Tomcat server.xml 設定]
 |整理 Tomcat HTTP / HTTPS Connector、TLS 憑證格式、keystore / PEM 寫法與 server.xml 實務設定。
-|xref:java/tomcat-server-xml.adoc[開啟]
 |===
 
 == Frontend
 
 前端 HTML 結構、語意化元素與可維護性筆記。
 
-[cols="35%,45%,20%", options="header"]
+[cols="35%,65%", options="header"]
 |===
-|文件 |重點 |連結
+|文件 |重點
 
-|HTML5 語意化 Element 使用規範
+|xref:frontend/html5-semantic-elements.adoc[HTML5 語意化 Element 使用規範]
 |整理常見 HTML5 語意化元素、使用情境與取代 `div` 的判斷方式。
-|xref:frontend/html5-semantic-elements.adoc[開啟]
 |===
 
 == Security
 
 Web 安全 Header、瀏覽器安全規則與常見弱點名詞筆記。
 
-[cols="35%,45%,20%", options="header"]
+[cols="35%,65%", options="header"]
 |===
-|文件 |重點 |連結
+|文件 |重點
 
-|資安名詞與 Web 安全 Header 說明
+|xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header 說明]
 |整理 COOP、COEP、CORP、CSP、HSTS、CORS、Cookie 與常見 Web 弱點名詞。
-|xref:security/web-security-headers.adoc[開啟]
 
-|加密、Hash、HMAC 與簽章基礎說明
+|xref:security/web-crypto-basics.adoc[加密、Hash、HMAC 與簽章基礎說明]
 |整理對稱加密、非對稱加密、Hash、HMAC、數位簽章、憑證、JWT、密碼儲存與常見誤解。
-|xref:security/web-crypto-basics.adoc[開啟]
 
-|數位憑證觀念與 Web Server 部署指南
+|xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
 |整理常見憑證格式副檔名（cer/crt, p12/pfx）、CSR 申請、憑證鏈順序，以及 Tomcat、Spring Boot、Nginx、IIS、Apache、HAProxy 的 HTTPS 部署設定與常用指令。
-|xref:security/digital-certificates-guide.adoc[開啟]
 |===
 
 == Tools
 
 開發工具、AI CLI 與工程工作流筆記。
 
-[cols="35%,45%,20%", options="header"]
+[cols="35%,65%", options="header"]
 |===
-|文件 |重點 |連結
+|文件 |重點
 
-|AI CLI 注意事項
+|xref:tools/ai-cli-notes.adoc[AI CLI 注意事項]
 |整理 Codex、Claude Code、Gemini CLI 等工具使用策略，以及 Spec / Skill 對 CLI 成本與結果穩定性的影響。
-|xref:tools/ai-cli-notes.adoc[開啟]
 
-|套件依賴更新流程
+|xref:tools/dependency-update-guide.adoc[套件依賴更新流程]
 |整理 pnpm、npm、Maven 與 Gradle 的版本盤點、套件更新、lockfile 處理、建置測試、異動檢視與提交流程。
-|xref:tools/dependency-update-guide.adoc[開啟]
 |===
