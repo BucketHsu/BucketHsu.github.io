@@ -24,7 +24,7 @@ Bucket.Hsu
 第一次進入本站時，建議先看整體入口，再依主題查找需要的內容。
 
 . xref:getting-started.adoc[快速開始]
-. xref:architecture.adoc[架構]
+. xref:architecture.adoc[技術主題地圖]
 . xref:deployment.adoc[部署]
 . xref:security.adoc[安全]
 . xref:troubleshooting.adoc[疑難排解]
@@ -32,7 +32,7 @@ Bucket.Hsu
 == 文件入口
 
 * xref:getting-started.adoc[快速開始]
-* xref:architecture.adoc[架構]
+* xref:architecture.adoc[技術主題地圖]
 * xref:database.adoc[資料庫]
 * xref:deployment.adoc[部署]
 * xref:security.adoc[安全]
