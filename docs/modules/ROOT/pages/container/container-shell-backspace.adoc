@@ -5,8 +5,8 @@ Bucket.Hsu
 :icon-set: fas
 :sectnums:
 :toc: left
-:toc-title: 大綱
-:toclevels: 2
+:toc-title: 目錄
+:toclevels: 3
 :authors: Bucket.Hsu
 :doctype: book
 :chapter-label:

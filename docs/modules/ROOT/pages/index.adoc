@@ -4,8 +4,8 @@ Bucket.Hsu
 :icons: font
 :sectnums:
 :toc: left
-:toc-title: 大綱
-:toclevels: 2
+:toc-title: 目錄
+:toclevels: 3
 :doctype: book
 :chapter-label:
 :table-caption: 表

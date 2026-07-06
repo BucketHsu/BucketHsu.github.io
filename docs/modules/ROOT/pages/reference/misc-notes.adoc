@@ -4,7 +4,7 @@ Bucket.Hsu
 :icons: font
 :sectnums:
 :toc: left
-:toc-title: 大綱
+:toc-title: 目錄
 :toclevels: 3
 :imagesdir: ../../assets/images
 :authors: Bucket.Hsu

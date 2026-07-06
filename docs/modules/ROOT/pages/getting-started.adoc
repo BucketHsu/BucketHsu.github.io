@@ -5,7 +5,7 @@ Bucket.Hsu
 :sectnums:
 :toc: left
 :toc-title: 目錄
-:toclevels: 2
+:toclevels: 3
 :source-highlighter: highlight.js
 :stylesheet: assets/files/stylesheets/colony.css
 :last-update-label!:
