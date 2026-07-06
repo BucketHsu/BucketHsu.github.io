@@ -18,7 +18,7 @@ Bucket.Hsu
 如果只是想快速掌握內容，建議依照下面順序閱讀：
 
 . xref:index.adoc[首頁]：查看本站整理的主要主題。
-. xref:architecture.adoc[架構]：理解文件分類與技術主題地圖。
+. xref:architecture.adoc[技術主題地圖]：理解文件分類與主題分區。
 . xref:deployment.adoc[部署]：查找容器、Web Server 與 Kubernetes 相關筆記。
 . xref:security.adoc[安全]：查找 Web 安全、加密與憑證相關筆記。
 . xref:troubleshooting.adoc[疑難排解]：查找常見問題與排查方向。
