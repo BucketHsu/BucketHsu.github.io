@@ -5,8 +5,8 @@ V1.0, 2025-08
 :icon-set: fas
 :sectnums:
 :toc: left
-:toc-title: 大綱
-:toclevels: 2
+:toc-title: 目錄
+:toclevels: 3
 :imagesdir: ../../assets/images
 :sourcedir: uml
 :saltdir: salt
