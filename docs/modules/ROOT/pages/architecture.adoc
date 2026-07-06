@@ -1,4 +1,4 @@
-= 架構
+= 技術主題地圖
 Bucket.Hsu
 :experimental:
 :icons: font
@@ -11,36 +11,9 @@ Bucket.Hsu
 :last-update-label!:
 :nofooter:
 
-本頁整理本站的文件站架構、主題分類與建置發布流程，作為理解整體文件組織的入口。
+本頁整理本站的主題分類、閱讀入口與文件站結構，作為理解整體文件組織的入口。
 
-== 文件站架構
-
-本站以 Antora 作為主要文件網站產生工具，並由 GitHub Pages 發布靜態網站。
-
-[cols="30%,70%", options="header"]
-|===
-|位置 |用途
-
-|`docs/antora.yml`
-|定義 Antora component 名稱、標題、版本與導覽檔。
-
-|`docs/modules/ROOT/nav.adoc`
-|定義左側導覽結構。
-
-|`docs/modules/ROOT/pages/`
-|放置主要 AsciiDoc 文件內容。
-
-|`docs/modules/ROOT/assets/`
-|放置圖片、樣式與其他靜態資源。
-
-|`antora-playbook.yml`
-|定義站台標題、來源位置、UI bundle 與 AsciiDoc 屬性。
-
-|`.github/workflows/pages.yml`
-|負責建置文件並部署到 GitHub Pages。
-|===
-
-== 主題分類架構
+== 主題分類
 
 目前內容依查閱情境分成下列主題：
 
@@ -76,6 +49,33 @@ Bucket.Hsu
 * xref:deployment.adoc[部署]
 * xref:security.adoc[安全]
 * xref:troubleshooting.adoc[疑難排解]
+
+== 文件站結構
+
+本站以 Antora 作為主要文件網站產生工具，並由 GitHub Pages 發布靜態網站。
+
+[cols="30%,70%", options="header"]
+|===
+|位置 |用途
+
+|`docs/antora.yml`
+|定義 Antora component 名稱、標題、版本與導覽檔。
+
+|`docs/modules/ROOT/nav.adoc`
+|定義左側導覽結構。
+
+|`docs/modules/ROOT/pages/`
+|放置主要 AsciiDoc 文件內容。
+
+|`docs/modules/ROOT/assets/`
+|放置圖片、樣式與其他靜態資源。
+
+|`antora-playbook.yml`
+|定義站台標題、來源位置、UI bundle 與 AsciiDoc 屬性。
+
+|`.github/workflows/pages.yml`
+|負責建置文件並部署到 GitHub Pages。
+|===
 
 == 建置與發布流程
 
