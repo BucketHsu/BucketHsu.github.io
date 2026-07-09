@@ -1,0 +1,253 @@
+= Docker / Podman 清理策略說明
+Bucket.Hsu
+:experimental:
+:icons: font
+:icon-set: fas
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:authors: Bucket.Hsu
+:doctype: book
+:chapter-label:
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:index-link: ../index.html
+:last-update-label!:
+:nofooter:
+
+本文整理 Docker / Podman 對主機容量的影響，以及公司內部維運時建議採用的清理策略。
+
+重點不是看到 `unused` 就全部刪掉，而是先看主機用途，再決定哪些資源可以自動清、哪些只能人工確認後處理。
+
+== 為什麼不預設自動清理
+
+Docker / Podman 只能判斷資源目前是否被使用，不能判斷這些資源是否還有業務價值。
+
+常見情境如下：
+
+* 沒有 container 正在使用的 image，不代表未來不會再被 CI/CD、測試環境或服務回滾流程使用。
+* build cache 會佔用磁碟空間，但它原本就是用來加速後續 build；清掉後不一定會出問題，但下一次 build 可能會變慢。
+* volume 風險最高，因為裡面可能放的是資料庫、Nexus、GitLab、Registry、MinIO、上傳檔案或正式資料。
+* Docker / Podman 是 container runtime，不是維運排程系統；何時清、清哪些、保留多久，應該由主機用途與公司維運政策決定。
+
+因此 Docker / Podman 提供 `prune` 指令，但不會預設在背景自動 GC。自動清理若沒有分環境、分用途，很容易把暫時沒有掛到 container、但仍有價值的資料刪掉。
+
+== 常見可清理項目
+
+[cols="25%,50%,25%", options="header"]
+|===
+|項目 |說明 |風險
+
+|stopped containers
+|已停止的 container。通常可清理，但若需要保留 container 內的暫存檔或 log，清理前仍要確認。
+|低
+
+|unused images
+|目前沒有 container 使用的 image。CI 主機、開發主機容易累積大量舊 image。
+|中
+
+|build cache
+|build 過程留下的 cache。清理後可回收容量，但後續 build 可能變慢。
+|低到中
+
+|unused volumes
+|目前沒有 container 使用的 volume。可能只是暫時未掛載，也可能是舊資料。
+|高
+
+|GitLab Runner cache volumes
+|GitLab Runner 產生的 cache volume。名稱常見 `runner-...-cache-...`，在 CI 主機上可能大量累積。
+|中
+|===
+
+注意事項：
+
+* `docker system prune` 預設不會清 volume。
+* `docker volume prune` 與 `docker volume prune -a` 風險不同。
+* `docker volume prune` 主要清理 anonymous volumes。
+* `docker volume prune -a` 會清理 unused named volumes，正式服務主機不可隨意自動執行。
+
+== 依主機類型制定清理策略
+
+=== GitLab Runner / CI 主機
+
+GitLab Runner / CI 主機建議定期清理。這類主機通常會累積大量 image、build cache、stopped container，以及 runner cache volume。
+
+如果 `docker volume ls` 看到大量名稱類似 `runner-...-cache-...` 的 volume，通常就是 GitLab Runner cache。這類 volume 在 Runner 主機可較積極清理，但仍建議保留 7 天或 30 天，避免剛跑完的 pipeline 或短期重跑任務失去 cache。
+
+範例：保留 7 天內資源，清理 7 天以前未使用項目。
+
+[source,bash]
+----
+docker container prune -f
+docker volume prune -a -f --filter "until=168h"
+docker image prune -a -f --filter "until=168h"
+docker builder prune -a -f --filter "until=168h"
+----
+
+若 CI 主機空間壓力較小，也可以把 `until=168h` 調整為 `until=720h`，約等於保留 30 天。
+
+=== 開發 / 測試主機
+
+開發 / 測試主機可以定期清 image、container、build cache。這些主機通常會反覆 build、測試不同版本，容量容易被舊 image 和 cache 吃掉。
+
+volume 是否清理要依環境決定。如果 volume 內可能有測試資料庫、測試上傳檔、測試用 Registry 或臨時 Nexus，清除前要先確認資料是否可丟。
+
+範例：保留 7 天內 image 與 build cache，不自動清 volume。
+
+[source,bash]
+----
+docker container prune -f
+docker image prune -a -f --filter "until=168h"
+docker builder prune -a -f --filter "until=168h"
+----
+
+若確認該測試主機的 volume 都是可重建資料，再另外規劃 volume 清理，不要直接套用到所有測試主機。
+
+=== 正式服務主機
+
+正式服務主機應採保守策略。可以定期清 stopped container、unused image、build cache，但不建議自動清 volume。
+
+volume 可能存放正式資料，即使目前沒有 container 使用，也不代表可以刪。例如服務正在搬遷、container 暫時停用、compose 檔案調整、服務準備回滾時，都可能出現 volume 未被目前 container 使用的狀態。
+
+範例：保留 30 天內 image 與 build cache，不自動清 volume。
+
+[source,bash]
+----
+docker container prune -f
+docker image prune -a -f --filter "until=720h"
+docker builder prune -a -f --filter "until=720h"
+----
+
+正式服務主機要清 volume 時，應由維運人員人工確認 volume 名稱、掛載路徑、資料內容、備份狀態與服務影響後再執行。
+
+[source,text]
+----
+正式服務主機不建議自動執行 docker volume prune -a
+----
+
+== Podman 補充
+
+Podman 也有類似問題，會累積 images、containers、volumes、build cache。差異在於實際指令、rootless / rootful storage 位置與使用方式可能不同，但清理原則一樣：先看主機用途，再決定清理範圍。
+
+常用檢查與清理指令：
+
+[source,bash]
+----
+podman system df
+podman container prune -f
+podman image prune -a -f
+podman volume prune -f
+podman system prune -f
+----
+
+提醒：
+
+* Podman volume 一樣不可在正式主機隨意清。
+* rootless Podman 的資料通常在使用者家目錄底下，容量告警可能出現在 `/home`，不一定是 `/var`。
+* 清理策略仍應依主機用途決定，不應只因為 `podman system df` 顯示 reclaimable 就直接刪。
+
+== 建議放入維運腳本庫
+
+公司內部建議把清理邏輯放到維運腳本庫，例如 `infra-scripts` 專案，而不是散落在各主機 crontab 內。
+
+建議結構如下：
+
+[source,text]
+----
+infra-scripts/
+└── linux/
+    └── docker/
+        ├── docker-cleanup-safe/
+        │   ├── docker-cleanup-safe.sh
+        │   ├── .env.example
+        │   └── README.adoc
+        │
+        ├── docker-cleanup-runner/
+        │   ├── docker-cleanup-runner.sh
+        │   ├── .env.example
+        │   └── README.adoc
+        │
+        └── docker-check/
+            ├── docker-check.sh
+            └── README.adoc
+----
+
+建議拆成不同腳本，而不是一支腳本用參數控制所有環境：
+
+* `docker-cleanup-safe`：正式服務主機可用，不清 volume。
+* `docker-cleanup-runner`：GitLab Runner / CI 主機使用，可清 runner cache volume，並保留指定天數。
+* `docker-check`：只檢查容量與 Docker 使用狀況，不刪資料，適合排程前後與人工巡檢使用。
+
+每支腳本至少應提供：
+
+* dry-run 或檢查模式。
+* `KEEP_HOURS` 或 `KEEP_DAYS` 設定。
+* 是否允許清 volume 的明確開關。
+* 執行前後的 `docker system df` 紀錄。
+* log 輸出位置與 logrotate 設定建議。
+
+== 排程原則
+
+建議排程如下：
+
+* GitLab Runner / CI 主機：可每日或每週清。
+* 開發 / 測試主機：可每週清。
+* 正式服務主機：可每月或每週清 image/cache，但不自動清 volume。
+
+排程時間應避開：
+
+* GitLab 備份時間。
+* Nexus 備份時間。
+* Registry 或 MinIO 備份時間。
+* 正式服務尖峰時間。
+* 大量 CI 執行時間。
+* 系統例行 patch、重開機或備份驗證時段。
+
+清理指令建議加 `timeout`，避免 Docker daemon 或 storage driver 卡住，導致腳本長時間不結束。
+
+[source,bash]
+----
+timeout 60s docker system df
+timeout 300s docker container prune -f
+timeout 1800s docker image prune -a -f --filter "until=720h"
+timeout 1800s docker builder prune -a -f --filter "until=720h"
+----
+
+若腳本執行在 systemd timer，建議同時設定 service timeout，讓作業在異常時可以被 systemd 中止並留下紀錄。
+
+== 風險提醒
+
+[WARNING]
+====
+不要在正式主機無腦使用 `docker system prune -a --volumes`。這類指令會清理範圍放大到 image、container、network、cache 與 volume，若沒有先確認資料用途，可能刪掉正式資料或回滾所需資源。
+====
+
+[WARNING]
+====
+不要在正式主機無腦使用 `docker volume prune -a`。`-a` 會包含 unused named volumes，而 named volume 常被用來存放需要保存的服務資料。
+====
+
+[WARNING]
+====
+清 volume 前要確認是否有資料庫、Nexus、GitLab、Registry、MinIO、上傳檔案、正式附件、備份暫存或其他持久化資料。只看「目前沒有 container 使用」不足以判斷可刪。
+====
+
+清理前至少先檢查：
+
+[source,bash]
+----
+docker system df -v
+docker volume ls
+docker ps -a
+----
+
+必要時再補查 compose 檔案、服務部署文件、備份紀錄與實際掛載路徑。
+
+== 結論
+
+Docker / Podman 不自動清，是因為它們無法判斷資料是否仍有業務價值。清理策略應由主機用途決定：Runner 主機可以較積極，正式主機要保守。
+
+image、container、build cache 可以定期清；volume 需最謹慎，正式主機不建議自動清。公司內部建議用 `infra-scripts` 搭配 crontab 或 systemd timer 統一管理清理政策，讓保留天數、執行時間、log 與風險控管都有固定標準。
