@@ -96,6 +96,10 @@ Container、Docker Compose、互動式 shell 與容器環境排查筆記。
 |整理 Docker Compose 常用功能、環境變數、healthcheck、volume、network、NFS/CIFS 掛載等範例。
 |撰寫或維護本機、測試環境的 compose 設定。
 
+|xref:container/docker-cleanup-policy.adoc[Docker / Podman 清理策略說明]
+|整理 Docker / Podman 不自動清理的原因、常見可清理項目、volume 風險與分環境清理策略。
+|規劃 Runner、開發測試或正式服務主機的容器清理排程。
+
 |xref:container/container-shell-backspace.adoc[使用 sh 進入 container 時 Backspace 無法使用]
 |整理 container 內使用 `sh` 時 Backspace 異常的原因與 `stty erase`、`TERM`、`bash` 解法。
 |排查容器互動式 shell 操作異常。

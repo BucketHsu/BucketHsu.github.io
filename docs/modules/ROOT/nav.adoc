@@ -18,6 +18,7 @@
 * 網路與容器
 ** xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異]
 ** xref:container/docker-compose-notes.adoc[Docker Compose 整理]
+** xref:container/docker-cleanup-policy.adoc[Docker / Podman 清理策略說明]
 ** xref:container/container-shell-backspace.adoc[使用 sh 進入 container 時 Backspace 無法使用]
 * Kubernetes
 ** xref:k8s/ckad-practice-notes.adoc[CKAD考古題與練習題]
