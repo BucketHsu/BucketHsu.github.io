@@ -1,3 +1,6 @@
 static_files:
   - css/site.css
   - js/theme.js
+  - favicon.ico
+  - icon.png
+
