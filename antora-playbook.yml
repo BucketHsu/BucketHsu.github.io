@@ -1,7 +1,7 @@
 site:
-  title: BucketHsu 技術筆記
-  url: https://buckethsu.github.io/
-  start_page: bucket-hsu-notes::index.adoc
+  title: 學藝不精工程師 技術筆記
+  url: https://novice-engineer.github.io/
+  start_page: novice-engineer-notes::index.adoc
 
 content:
   sources:

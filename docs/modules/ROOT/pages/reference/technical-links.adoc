@@ -1,5 +1,5 @@
 = 技術相關參考網頁
-Bucket.Hsu
+學藝不精工程師
 :experimental:
 :icons: font
 :sectnums:
@@ -7,7 +7,7 @@ Bucket.Hsu
 :toc-title: 目錄
 :toclevels: 3
 :imagesdir: ../../assets/images
-:authors: Bucket.Hsu
+:authors: 學藝不精工程師
 :doctype: book
 :chapter-label:
 :table-caption: 表

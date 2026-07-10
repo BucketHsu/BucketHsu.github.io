@@ -1,5 +1,5 @@
 {
-  "name": "bucket-hsu-notes-docs",
+  "name": "novice-engineer-notes-docs",
   "private": true,
   "scripts": {
     "docs:antora": "antora antora-playbook.yml --clean --to-dir target/generated-docs/site --log-failure-level=error",

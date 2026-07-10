@@ -1,5 +1,5 @@
 = 文件撰寫規範
-Bucket.Hsu
+學藝不精工程師
 :experimental:
 :icons: font
 :sectnums:
@@ -49,7 +49,7 @@ Bucket.Hsu
 [source,asciidoc]
 ----
 = 文件標題
-Bucket.Hsu
+學藝不精工程師
 :experimental:
 :icons: font
 :sectnums:
