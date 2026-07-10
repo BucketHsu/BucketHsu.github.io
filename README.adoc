@@ -1,14 +1,14 @@
-= BucketHsu 技術筆記
-Bucket.Hsu
+= 學藝不精工程師 技術筆記
+學藝不精工程師
 :toc:
 :toc-title: 目錄
 :toclevels: 2
 
-這個 repository 是 `https://buckethsu.github.io/` 的技術筆記來源。
+這個 repository 是 `https://novice-engineer.github.io/` 的技術筆記來源。
 
 == 文件網站入口
 
-* GitHub Pages：`https://buckethsu.github.io/`
+* GitHub Pages：`https://novice-engineer.github.io/`
 * Antora 首頁：`docs/modules/ROOT/pages/index.adoc`
 * Antora 導覽：`docs/modules/ROOT/nav.adoc`
 * 文件撰寫規範：`docs/modules/ROOT/pages/contributing/writing-style.adoc`
@@ -96,9 +96,9 @@ npm run docs:site
 
 == 授權與使用限制
 
-本 repository 是 Bucket.Hsu 個人技術筆記的公開展示來源，不是開源專案，也不是可自由再利用的文件素材。
+本 repository 是 學藝不精工程師 個人技術筆記的公開展示來源，不是開源專案，也不是可自由再利用的文件素材。
 
-除非另有明確書面同意，Bucket.Hsu 原創內容保留所有權利，不授權他人複製、散布、轉載、改作、再發布、商業使用，或作為教材、產品文件、內部知識庫與訓練資料集使用。
+除非另有明確書面同意，學藝不精工程師 原創內容保留所有權利，不授權他人複製、散布、轉載、改作、再發布、商業使用，或作為教材、產品文件、內部知識庫與訓練資料集使用。
 
 公開 repository 仍可能依 GitHub 服務功能被瀏覽與 fork；這不代表取得上述再利用授權。
 

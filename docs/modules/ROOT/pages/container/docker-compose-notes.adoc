@@ -12,7 +12,7 @@ V1.0, 2026-04-26
 :imagesdir: ../../assets/images
 :sourcedir:
 :saltdir:
-:authors: Bucket.Hsu
+:authors: 學藝不精工程師
 :doctype: book
 :media: prepress
 :chapter-signifier: 章

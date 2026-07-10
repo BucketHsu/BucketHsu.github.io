@@ -10,7 +10,7 @@ V1.0, 2025-08
 :imagesdir: ../../assets/images
 :sourcedir: uml
 :saltdir: salt
-:authors: Bucket.Hsu
+:authors: 學藝不精工程師
 :doctype: book
 :chapter-label:
 :table-caption: 表

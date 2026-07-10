@@ -1,5 +1,5 @@
 = Docker / Podman 清理策略說明
-Bucket.Hsu
+學藝不精工程師
 :experimental:
 :icons: font
 :icon-set: fas
@@ -7,7 +7,7 @@ Bucket.Hsu
 :toc: left
 :toc-title: 目錄
 :toclevels: 3
-:authors: Bucket.Hsu
+:authors: 學藝不精工程師
 :doctype: book
 :chapter-label:
 :table-caption: 表

@@ -23,7 +23,7 @@
   <body>
     <header class="topbar">
       <a class="topbar__brand" href="{{{relativize site.homeUrl}}}">
-        <span class="topbar__mark" aria-hidden="true">B</span>
+        <img class="topbar__logo" src="{{uiRootPath}}/static/icon.png" alt="Logo" style="height: 2.25rem; width: 2.25rem; object-fit: contain;">
         <span>{{site.title}}</span>
       </a>
       <div class="topbar__actions">
@@ -38,7 +38,6 @@
       <aside class="site-nav">
         <div class="site-nav__heading">
           <span>文件導覽</span>
-          <span class="site-nav__version">Latest</span>
         </div>
         <nav class="site-nav__menu">
           <ul class="nav-list">
