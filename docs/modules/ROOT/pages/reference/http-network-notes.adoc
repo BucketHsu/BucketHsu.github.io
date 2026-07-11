@@ -1,0 +1,21 @@
+= HTTP 與網路基礎筆記
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:imagesdir: ../../assets/images
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+ifdef::env-site[:image-link-prefix: ../_images/common]
+ifndef::env-site[:image-link-prefix: ../assets/images/common]
+:last-update-label!:
+:nofooter:
+
+本頁整理 HTTP 狀態碼、Request Method、Windows 網路指令與 OSI 網路協定等內容。
+
+include::misc-notes.adoc[lines=25..137,leveloffset=+1]
+
+include::misc-notes.adoc[lines=2351..2475,leveloffset=+1]
