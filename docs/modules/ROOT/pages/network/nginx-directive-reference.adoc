@@ -11,11 +11,9 @@
 :last-update-label!:
 :nofooter:
 
-本頁整理 Nginx 常用設定指令的作用範圍、用途、常見值與注意事項，適合在閱讀 xref:nginx-guide.adoc[Nginx 基礎觀念與設定指南] 後作為速查表使用。
+本頁整理 Nginx 常用設定指令的作用範圍、用途與注意事項，適合搭配 xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南] 查閱。
 
 == Context 說明
-
-Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通常會顯示 `directive is not allowed here`。
 
 [cols="20%,35%,45%", options="header"]
 |===
@@ -35,7 +33,7 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 
 |`server`
 |`http` 內
-|定義一個虛擬主機、監聽 port 與網域。
+|定義虛擬主機、監聽 port 與網域。
 
 |`location`
 |`server` 內
@@ -43,7 +41,7 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 
 |`upstream`
 |`http` 內
-|定義一組後端伺服器，供反向代理與負載平衡使用。
+|定義後端伺服器群組。
 |===
 
 == 全域與程序設定
@@ -54,28 +52,28 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 
 |`user nginx;`
 |Main
-|指定 Worker Process 使用的作業系統帳號與群組。
-|需確保該帳號能讀取靜態檔案、憑證與必要目錄。
+|指定 Worker 使用的作業系統帳號。
+|該帳號需能讀取靜態檔案、憑證與必要目錄。
 
 |`worker_processes auto;`
 |Main
 |設定 Worker Process 數量。
-|`auto` 通常會依可用 CPU 核心數決定。
+|`auto` 通常依 CPU 核心數決定。
 
 |`worker_rlimit_nofile 65535;`
 |Main
 |提高 Worker 可開啟檔案描述符數量。
-|還要搭配作業系統的 `ulimit` 或 systemd LimitNOFILE。
+|還需搭配 `ulimit` 或 systemd `LimitNOFILE`。
 
 |`pid /run/nginx.pid;`
 |Main
-|指定 Master Process PID 檔案位置。
+|指定 Master Process PID 檔位置。
 |套件安裝通常已有預設值。
 
-|`daemon on;`
+|`daemon off;`
 |Main
-|控制 Nginx 是否在背景執行。
-|容器環境通常使用 `daemon off;`，官方映像已處理。
+|控制是否在前景執行。
+|容器環境通常需前景執行。
 |===
 
 == Events 與連線設定
@@ -86,23 +84,18 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 
 |`worker_connections 1024;`
 |`events`
-|每個 Worker 同時可處理的連線數。
-|反向代理時，一個用戶端請求可能同時占用前端與後端連線。
+|每個 Worker 可同時處理的連線數。
+|反向代理時，一個請求可能同時占用前端與後端連線。
 
 |`use epoll;`
 |`events`
-|指定 Linux 的高效事件模型。
-|新版 Nginx 通常會自動選擇，不一定需要手動指定。
+|指定 Linux 高效事件模型。
+|新版 Nginx 通常會自動選擇。
 
 |`multi_accept on;`
 |`events`
 |讓 Worker 一次接受多個新連線。
-|高連線情境可評估，需搭配壓力測試。
-
-|`accept_mutex on;`
-|`events`
-|降低多個 Worker 同時爭搶新連線的情況。
-|新版 Nginx 的預設與事件模型可能已足夠，通常不必特別調整。
+|需搭配壓力測試。
 |===
 
 == HTTP 共用設定
@@ -114,42 +107,32 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 |`include /etc/nginx/mime.types;`
 |`http`
 |載入副檔名與 Content-Type 對照。
-|未載入時，CSS、JavaScript 或圖片可能使用錯誤 MIME type。
+|未載入可能導致 CSS、JavaScript 使用錯誤 MIME type。
 
 |`default_type application/octet-stream;`
 |`http`、`server`、`location`
 |無法判斷 MIME type 時使用的預設類型。
-|通常維持二進位下載類型即可。
+|通常維持二進位下載類型。
 
 |`sendfile on;`
 |`http`、`server`、`location`
-|使用核心機制傳送靜態檔案，降低使用者空間複製。
-|某些網路檔案系統或特殊環境若出現內容更新不即時，可測試關閉。
-
-|`tcp_nopush on;`
-|`http`、`server`、`location`
-|搭配 `sendfile`，盡量將回應 Header 與檔案資料合併傳送。
-|通常適合靜態檔案傳輸。
-
-|`tcp_nodelay on;`
-|`http`、`server`、`location`
-|降低 Keep-Alive 連線的小封包延遲。
-|一般維持預設即可。
+|使用核心機制傳送靜態檔案。
+|部分網路檔案系統若更新不即時，可測試關閉。
 
 |`keepalive_timeout 65;`
 |`http`、`server`、`location`
-|用戶端 Keep-Alive 連線保持時間。
-|過長會占用連線，過短會增加重新建立 TCP/TLS 的成本。
+|用戶端 Keep-Alive 保持時間。
+|過長會占用連線，過短會增加 TCP/TLS 建立成本。
 
 |`keepalive_requests 1000;`
 |`http`、`server`、`location`
 |單一 Keep-Alive 連線最多處理的請求數。
-|高流量環境可提高，但應搭配資源監控。
+|高流量環境應搭配監控調整。
 
 |`server_tokens off;`
 |`http`、`server`、`location`
-|隱藏錯誤頁與 Header 中的 Nginx 詳細版本。
-|只能降低資訊暴露，不能取代定期更新。
+|隱藏回應中的 Nginx 詳細版本。
+|不能取代定期更新。
 |===
 
 == Server 與網域設定
@@ -161,32 +144,32 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 |`listen 80;`
 |`server`
 |監聽指定 IP 與 port。
-|可寫成 `listen 127.0.0.1:8080;` 或 `listen 443 ssl;`。
+|可寫成 `listen 127.0.0.1:8080;`。
 
-|`listen 443 ssl http2;`
+|`listen 443 ssl;`
 |`server`
-|監聽 HTTPS，並依版本與套件能力啟用 HTTP/2。
-|部分新版設定建議以獨立 `http2 on;` 指令啟用，應先以 `nginx -V` 與官方文件確認版本支援。
+|監聽 HTTPS。
+|需搭配憑證與私鑰。
 
-|`server_name example.com www.example.com;`
+|`server_name example.com;`
 |`server`
-|指定此虛擬主機匹配的網域。
-|請求 Host 不匹配時可能落到同 port 的預設 server。
+|指定虛擬主機匹配的網域。
+|未匹配時可能落到同 port 的預設 server。
 
 |`default_server`
 |`listen`
 |指定該 IP/port 的預設虛擬主機。
-|同一組監聽位址只能有一個預設 server。
+|同一組監聽位址只能有一個。
 
 |`return 301 https://$host$request_uri;`
 |`server`、`location`
 |直接回傳狀態碼或重新導向。
-|永久導向使用 301；測試期間可先用 302，避免瀏覽器長期快取。
+|測試期間可先用 302，避免永久快取。
 
 |`error_page 404 /404.html;`
 |`http`、`server`、`location`
-|指定自訂錯誤頁或內部導向。
-|錯誤頁本身應確保可以正常讀取，避免迴圈。
+|指定自訂錯誤頁。
+|避免錯誤頁本身造成循環導向。
 |===
 
 == 靜態檔案與路徑設定
@@ -197,60 +180,55 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 
 |`root /var/www/html;`
 |`http`、`server`、`location`
-|將請求 URI 附加到指定根目錄後尋找檔案。
-|`location /files/` 搭配 `root /data;` 時，`/files/a.txt` 對應 `/data/files/a.txt`。
+|將請求 URI 附加到根目錄後尋找檔案。
+|`/files/a.txt` 可能對應 `/data/files/a.txt`。
 
 |`alias /data/downloads/;`
 |`location`
-|將匹配的 location 路徑替換成指定實體目錄。
-|`location` 與 `alias` 尾端斜線應保持一致。
+|以指定目錄取代 location 路徑。
+|`location` 與 `alias` 尾端斜線應一致。
 
-|`index index.html index.htm;`
+|`index index.html;`
 |`http`、`server`、`location`
-|請求目錄時依序尋找首頁檔案。
-|只在請求對應目錄時生效。
+|請求目錄時依序尋找首頁檔。
+|只在目錄請求時生效。
 
 |`try_files $uri $uri/ =404;`
 |`server`、`location`
-|依序檢查檔案或目錄，最後回傳狀態碼或內部導向。
-|SPA 常使用 `try_files $uri $uri/ /index.html;`。
+|依序檢查檔案或目錄。
+|SPA 常使用 `/index.html` 作為最後 fallback。
 
 |`autoindex on;`
 |`http`、`server`、`location`
-|沒有 index 檔時顯示目錄清單。
-|可能暴露檔案名稱，正式環境通常保持關閉。
-
-|`internal;`
-|`location`
-|限制 location 只能透過 Nginx 內部導向存取。
-|適合受保護下載或 `X-Accel-Redirect`。
+|顯示目錄清單。
+|正式環境通常保持關閉。
 |===
 
-== Location 比對設定
+== Location 比對
 
-[cols="25%,30%,45%", options="header"]
+[cols="30%,30%,40%", options="header"]
 |===
 |形式 |用途 |範例
 
 |`location = /health`
-|完全相符，優先級最高。
+|完全相符
 |健康檢查固定路徑。
 
 |`location /api/`
-|一般前綴比對，採最長前綴。
-|API 路徑反向代理。
+|一般前綴比對
+|採最長前綴。
 
 |`location ^~ /static/`
-|前綴命中後不再檢查正規表示式 location。
+|前綴命中後不再檢查正規表示式
 |大量靜態資源目錄。
 
 |`location ~ \.php$`
-|區分大小寫的正規表示式。
-|依副檔名處理動態內容。
+|區分大小寫正規表示式
+|依副檔名處理。
 
-|`location ~* \.(jpg\|png)$`
-|不區分大小寫的正規表示式。
-|圖片快取與 Header 設定。
+|`location ~* \.(jpg|png)$`
+|不區分大小寫正規表示式
+|圖片快取設定。
 |===
 
 == 反向代理設定
@@ -261,90 +239,43 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 
 |`proxy_pass http://backend;`
 |`location`
-|將請求轉送至後端服務或 upstream。
-|結尾 `/` 會影響 URI 替換方式，是常見錯誤來源。
+|將請求轉送至後端或 upstream。
+|結尾 `/` 會影響 URI 替換方式。
 
 |`proxy_http_version 1.1;`
 |`http`、`server`、`location`
-|指定與後端通訊使用的 HTTP 版本。
-|WebSocket、upstream keepalive 常需要 HTTP/1.1。
+|指定與後端通訊的 HTTP 版本。
+|WebSocket 與 upstream keepalive 常需要 1.1。
 
 |`proxy_set_header Host $host;`
 |`http`、`server`、`location`
-|覆寫傳給後端的請求 Header。
-|常搭配 `X-Real-IP`、`X-Forwarded-For`、`X-Forwarded-Proto`。
+|覆寫傳給後端的 Header。
+|通常也設定來源 IP 與原始協定。
 
 |`proxy_connect_timeout 10s;`
 |`http`、`server`、`location`
-|等待與後端建立連線的最長時間。
-|不是後端處理完整請求的時間。
+|等待與後端建立連線的時間。
+|不代表完整請求總時間。
 
 |`proxy_send_timeout 60s;`
 |`http`、`server`、`location`
-|傳送請求到後端時，兩次寫入操作間的逾時時間。
-|大型上傳或慢速連線需評估。
+|向後端傳送請求的等待時間。
+|大型上傳需評估。
 
 |`proxy_read_timeout 60s;`
 |`http`、`server`、`location`
-|等待後端兩次讀取資料之間的逾時時間。
-|長任務、WebSocket、SSE 可能需要提高。
+|等待後端回應資料的時間。
+|長任務、串流與 SSE 需調整。
 
-|`proxy_buffering on;`
+|`proxy_buffering off;`
 |`http`、`server`、`location`
-|先緩衝後端回應，再傳給用戶端。
-|SSE、串流與即時輸出通常需要關閉。
-
-|`proxy_buffer_size 16k;`
-|`http`、`server`、`location`
-|設定讀取後端回應第一部分的 buffer 大小。
-|Header 過大時可能出現 `upstream sent too big header`。
-
-|`proxy_buffers 8 16k;`
-|`http`、`server`、`location`
-|設定單一請求可使用的回應 buffer 數量與大小。
-|不宜在未量測前任意設得過大。
-
-|`proxy_request_buffering off;`
-|`http`、`server`、`location`
-|不先完整接收用戶端 Request Body，直接串流給後端。
-|大型上傳可降低暫存，但後端需能處理串流與中斷。
-
-|`proxy_redirect off;`
-|`http`、`server`、`location`
-|停用 Nginx 對後端 Redirect Header 的自動改寫。
-|後端回傳絕對網址時應確認是否仍需改寫。
-
-|`proxy_intercept_errors on;`
-|`http`、`server`、`location`
-|攔截後端錯誤狀態碼，交由 Nginx 的 `error_page` 處理。
-|若要保留後端原始錯誤頁，應維持關閉。
-|===
-
-== 用戶端請求限制
-
-[cols="25%,20%,30%,25%", options="header"]
-|===
-|指令 |Context |用途 |注意事項
+|關閉後端回應緩衝。
+|常用於 SSE 與串流。
 
 |`client_max_body_size 100m;`
 |`http`、`server`、`location`
-|限制用戶端 Request Body 大小。
-|超過時回傳 413；後端也可能有自己的上傳限制。
-
-|`client_body_timeout 60s;`
-|`http`、`server`、`location`
-|等待用戶端傳送 Request Body 的逾時時間。
-|慢速上傳需評估，但不宜無限制提高。
-
-|`client_header_timeout 60s;`
-|`http`、`server`
-|等待用戶端完整傳送 Request Header 的時間。
-|可降低慢速連線長期占用資源。
-
-|`large_client_header_buffers 4 8k;`
-|`http`、`server`
-|接收大型 Request Header 的 buffer。
-|Cookie、JWT 或 Header 過大時可能需要調整，但應先檢查設計是否合理。
+|限制 Request Body 大小。
+|需同步確認後端上傳限制。
 |===
 
 == Upstream 與負載平衡
@@ -355,110 +286,80 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 
 |`upstream backend { ... }`
 |`http`
-|定義一組後端伺服器。
-|名稱可直接用於 `proxy_pass http://backend;`。
+|定義後端伺服器群組。
+|供 `proxy_pass http://backend;` 使用。
 
 |`server app1:8080 weight=3;`
 |`upstream`
 |定義後端節點與權重。
-|可搭配 `max_fails`、`fail_timeout`、`backup`、`down`。
+|可搭配 `max_fails`、`fail_timeout`。
 
 |`least_conn;`
 |`upstream`
-|優先選擇目前連線較少的節點。
-|適合請求處理時間差異較大的服務。
+|優先選擇連線數較少的後端。
+|適合處理時間差異較大的請求。
 
 |`ip_hash;`
 |`upstream`
-|依來源 IP 固定分配後端。
-|代理層或 NAT 可能讓大量使用者呈現同一來源 IP。
+|依來源 IP 固定後端。
+|來源經 Proxy 時需確認實際可見 IP。
 
 |`keepalive 32;`
 |`upstream`
-|保留與後端的閒置 Keep-Alive 連線數。
-|通常要搭配 `proxy_http_version 1.1`，並避免送出 `Connection: close`。
-
-|`max_fails=3 fail_timeout=30s`
-|`upstream server`
-|設定被動健康判斷的失敗次數與暫時停用期間。
-|開源版主要是被動檢查，並非完整主動健康檢查。
+|保留與後端的閒置連線池。
+|舊版 Nginx 需搭配 HTTP/1.1 與 `proxy_set_header Connection "";`。
 |===
 
-== TLS 與 HTTPS 設定
-
-[cols="28%,18%,30%,24%", options="header"]
-|===
-|指令 |Context |用途 |注意事項
-
-|`ssl_certificate fullchain.pem;`
-|`http`、`server`
-|指定站台憑證與中繼憑證鏈。
-|通常應使用完整憑證鏈，而不是只放單張站台憑證。
-
-|`ssl_certificate_key private.key;`
-|`http`、`server`
-|指定憑證對應私鑰。
-|限制檔案權限，不應提交到 Git repository。
-
-|`ssl_protocols TLSv1.2 TLSv1.3;`
-|`http`、`server`
-|限制可使用的 TLS 版本。
-|除非有明確相容性需求，不建議重新啟用過時協定。
-
-|`ssl_ciphers ...;`
-|`http`、`server`
-|設定 TLS 1.2 等協定可用 Cipher Suite。
-|不要直接複製年代久遠的清單；TLS 1.3 Cipher 不由此指令控制。
-
-|`ssl_session_cache shared:SSL:10m;`
-|`http`、`server`
-|快取 TLS Session，降低重複握手成本。
-|共享記憶體名稱需在設定中一致。
-
-|`ssl_session_timeout 10m;`
-|`http`、`server`
-|設定 TLS Session 可重用時間。
-|需依安全與效能需求調整。
-
-|`ssl_stapling on;`
-|`http`、`server`
-|讓 Nginx 回傳 OCSP Stapling 資訊。
-|需正確憑證鏈、DNS resolver，並確認 CA 支援。
-
-|`resolver 1.1.1.1 valid=300s;`
-|`http`、`server`、`location`
-|指定 Nginx 執行期間解析 DNS 使用的 resolver。
-|內部環境應使用組織 DNS，不應盲目使用公共 DNS。
-|===
-
-== Header 與跨來源設定
+== TLS 與 HTTPS
 
 [cols="25%,20%,30%,25%", options="header"]
 |===
 |指令 |Context |用途 |注意事項
 
-|`add_header Name Value always;`
-|`http`、`server`、`location`
-|加入回應 Header。
-|沒有 `always` 時，只會套用在部分回應狀態碼；子層重新定義時也會影響繼承。
+|`ssl_certificate fullchain.pem;`
+|`server`
+|指定站台憑證與中繼憑證鏈。
+|通常應使用完整憑證鏈。
 
-|`proxy_hide_header Server;`
-|`http`、`server`、`location`
-|隱藏後端回應的指定 Header。
-|不會處理 Nginx 自己產生的 Header。
+|`ssl_certificate_key private.key;`
+|`server`
+|指定私鑰。
+|限制檔案權限，不可提交到 repository。
 
-|`proxy_pass_header Name;`
-|`http`、`server`、`location`
-|允許傳遞原本預設不傳的後端 Header。
-|使用前應確認不會暴露敏感資訊。
+|`ssl_protocols TLSv1.2 TLSv1.3;`
+|`http`、`server`
+|限制可使用的 TLS 版本。
+|應依用戶端相容性與安全政策調整。
 
-|`Access-Control-Allow-Origin`
-|回應 Header
-|允許指定來源進行跨來源請求。
-|需攜帶 Cookie 時不能使用 `*`，並要搭配 Credentials 設定。
+|`ssl_session_cache shared:SSL:10m;`
+|`http`、`server`
+|快取 TLS Session。
+|可降低重複握手成本。
 |===
 
-== 壓縮與快取設定
+== Header、CORS 與安全設定
+
+[cols="25%,20%,30%,25%", options="header"]
+|===
+|指令 |Context |用途 |注意事項
+
+|`add_header X-Content-Type-Options "nosniff" always;`
+|`http`、`server`、`location`
+|加入回應 Header。
+|`always` 可讓非 2xx 回應也加入。
+
+|`add_header Strict-Transport-Security ... always;`
+|`http`、`server`、`location`
+|啟用 HSTS。
+|啟用子網域前須確認全部支援 HTTPS。
+
+|`add_header Access-Control-Allow-Origin ...;`
+|`http`、`server`、`location`
+|加入 CORS Header。
+|location 內使用 `add_header` 可能停止繼承父層 Header，需重複必要 Header 或評估 `add_header_inherit merge`。
+|===
+
+== Gzip、快取與 Buffer
 
 [cols="25%,20%,30%,25%", options="header"]
 |===
@@ -466,36 +367,31 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 
 |`gzip on;`
 |`http`、`server`、`location`
-|啟用 Gzip 壓縮。
-|不需要壓縮 JPEG、PNG、ZIP 等已壓縮格式。
-
-|`gzip_min_length 1024;`
-|`http`、`server`、`location`
-|小於指定大小的回應不壓縮。
-|避免壓縮成本高於節省的傳輸量。
-
-|`gzip_comp_level 5;`
-|`http`、`server`、`location`
-|設定壓縮等級 1 到 9。
-|等級越高 CPU 成本越高，通常不必使用 9。
+|啟用回應壓縮。
+|不建議壓縮 JPEG、PNG、ZIP。
 
 |`gzip_types ...;`
 |`http`、`server`、`location`
-|指定額外壓縮的 MIME type。
-|`text/html` 通常由內建行為處理，不必重複加入。
+|指定壓縮的 MIME type。
+|通常包含 CSS、JSON、JavaScript、XML、SVG。
 
 |`expires 7d;`
 |`http`、`server`、`location`
-|設定 Expires 與 Cache-Control 的快取時間。
-|HTML 通常不宜長期快取；帶 hash 的靜態資源可設較長。
+|設定 Expires 與 Cache-Control。
+|需配合檔名版本化策略。
 
-|`open_file_cache max=1000 inactive=20s;`
+|`proxy_buffer_size 16k;`
 |`http`、`server`、`location`
-|快取已開啟檔案與檔案資訊。
-|檔案變動頻繁時應注意快取時間。
+|設定後端回應第一段 Buffer。
+|Header 過大時應先檢查 Cookie 或 JWT。
+
+|`proxy_buffers 8 16k;`
+|`http`、`server`、`location`
+|設定後端回應 Buffer 數量與大小。
+|調整前應先觀察實際需求。
 |===
 
-== Log 設定
+== Log
 
 [cols="25%,20%,30%,25%", options="header"]
 |===
@@ -504,22 +400,17 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 |`log_format main '...';`
 |`http`
 |定義 Access Log 格式。
-|建議包含 `$request_time` 與 `$upstream_response_time` 方便效能排查。
+|建議包含 `$request_time` 與 `$upstream_response_time`。
 
 |`access_log /var/log/nginx/access.log main;`
 |`http`、`server`、`location`
 |指定 Access Log 路徑與格式。
-|高流量環境需規劃 logrotate、集中收集與磁碟容量。
-
-|`access_log off;`
-|`http`、`server`、`location`
-|停用指定範圍的 Access Log。
-|健康檢查或高頻靜態資源可評估，但會降低稽核與排查能力。
+|需規劃 logrotate 與容量。
 
 |`error_log /var/log/nginx/error.log warn;`
 |Main、`http`、`server`、`location`
-|指定 Error Log 路徑與最低記錄等級。
-|`debug` 會產生大量內容，只適合短期排查。
+|指定 Error Log 路徑與最低等級。
+|`debug` 只適合短期排查。
 |===
 
 == 存取控制與流量限制
@@ -531,68 +422,49 @@ Nginx 指令只能放在允許的 context 中。放錯位置時，`nginx -t` 通
 |`allow 10.0.0.0/8;`
 |`http`、`server`、`location`
 |允許指定 IP 或網段。
-|規則依序判斷，通常最後搭配 `deny all;`。
-
-|`deny all;`
-|`http`、`server`、`location`
-|拒絕所有尚未匹配 allow 的來源。
-|若 Nginx 前方還有 Proxy，需先正確設定真實來源 IP。
+|通常最後搭配 `deny all;`。
 
 |`auth_basic "Restricted";`
 |`http`、`server`、`location`
-|啟用 HTTP Basic Authentication。
-|必須搭配 HTTPS，否則帳密僅為 Base64 編碼並非加密。
+|啟用 HTTP Basic Auth。
+|必須搭配 HTTPS。
 
-|`auth_basic_user_file /etc/nginx/.htpasswd;`
-|`http`、`server`、`location`
-|指定 Basic Auth 密碼檔。
-|限制檔案權限，避免被網站直接下載。
-
-|`limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;`
+|`limit_req_zone ...;`
 |`http`
-|建立 Request Rate 限制共享區域。
-|只定義區域，不會自動套用，還需 `limit_req`。
+|建立請求速率限制共享區域。
+|還需搭配 `limit_req`。
 
 |`limit_req zone=api burst=20 nodelay;`
 |`server`、`location`
 |套用請求速率限制。
-|需依正常流量與突發行為壓力測試，避免誤擋使用者。
+|需依正常流量壓力測試。
 
-|`limit_conn_zone $binary_remote_addr zone=addr:10m;`
+|`limit_conn_zone ...;`
 |`http`
-|建立同來源連線數限制共享區域。
-|還需搭配 `limit_conn addr 20;` 才會生效。
+|建立來源連線數限制共享區域。
+|還需搭配 `limit_conn`。
 |===
 
-== 真實來源 IP 設定
-
-當 Nginx 前方還有 Load Balancer、CDN 或其他 Proxy 時，`$remote_addr` 可能只會看到上一層 Proxy。
-
-[source,nginx]
-----
-set_real_ip_from 10.0.0.0/8;
-real_ip_header X-Forwarded-For;
-real_ip_recursive on;
-----
+== 真實來源 IP
 
 [cols="25%,20%,30%,25%", options="header"]
 |===
 |指令 |Context |用途 |注意事項
 
-|`set_real_ip_from`
+|`set_real_ip_from 10.0.0.0/8;`
 |`http`、`server`、`location`
-|指定可信任的上一層 Proxy IP 或網段。
-|不可設定成任意來源，否則用戶端可偽造來源 IP。
+|指定可信任的上一層 Proxy。
+|不可設定成任意來源。
 
-|`real_ip_header`
+|`real_ip_header X-Forwarded-For;`
 |`http`、`server`、`location`
-|指定從哪個 Header 取得真實來源 IP。
-|常見為 `X-Forwarded-For` 或特定 Load Balancer Header。
+|指定真實來源 IP Header。
+|需配合可信任 Proxy 範圍。
 
 |`real_ip_recursive on;`
 |`http`、`server`、`location`
-|從代理鏈中向前尋找最後一個不可信任位址。
-|必須先正確設定可信任 Proxy 範圍。
+|從代理鏈向前尋找最後一個不可信任位址。
+|依賴正確的 `set_real_ip_from`。
 |===
 
 == 常見錯誤訊息
@@ -602,30 +474,28 @@ real_ip_recursive on;
 |錯誤訊息 |原因與處理
 
 |`directive is not allowed here`
-|指令放錯 context；檢查是否應放在 Main、`http`、`server` 或 `location`。
+|指令放錯 Context。
 
 |`duplicate default server`
-|相同 IP/port 定義了多個 `default_server`。
+|相同 IP/port 定義多個 `default_server`。
 
 |`host not found in upstream`
-|upstream 主機名無法解析；檢查 DNS、容器服務名稱與啟動順序。
+|upstream 主機名無法解析。
 
 |`upstream sent too big header`
-|後端回應 Header 超過 buffer；先檢查 Cookie/JWT 是否過大，再評估 buffer 設定。
+|後端 Header 過大；先檢查 Cookie 或 JWT。
 
 |`client intended to send too large body`
 |Request Body 超過 `client_max_body_size`。
 
 |`rewrite or internal redirection cycle`
-|`rewrite`、`try_files` 或 `error_page` 造成循環內部導向。
+|`rewrite`、`try_files` 或 `error_page` 形成循環。
 
 |`permission denied`
-|Nginx 執行帳號缺少檔案權限，或受到 SELinux 限制。
+|執行帳號缺少權限，或受到 SELinux 限制。
 |===
 
 == 套用前檢查
-
-每次調整設定後，至少執行：
 
 [source,bash]
 ----
@@ -634,6 +504,4 @@ nginx -T
 systemctl reload nginx
 ----
 
-* `nginx -t`：驗證語法與引用檔案是否可讀。
-* `nginx -T`：顯示 include 展開後的完整設定，適合排查設定實際落在哪裡。
-* reload 後應再使用 `curl`、瀏覽器與 log 驗證實際行為。
+更多完整範例與排查流程請參考 xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]。
