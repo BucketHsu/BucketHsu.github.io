@@ -1,0 +1,1166 @@
+= Nginx 基礎觀念與設定指南
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本篇由淺入深整理 Nginx 的用途、設定檔結構、靜態網站、反向代理、負載平衡、HTTPS、安全 Header、效能調整與常見問題排查。
+
+== Nginx 是什麼
+
+Nginx（通常讀作 Engine-X）是一套常用的 Web Server、反向代理伺服器與負載平衡器。
+
+它經常放在使用者與後端應用程式之間，負責接收 HTTP / HTTPS 請求，再依照設定決定：
+
+* 直接回傳靜態檔案。
+* 將請求轉送到 Tomcat、Spring Boot、Node.js 或其他後端服務。
+* 將流量分散到多台應用程式伺服器。
+* 統一處理 TLS 憑證、壓縮、快取、安全 Header 與存取紀錄。
+
+=== 常見使用情境
+
+[cols="30%,70%", options="header"]
+|===
+|情境 |說明
+
+|靜態網站
+|直接提供 HTML、CSS、JavaScript、圖片與下載檔案。
+
+|反向代理
+|使用者只連到 Nginx，再由 Nginx 將請求轉送到內部後端服務。
+
+|TLS 終止
+|由 Nginx 負責 HTTPS 與憑證，後端可維持 HTTP 連線。
+
+|負載平衡
+|將請求分散到多台後端伺服器，提高可用性與處理能力。
+
+|統一入口
+|多個系統共用同一個 IP 或網域，再依網域或 URL 路徑導向不同服務。
+|===
+
+== 正向代理與反向代理
+
+=== 正向代理
+
+正向代理代表用戶端知道自己正在透過代理伺服器連線到外部服務。
+
+常見用途包含：
+
+* 公司對外網路控管。
+* 隱藏用戶端來源。
+* 存取特定外部資源。
+
+[source,text]
+----
+使用者 → 正向代理 → 外部網站
+----
+
+=== 反向代理
+
+反向代理代表使用者只知道 Nginx 的位址，不需要知道後端服務實際位置。
+
+[source,text]
+----
+使用者 → Nginx → Spring Boot / Tomcat / Node.js
+----
+
+反向代理的優點：
+
+* 隱藏後端 IP 與 port。
+* 集中管理 HTTPS。
+* 可依路徑或網域分流。
+* 可統一加入 Header、壓縮、快取與存取控制。
+* 後端服務更換 port 或主機時，使用者端網址可保持不變。
+
+== Nginx 基本架構
+
+Nginx 採用 Master Process 與 Worker Process 架構。
+
+[cols="30%,70%", options="header"]
+|===
+|程序 |用途
+
+|Master Process
+|讀取設定檔、管理 Worker、重新載入設定與處理啟停訊號。
+
+|Worker Process
+|實際接收連線並處理 HTTP 請求。
+|===
+
+這種架構讓 Nginx 可以在不中斷既有連線的情況下重新載入設定。
+
+== 常見安裝與管理方式
+
+=== Ubuntu / Debian
+
+[source,bash]
+----
+sudo apt update
+sudo apt install nginx
+
+sudo systemctl enable --now nginx
+sudo systemctl status nginx
+----
+
+=== RHEL / AlmaLinux / Rocky Linux
+
+[source,bash]
+----
+sudo dnf install nginx
+sudo systemctl enable --now nginx
+sudo systemctl status nginx
+----
+
+=== Windows
+
+Windows 版通常使用壓縮檔解壓縮後直接執行：
+
+[source,powershell]
+----
+cd C:\nginx
+.\nginx.exe
+----
+
+常用控制指令：
+
+[source,powershell]
+----
+.\nginx.exe -t
+.\nginx.exe -s reload
+.\nginx.exe -s quit
+.\nginx.exe -s stop
+----
+
+[NOTE]
+====
+Windows 版適合測試或簡單部署。正式 Linux 環境通常使用 systemd 管理服務會比較完整。
+====
+
+== 常見目錄與設定檔
+
+不同安裝方式的路徑可能不同，Linux 套件常見如下：
+
+[cols="40%,60%", options="header"]
+|===
+|路徑 |用途
+
+|`/etc/nginx/nginx.conf`
+|主要設定檔。
+
+|`/etc/nginx/conf.d/*.conf`
+|額外站台或服務設定。
+
+|`/etc/nginx/sites-available/`
+|Debian / Ubuntu 常見的站台設定存放位置。
+
+|`/etc/nginx/sites-enabled/`
+|Debian / Ubuntu 已啟用站台的符號連結。
+
+|`/usr/share/nginx/html/`
+|常見預設靜態網站根目錄。
+
+|`/var/log/nginx/access.log`
+|存取紀錄。
+
+|`/var/log/nginx/error.log`
+|錯誤紀錄。
+|===
+
+Windows 解壓縮版本常見結構：
+
+[source,text]
+----
+nginx/
+├── conf/
+│   └── nginx.conf
+├── html/
+├── logs/
+└── nginx.exe
+----
+
+== 設定檔基本結構
+
+Nginx 設定由多個 context 組成：
+
+[source,nginx]
+----
+user nginx;
+worker_processes auto;
+
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    access_log /var/log/nginx/access.log;
+
+    server {
+        listen 80;
+        server_name example.com;
+
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+        }
+    }
+}
+----
+
+=== 主要 context
+
+[cols="25%,75%", options="header"]
+|===
+|Context |用途
+
+|Main
+|設定 worker、使用者、log 等全域項目。
+
+|`events`
+|設定連線處理方式與每個 Worker 可接受的連線數。
+
+|`http`
+|HTTP / HTTPS 相關設定，例如 gzip、log、MIME type、server。
+
+|`server`
+|代表一個虛擬主機，可依 port 或網域區分網站。
+
+|`location`
+|依 URL 路徑決定如何處理請求。
+
+|`upstream`
+|定義一組後端伺服器，常用於負載平衡。
+|===
+
+== 修改設定前的基本流程
+
+每次修改後建議依序執行：
+
+[source,bash]
+----
+# 驗證語法
+sudo nginx -t
+
+# 重新載入，不中斷既有連線
+sudo systemctl reload nginx
+----
+
+也可使用：
+
+[source,bash]
+----
+sudo nginx -s reload
+----
+
+若語法驗證失敗，不應直接 reload。
+
+=== 常用管理指令
+
+[source,bash]
+----
+nginx -t                 # 檢查設定語法
+nginx -T                 # 顯示完整展開後的設定
+nginx -V                 # 顯示版本與編譯模組
+systemctl status nginx   # 查看服務狀態
+systemctl reload nginx   # 平滑重新載入
+systemctl restart nginx  # 完整重新啟動
+journalctl -u nginx      # 查看 systemd log
+----
+
+== 提供靜態網站
+
+最簡單的靜態網站設定：
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name example.com;
+
+    root /var/www/example;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+----
+
+=== `root` 與 `index`
+
+[source,nginx]
+----
+root /var/www/example;
+index index.html index.htm;
+----
+
+當請求 `/images/logo.png` 時，Nginx 會嘗試讀取：
+
+[source,text]
+----
+/var/www/example/images/logo.png
+----
+
+=== `try_files`
+
+[source,nginx]
+----
+location / {
+    try_files $uri $uri/ =404;
+}
+----
+
+依序檢查：
+
+. 是否存在對應檔案。
+. 是否存在對應目錄。
+. 都不存在時回傳 404。
+
+== SPA 前端網站設定
+
+React、Vue 或 Angular 等 SPA 通常由前端 Router 控制路由。
+
+若使用者直接開啟 `/users/123`，Nginx 會找不到實體檔案，因此需要回到 `index.html`：
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name frontend.example.com;
+
+    root /var/www/frontend;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+----
+
+[NOTE]
+====
+若網站不是 SPA，不要一律回傳 `index.html`，否則真正不存在的檔案也可能回傳 200。
+====
+
+== 反向代理基礎設定
+
+將 `/` 全部代理到本機 8080：
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name api.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+    }
+}
+----
+
+=== 建議加入的 Proxy Header
+
+[source,nginx]
+----
+location / {
+    proxy_pass http://127.0.0.1:8080;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+----
+
+[cols="35%,65%", options="header"]
+|===
+|Header |用途
+
+|`Host`
+|保留使用者原本請求的網域。
+
+|`X-Real-IP`
+|傳遞直接連到 Nginx 的來源 IP。
+
+|`X-Forwarded-For`
+|保留經過多層 Proxy 的用戶端 IP 鏈。
+
+|`X-Forwarded-Proto`
+|告知後端原始請求是 HTTP 或 HTTPS。
+|===
+
+== `proxy_pass` 路徑規則
+
+`proxy_pass` 是否包含結尾 `/`，會影響轉送路徑。
+
+=== 不包含結尾斜線
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+}
+----
+
+請求：
+
+[source,text]
+----
+/api/users
+----
+
+後端收到：
+
+[source,text]
+----
+/api/users
+----
+
+=== 包含結尾斜線
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080/;
+}
+----
+
+後端收到：
+
+[source,text]
+----
+/users
+----
+
+[WARNING]
+====
+`location` 與 `proxy_pass` 的斜線是常見錯誤來源。修改後應實際確認後端收到的 URI。
+====
+
+== 多路徑反向代理
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name system.example.com;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /admin/ {
+        proxy_pass http://127.0.0.1:8081/;
+    }
+
+    location / {
+        root /var/www/frontend;
+        try_files $uri $uri/ /index.html;
+    }
+}
+----
+
+== WebSocket 代理
+
+WebSocket 需要升級 HTTP 連線：
+
+[source,nginx]
+----
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    server_name ws.example.com;
+
+    location /socket/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+    }
+}
+----
+
+== Timeout 與大型請求
+
+=== Proxy Timeout
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 60s;
+    proxy_read_timeout 60s;
+}
+----
+
+[cols="35%,65%", options="header"]
+|===
+|設定 |用途
+
+|`proxy_connect_timeout`
+|等待與後端建立連線的時間。
+
+|`proxy_send_timeout`
+|傳送請求到後端時允許的等待時間。
+
+|`proxy_read_timeout`
+|等待後端回傳資料的時間。
+|===
+
+=== 上傳檔案大小
+
+預設限制可能不符合大型檔案上傳需求：
+
+[source,nginx]
+----
+server {
+    client_max_body_size 100m;
+}
+----
+
+若出現 `413 Request Entity Too Large`，應檢查此設定，也要同步確認後端應用程式的上傳限制。
+
+== 負載平衡
+
+[source,nginx]
+----
+upstream backend_servers {
+    server 10.0.0.11:8080;
+    server 10.0.0.12:8080;
+}
+
+server {
+    listen 80;
+    server_name api.example.com;
+
+    location / {
+        proxy_pass http://backend_servers;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+----
+
+=== 常見分配方式
+
+==== Round Robin
+
+預設方式，依序分配請求。
+
+[source,nginx]
+----
+upstream backend_servers {
+    server app1:8080;
+    server app2:8080;
+}
+----
+
+==== Weight
+
+[source,nginx]
+----
+upstream backend_servers {
+    server app1:8080 weight=3;
+    server app2:8080 weight=1;
+}
+----
+
+app1 理論上會取得較多請求。
+
+==== Least Connections
+
+[source,nginx]
+----
+upstream backend_servers {
+    least_conn;
+    server app1:8080;
+    server app2:8080;
+}
+----
+
+優先選擇目前連線較少的後端。
+
+==== IP Hash
+
+[source,nginx]
+----
+upstream backend_servers {
+    ip_hash;
+    server app1:8080;
+    server app2:8080;
+}
+----
+
+同一來源 IP 通常會被導向同一台後端。
+
+[NOTE]
+====
+若系統使用 Server-side Session，應評估 Sticky Session 或改用共享 Session，例如 Redis。
+====
+
+== HTTPS 基礎設定
+
+[source,nginx]
+----
+server {
+    listen 443 ssl;
+    server_name example.com;
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/private.key;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+----
+
+=== HTTP 轉 HTTPS
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name example.com;
+
+    return 301 https://$host$request_uri;
+}
+----
+
+=== 憑證鏈
+
+`ssl_certificate` 通常應指定包含站台憑證與中繼憑證的完整憑證鏈，例如 `fullchain.pem`。
+
+如果憑證鏈不完整，部分瀏覽器或 Java 用戶端可能出現信任錯誤。
+
+更多憑證格式與部署內容可參考 xref:../security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]。
+
+== 安全 Header
+
+[source,nginx]
+----
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
+----
+
+若已確認全站只使用 HTTPS，可評估 HSTS：
+
+[source,nginx]
+----
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+----
+
+[WARNING]
+====
+HSTS 會要求瀏覽器在有效期間內強制使用 HTTPS。啟用 `includeSubDomains` 前，必須確認所有子網域都已支援 HTTPS。
+====
+
+CSP 應依實際前端資源來源設計，不建議直接複製過度寬鬆的設定。
+
+== CORS 處理
+
+CORS 可以由後端或 Nginx 處理，但應避免兩邊重複設定造成 Header 重複。
+
+簡單範例：
+
+[source,nginx]
+----
+location /api/ {
+    if ($request_method = OPTIONS) {
+        add_header Access-Control-Allow-Origin "https://frontend.example.com";
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS";
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type";
+        add_header Access-Control-Max-Age 86400;
+        return 204;
+    }
+
+    add_header Access-Control-Allow-Origin "https://frontend.example.com" always;
+    proxy_pass http://127.0.0.1:8080/;
+}
+----
+
+[NOTE]
+====
+需要攜帶 Cookie 或認證資訊時，不可將 `Access-Control-Allow-Origin` 設為 `*`，並需搭配 `Access-Control-Allow-Credentials: true`。
+====
+
+== Gzip 壓縮
+
+[source,nginx]
+----
+gzip on;
+gzip_vary on;
+gzip_min_length 1024;
+gzip_comp_level 5;
+gzip_types
+    text/plain
+    text/css
+    application/json
+    application/javascript
+    application/xml
+    image/svg+xml;
+----
+
+不建議壓縮已高度壓縮的格式，例如 JPEG、PNG、ZIP。
+
+== 靜態檔案快取
+
+[source,nginx]
+----
+location ~* \.(?:css|js|png|jpg|jpeg|gif|svg|woff2?)$ {
+    expires 7d;
+    add_header Cache-Control "public";
+}
+----
+
+若檔名包含內容雜湊，例如 `app.a1b2c3.js`，可以設定較長快取：
+
+[source,nginx]
+----
+location ~* \.(?:css|js|png|jpg|jpeg|gif|svg|woff2?)$ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+}
+----
+
+== Proxy Buffering
+
+Nginx 預設可能先緩衝後端回應，再傳給用戶端。
+
+[source,nginx]
+----
+proxy_buffering on;
+proxy_buffer_size 16k;
+proxy_buffers 8 16k;
+----
+
+串流、Server-Sent Events 或需要即時輸出的服務，可能需要關閉：
+
+[source,nginx]
+----
+location /events/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_buffering off;
+    proxy_cache off;
+}
+----
+
+== 存取控制
+
+=== IP 白名單
+
+[source,nginx]
+----
+location /admin/ {
+    allow 192.168.1.0/24;
+    allow 10.0.0.10;
+    deny all;
+
+    proxy_pass http://127.0.0.1:8080;
+}
+----
+
+=== Basic Authentication
+
+產生密碼檔：
+
+[source,bash]
+----
+sudo apt install apache2-utils
+sudo htpasswd -c /etc/nginx/.htpasswd admin
+----
+
+Nginx 設定：
+
+[source,nginx]
+----
+location /private/ {
+    auth_basic "Restricted";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    proxy_pass http://127.0.0.1:8080;
+}
+----
+
+== Log 設定
+
+=== Access Log
+
+[source,nginx]
+----
+log_format main '$remote_addr - $remote_user [$time_local] '
+                '"$request" $status $body_bytes_sent '
+                '"$http_referer" "$http_user_agent" '
+                'xff="$http_x_forwarded_for" '
+                'request_time=$request_time '
+                'upstream_time=$upstream_response_time';
+
+access_log /var/log/nginx/access.log main;
+----
+
+重要欄位：
+
+[cols="35%,65%", options="header"]
+|===
+|欄位 |用途
+
+|`$remote_addr`
+|直接連到 Nginx 的來源 IP。
+
+|`$status`
+|HTTP 回應狀態碼。
+
+|`$request_time`
+|Nginx 處理整個請求的時間。
+
+|`$upstream_response_time`
+|後端服務回應時間。
+
+|`$http_x_forwarded_for`
+|上游 Proxy 傳入的來源 IP 鏈。
+|===
+
+=== Error Log 等級
+
+[source,nginx]
+----
+error_log /var/log/nginx/error.log warn;
+----
+
+常見等級：
+
+[source,text]
+----
+debug → info → notice → warn → error → crit → alert → emerg
+----
+
+除錯完成後不建議長期使用 `debug`，避免 log 過大。
+
+== 常見 HTTP 狀態碼與排查方向
+
+[cols="20%,35%,45%", options="header"]
+|===
+|狀態碼 |常見原因 |排查方向
+
+|400
+|請求格式、Header 或 TLS SNI 異常
+|檢查 access log、Header、網域與 HTTPS 設定。
+
+|403
+|檔案權限、目錄權限、SELinux、deny 規則
+|檢查 Nginx 執行帳號、檔案權限與 SELinux Label。
+
+|404
+|root、alias、location 或 URI 錯誤
+|確認實體路徑與 `try_files`。
+
+|413
+|上傳內容超過限制
+|調整 `client_max_body_size`，並檢查後端限制。
+
+|499
+|用戶端在 Nginx 回應前中斷連線
+|檢查前端 timeout、網路與後端處理時間。
+
+|500
+|Nginx 設定、腳本或內部處理錯誤
+|查看 error log。
+
+|502
+|無法連到後端或後端回應無效
+|檢查後端程序、IP、port、DNS、SELinux 與防火牆。
+
+|503
+|後端不可用或被限流
+|檢查 upstream 狀態與服務容量。
+
+|504
+|等待後端回應逾時
+|檢查後端效能與 `proxy_read_timeout`。
+|===
+
+== 502 Bad Gateway 排查
+
+依序檢查：
+
+. 後端服務是否啟動。
+. Nginx 主機是否能連到後端 port。
+. `proxy_pass` 的 IP、主機名與 port 是否正確。
+. 容器網路中是否誤用 `127.0.0.1`。
+. DNS 是否能解析 upstream 名稱。
+. Linux 防火牆或 SELinux 是否阻擋。
+. 後端是否主動關閉連線。
+
+[source,bash]
+----
+systemctl status nginx
+ss -lntp
+curl -v http://127.0.0.1:8080/health
+sudo tail -f /var/log/nginx/error.log
+----
+
+[NOTE]
+====
+若 Nginx 與後端位於不同容器，`127.0.0.1` 代表 Nginx 容器本身，不是另一個後端容器。應使用容器服務名稱或實際網路位址。
+====
+
+== 404 與 `root`、`alias` 差異
+
+=== `root`
+
+[source,nginx]
+----
+location /files/ {
+    root /data;
+}
+----
+
+請求 `/files/a.pdf` 對應：
+
+[source,text]
+----
+/data/files/a.pdf
+----
+
+=== `alias`
+
+[source,nginx]
+----
+location /files/ {
+    alias /data/downloads/;
+}
+----
+
+請求 `/files/a.pdf` 對應：
+
+[source,text]
+----
+/data/downloads/a.pdf
+----
+
+[WARNING]
+====
+`alias` 的路徑與 `location` 尾端斜線應保持一致，否則容易產生路徑錯誤。
+====
+
+== Location 比對觀念
+
+常見形式：
+
+[source,nginx]
+----
+location = /health { }
+location ^~ /static/ { }
+location /api/ { }
+location ~ \.php$ { }
+location ~* \.(jpg|png)$ { }
+----
+
+[cols="25%,75%", options="header"]
+|===
+|形式 |用途
+
+|`=`
+|完全相符。
+
+|一般前綴
+|例如 `/api/`，依最長前綴比對。
+
+|`^~`
+|命中前綴後，不再檢查正規表示式 location。
+
+|`~`
+|區分大小寫的正規表示式。
+
+|`~*`
+|不區分大小寫的正規表示式。
+|===
+
+== Docker Compose 中使用 Nginx
+
+[source,yaml]
+----
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./frontend:/usr/share/nginx/html:ro
+    depends_on:
+      - app
+
+  app:
+    image: my-app:latest
+    expose:
+      - "8080"
+----
+
+Nginx 設定：
+
+[source,nginx]
+----
+upstream app_backend {
+    server app:8080;
+}
+
+server {
+    listen 80;
+
+    location /api/ {
+        proxy_pass http://app_backend/;
+    }
+}
+----
+
+同一個 Compose network 內可使用 service 名稱 `app` 連線。
+
+== 一份較完整的反向代理範例
+
+[source,nginx]
+----
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+upstream application_backend {
+    least_conn;
+    server 127.0.0.1:8080;
+    server 127.0.0.1:8081;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name example.com;
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/private.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    client_max_body_size 100m;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    location /api/ {
+        proxy_pass http://application_backend/;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    location /socket/ {
+        proxy_pass http://application_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+    }
+
+    location / {
+        root /var/www/frontend;
+        try_files $uri $uri/ /index.html;
+    }
+}
+----
+
+== 正式環境檢查清單
+
+部署前建議確認：
+
+* `nginx -t` 驗證成功。
+* DNS 已指向正確主機。
+* 防火牆已開放 80 / 443。
+* 憑證、私鑰與完整憑證鏈正確。
+* 私鑰檔案權限受到限制。
+* 後端服務只開放必要網路範圍。
+* `X-Forwarded-For` 與 `X-Forwarded-Proto` 正確傳遞。
+* 上傳大小與 timeout 符合系統需求。
+* Access Log 與 Error Log 有輪替策略。
+* 靜態資源快取策略符合版本更新方式。
+* HSTS、CSP、CORS 等安全設定經過測試。
+* 備份目前可用設定，並準備 rollback 方法。
+
+== 常見修改流程
+
+[source,bash]
+----
+# 1. 備份設定
+sudo cp /etc/nginx/conf.d/app.conf \
+  /etc/nginx/conf.d/app.conf.bak
+
+# 2. 修改設定
+sudo vi /etc/nginx/conf.d/app.conf
+
+# 3. 驗證語法
+sudo nginx -t
+
+# 4. 平滑重新載入
+sudo systemctl reload nginx
+
+# 5. 驗證服務
+curl -I https://example.com/
+curl -v https://example.com/api/health
+
+# 6. 觀察 log
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
+----
+
+== 延伸閱讀
+
+* xref:tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異]
+* xref:../security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
+* xref:../security/web-security-headers.adoc[資安名詞與 Web 安全 Header 說明]
+* xref:../container/docker-compose-notes.adoc[Docker Compose 整理]
+* xref:../k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除筆記]
