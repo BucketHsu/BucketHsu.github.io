@@ -1,0 +1,451 @@
+= Nginx 設定檔分層、Template 與 Include
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本頁整理 Nginx 設定檔的分層方式，說明 template 檔案、`80.conf`、`443.conf` 的用途，以及如何由主設定檔透過 `include` 載入。
+
+== 為什麼要拆分設定檔
+
+當所有設定都集中在單一 `nginx.conf` 時，常會出現以下問題：
+
+* HTTP、HTTPS、Proxy、Header 與憑證設定混在一起。
+* 多個站台重複撰寫相同內容。
+* 修改單一服務時，容易誤動其他站台設定。
+* 正式、測試與本機環境難以共用同一套架構。
+
+因此可將設定拆成：
+
+[source,text]
+----
+/etc/nginx/
+├── nginx.conf
+├── conf.d/
+│   ├── 80.conf
+│   ├── 443.conf
+│   └── app.conf
+└── templates/
+    └── proxy-common.conf.template
+----
+
+== 主設定檔 `nginx.conf`
+
+`nginx.conf` 負責程序層與 HTTP 共用設定，不建議在這裡塞入每一個站台的完整內容。
+
+[source,nginx]
+----
+user nginx;
+worker_processes auto;
+
+error_log /var/log/nginx/error.log warn;
+pid /run/nginx.pid;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    log_format main '$remote_addr - $remote_user [$time_local] '
+                    '"$request" $status $body_bytes_sent '
+                    'request_time=$request_time '
+                    'upstream_time=$upstream_response_time';
+
+    access_log /var/log/nginx/access.log main;
+
+    sendfile on;
+    keepalive_timeout 65;
+    server_tokens off;
+
+    include /etc/nginx/conf.d/*.conf;
+}
+----
+
+最後一行：
+
+[source,nginx]
+----
+include /etc/nginx/conf.d/*.conf;
+----
+
+代表 Nginx 會載入 `/etc/nginx/conf.d/` 下所有 `.conf` 檔案，因此 `80.conf`、`443.conf`、`app.conf` 都可以被主 `nginx.conf` 載入。
+
+== `80.conf` 的用途
+
+`80.conf` 通常集中處理 HTTP 連線，常見責任包含：
+
+* 監聽 port 80。
+* 將 HTTP 重新導向到 HTTPS。
+* 提供 ACME / Let's Encrypt 驗證路徑。
+* 少數不需要 HTTPS 的健康檢查或內網服務。
+
+=== 只做 HTTPS 重新導向
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name example.com www.example.com;
+
+    return 301 https://$host$request_uri;
+}
+----
+
+=== 保留 ACME 驗證路徑
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name example.com www.example.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+----
+
+== `443.conf` 的用途
+
+`443.conf` 通常集中處理 HTTPS、憑證與正式反向代理設定，常見責任包含：
+
+* 監聽 port 443。
+* 設定 `ssl_certificate` 與 `ssl_certificate_key`。
+* 限制 TLS 版本。
+* 加入安全 Header。
+* 將請求轉送到後端服務。
+* 提供靜態網站或 SPA。
+
+[source,nginx]
+----
+upstream application_backend {
+    server 127.0.0.1:8080;
+    keepalive 32;
+}
+
+server {
+    listen 443 ssl;
+    server_name example.com;
+
+    ssl_certificate /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/private.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    location /api/ {
+        proxy_pass http://application_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        root /var/www/frontend;
+        try_files $uri $uri/ /index.html;
+    }
+}
+----
+
+== `template` 檔案的用途
+
+Template 檔案不是 Nginx 自己的特殊語法，而是「尚未產生最終設定檔的範本」。
+
+它適合用在：
+
+* Docker 或 Podman 容器啟動時注入環境變數。
+* 不同環境共用同一份設定結構。
+* 開發、測試、正式環境只替換網域、port、後端位址或憑證路徑。
+* 避免在 repository 中寫死特定主機名稱與環境參數。
+
+常見 template：
+
+[source,nginx]
+----
+server {
+    listen 443 ssl;
+    server_name ${SERVER_NAME};
+
+    ssl_certificate ${SSL_CERTIFICATE};
+    ssl_certificate_key ${SSL_CERTIFICATE_KEY};
+
+    location /api/ {
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+----
+
+這份檔案可命名為：
+
+[source,text]
+----
+443.conf.template
+----
+
+產生最終設定檔：
+
+[source,bash]
+----
+envsubst '${SERVER_NAME} ${SSL_CERTIFICATE} ${SSL_CERTIFICATE_KEY} ${BACKEND_HOST} ${BACKEND_PORT}' \
+  < /etc/nginx/templates/443.conf.template \
+  > /etc/nginx/conf.d/443.conf
+----
+
+產生後，真正被 Nginx 載入的是：
+
+[source,text]
+----
+/etc/nginx/conf.d/443.conf
+----
+
+而不是 `.template` 本身。
+
+== 官方 Nginx Container 的 Template 機制
+
+官方 Nginx container image 支援將 template 放在：
+
+[source,text]
+----
+/etc/nginx/templates/*.template
+----
+
+容器啟動時會自動將環境變數展開，輸出到：
+
+[source,text]
+----
+/etc/nginx/conf.d/*.conf
+----
+
+Docker Compose 範例：
+
+[source,yaml]
+----
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SERVER_NAME: example.com
+      BACKEND_HOST: app
+      BACKEND_PORT: 8080
+      SSL_CERTIFICATE: /etc/nginx/certs/fullchain.pem
+      SSL_CERTIFICATE_KEY: /etc/nginx/certs/private.key
+    volumes:
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - app
+
+  app:
+    image: my-app:latest
+    expose:
+      - "8080"
+----
+
+範本目錄：
+
+[source,text]
+----
+nginx/
+├── templates/
+│   ├── 80.conf.template
+│   └── 443.conf.template
+└── certs/
+    ├── fullchain.pem
+    └── private.key
+----
+
+容器啟動後會產生：
+
+[source,text]
+----
+/etc/nginx/conf.d/80.conf
+/etc/nginx/conf.d/443.conf
+----
+
+== Template 與 Include 的關係
+
+兩者用途不同：
+
+[cols="30%,70%", options="header"]
+|===
+|機制 |用途
+
+|Template
+|在 Nginx 啟動前，將環境變數代入範本並產生正式 `.conf`。
+
+|Include
+|Nginx 讀取設定時，把其他 `.conf` 的內容載入目前 context。
+|===
+
+流程可以理解為：
+
+[source,text]
+----
+80.conf.template / 443.conf.template
+                ↓ envsubst
+        80.conf / 443.conf
+                ↓ include
+             nginx.conf
+----
+
+實際載入順序是 Nginx 從 `nginx.conf` 看到：
+
+[source,nginx]
+----
+include /etc/nginx/conf.d/*.conf;
+----
+
+再讀取已產生的 `80.conf` 與 `443.conf`。
+
+== 可以直接指定 include 檔案
+
+除了萬用字元，也可以明確指定：
+
+[source,nginx]
+----
+http {
+    include /etc/nginx/conf.d/80.conf;
+    include /etc/nginx/conf.d/443.conf;
+}
+----
+
+但通常使用：
+
+[source,nginx]
+----
+include /etc/nginx/conf.d/*.conf;
+----
+
+維護上較方便。
+
+== Include 的 Context 必須正確
+
+`80.conf`、`443.conf` 若內含完整 `server {}`，必須在 `http {}` context 內 include。
+
+正確：
+
+[source,nginx]
+----
+http {
+    include /etc/nginx/conf.d/*.conf;
+}
+----
+
+錯誤：
+
+[source,nginx]
+----
+include /etc/nginx/conf.d/443.conf;
+----
+
+若 `443.conf` 內含 `server {}`，卻在 Main context 載入，`nginx -t` 會出現類似：
+
+[source,text]
+----
+"server" directive is not allowed here
+----
+
+同理，若 include 的檔案只包含 `proxy_set_header`，則應在允許該 directive 的 `http`、`server` 或 `location` context 中載入。
+
+== 共用 Proxy Template
+
+除了 80 與 443，也可以建立共用 Proxy 設定：
+
+[source,nginx]
+----
+# /etc/nginx/snippets/proxy-common.conf
+proxy_http_version 1.1;
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_connect_timeout 10s;
+proxy_send_timeout 60s;
+proxy_read_timeout 60s;
+----
+
+在 `location` 中載入：
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://application_backend;
+    include /etc/nginx/snippets/proxy-common.conf;
+}
+----
+
+這種檔案比較像可重複使用的設定片段，不一定需要 `.template`；只有需要環境變數替換時，才需要使用 template。
+
+== 建議分工
+
+[cols="30%,70%", options="header"]
+|===
+|檔案 |建議責任
+
+|`nginx.conf`
+|程序、events、HTTP 共用參數與 include 入口。
+
+|`80.conf`
+|HTTP 監聽、HTTPS redirect、ACME challenge。
+
+|`443.conf`
+|HTTPS、憑證、安全 Header、Proxy 與網站內容。
+
+|`*.conf.template`
+|尚未展開環境變數的設定範本。
+
+|`proxy-common.conf`
+|可在多個 location 重複 include 的 Proxy 共用設定片段。
+|===
+
+== 驗證方式
+
+[source,bash]
+----
+# 驗證語法
+nginx -t
+
+# 查看 include 與 template 展開後的完整設定
+nginx -T
+
+# Container 內確認產生的設定檔
+ls -l /etc/nginx/conf.d/
+cat /etc/nginx/conf.d/80.conf
+cat /etc/nginx/conf.d/443.conf
+----
+
+[NOTE]
+====
+若使用 container template 機制，修改環境變數後通常需要重新建立或重新啟動容器，才能重新產生 `.conf`。
+====
+
+== 延伸閱讀
+
+* xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]
+* xref:network/nginx-trailing-slash.adoc[Nginx 路徑尾端斜線規則]
+* xref:network/nginx-directive-reference.adoc[Nginx 常用設定指令參考]
