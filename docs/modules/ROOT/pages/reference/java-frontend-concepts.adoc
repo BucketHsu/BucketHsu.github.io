@@ -16,4 +16,4 @@ ifndef::env-site[:image-link-prefix: ../assets/images/common]
 
 本頁整理 Java 專案分層、Spring Boot Profile、UI 元件與前端架構名詞等內容。
 
-include::misc-notes.adoc[lines=2476..2740,leveloffset=+1]
+include::misc-notes.adoc[lines=2476..2731,leveloffset=+1]

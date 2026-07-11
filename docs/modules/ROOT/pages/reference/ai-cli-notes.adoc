@@ -14,6 +14,6 @@ ifndef::env-site[:image-link-prefix: ../assets/images/common]
 :last-update-label!:
 :nofooter:
 
-本頁整理 SELinux 容器目錄、RamaLama、Codex CLI 與其他 AI 工具操作內容。
+本頁整理 RamaLama、Codex CLI 與其他 AI 工具操作內容。
 
-include::misc-notes.adoc[lines=2741..3300,leveloffset=+1]
+include::misc-notes.adoc[lines=2773..3300,leveloffset=+1]
