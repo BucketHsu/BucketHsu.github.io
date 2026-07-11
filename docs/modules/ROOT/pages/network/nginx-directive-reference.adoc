@@ -226,7 +226,7 @@
 |區分大小寫正規表示式
 |依副檔名處理。
 
-|`location ~* \.(jpg|png)$`
+|`location ~* \.(jpg\|png)$`
 |不區分大小寫正規表示式
 |圖片快取設定。
 |===
@@ -316,20 +316,20 @@
 |===
 |指令 |Context |用途 |注意事項
 
-|`ssl_certificate fullchain.pem;`
-|`server`
+|`ssl_certificate /path/fullchain.pem;`
+|`http`、`server`
 |指定站台憑證與中繼憑證鏈。
-|通常應使用完整憑證鏈。
+|通常使用完整鏈檔案。
 
-|`ssl_certificate_key private.key;`
-|`server`
+|`ssl_certificate_key /path/private.key;`
+|`http`、`server`
 |指定私鑰。
-|限制檔案權限，不可提交到 repository。
+|需限制檔案權限。
 
 |`ssl_protocols TLSv1.2 TLSv1.3;`
 |`http`、`server`
-|限制可使用的 TLS 版本。
-|應依用戶端相容性與安全政策調整。
+|限制允許的 TLS 版本。
+|除非有舊系統需求，不建議啟用更舊版本。
 
 |`ssl_session_cache shared:SSL:10m;`
 |`http`、`server`
@@ -337,61 +337,34 @@
 |可降低重複握手成本。
 |===
 
-== Header、CORS 與安全設定
+== Header、壓縮與快取
 
 [cols="25%,20%,30%,25%", options="header"]
 |===
 |指令 |Context |用途 |注意事項
 
-|`add_header X-Content-Type-Options "nosniff" always;`
+|`add_header X-Content-Type-Options nosniff always;`
 |`http`、`server`、`location`
 |加入回應 Header。
-|`always` 可讓非 2xx 回應也加入。
-
-|`add_header Strict-Transport-Security ... always;`
-|`http`、`server`、`location`
-|啟用 HSTS。
-|啟用子網域前須確認全部支援 HTTPS。
-
-|`add_header Access-Control-Allow-Origin ...;`
-|`http`、`server`、`location`
-|加入 CORS Header。
-|location 內使用 `add_header` 可能停止繼承父層 Header，需重複必要 Header 或評估 `add_header_inherit merge`。
-|===
-
-== Gzip、快取與 Buffer
-
-[cols="25%,20%,30%,25%", options="header"]
-|===
-|指令 |Context |用途 |注意事項
+|子層重新宣告 `add_header` 時可能停止繼承父層設定。
 
 |`gzip on;`
 |`http`、`server`、`location`
-|啟用回應壓縮。
-|不建議壓縮 JPEG、PNG、ZIP。
+|啟用 Gzip 壓縮。
+|不必壓縮 JPEG、PNG、ZIP 等已壓縮格式。
 
-|`gzip_types ...;`
+|`gzip_types text/css application/json;`
 |`http`、`server`、`location`
-|指定壓縮的 MIME type。
-|通常包含 CSS、JSON、JavaScript、XML、SVG。
+|指定可壓縮 MIME type。
+|應搭配實際內容類型調整。
 
 |`expires 7d;`
 |`http`、`server`、`location`
-|設定 Expires 與 Cache-Control。
-|需配合檔名版本化策略。
-
-|`proxy_buffer_size 16k;`
-|`http`、`server`、`location`
-|設定後端回應第一段 Buffer。
-|Header 過大時應先檢查 Cookie 或 JWT。
-
-|`proxy_buffers 8 16k;`
-|`http`、`server`、`location`
-|設定後端回應 Buffer 數量與大小。
-|調整前應先觀察實際需求。
+|設定瀏覽器快取期限。
+|檔名含內容雜湊時可設定更長。
 |===
 
-== Log
+== Log 設定
 
 [cols="25%,20%,30%,25%", options="header"]
 |===
@@ -405,7 +378,7 @@
 |`access_log /var/log/nginx/access.log main;`
 |`http`、`server`、`location`
 |指定 Access Log 路徑與格式。
-|需規劃 logrotate 與容量。
+|需規劃 logrotate 與磁碟容量。
 
 |`error_log /var/log/nginx/error.log warn;`
 |Main、`http`、`server`、`location`
@@ -424,47 +397,59 @@
 |允許指定 IP 或網段。
 |通常最後搭配 `deny all;`。
 
+|`deny all;`
+|`http`、`server`、`location`
+|拒絕所有尚未匹配 allow 的來源。
+|若前方有 Proxy，需先設定真實來源 IP。
+
 |`auth_basic "Restricted";`
 |`http`、`server`、`location`
-|啟用 HTTP Basic Auth。
+|啟用 HTTP Basic Authentication。
 |必須搭配 HTTPS。
 
-|`limit_req_zone ...;`
+|`auth_basic_user_file /etc/nginx/.htpasswd;`
+|`http`、`server`、`location`
+|指定 Basic Auth 密碼檔。
+|限制檔案權限。
+
+|`limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;`
 |`http`
-|建立請求速率限制共享區域。
+|建立 Request Rate 限制共享區域。
 |還需搭配 `limit_req`。
 
 |`limit_req zone=api burst=20 nodelay;`
 |`server`、`location`
 |套用請求速率限制。
 |需依正常流量壓力測試。
-
-|`limit_conn_zone ...;`
-|`http`
-|建立來源連線數限制共享區域。
-|還需搭配 `limit_conn`。
 |===
 
 == 真實來源 IP
+
+[source,nginx]
+----
+set_real_ip_from 10.0.0.0/8;
+real_ip_header X-Forwarded-For;
+real_ip_recursive on;
+----
 
 [cols="25%,20%,30%,25%", options="header"]
 |===
 |指令 |Context |用途 |注意事項
 
-|`set_real_ip_from 10.0.0.0/8;`
+|`set_real_ip_from`
 |`http`、`server`、`location`
-|指定可信任的上一層 Proxy。
+|指定可信任的上一層 Proxy IP 或網段。
 |不可設定成任意來源。
 
-|`real_ip_header X-Forwarded-For;`
+|`real_ip_header`
 |`http`、`server`、`location`
-|指定真實來源 IP Header。
-|需配合可信任 Proxy 範圍。
+|指定取得真實來源 IP 的 Header。
+|常見為 `X-Forwarded-For`。
 
 |`real_ip_recursive on;`
 |`http`、`server`、`location`
-|從代理鏈向前尋找最後一個不可信任位址。
-|依賴正確的 `set_real_ip_from`。
+|從代理鏈尋找最後一個不可信任位址。
+|必須先正確設定可信任 Proxy 範圍。
 |===
 
 == 常見錯誤訊息
@@ -474,25 +459,25 @@
 |錯誤訊息 |原因與處理
 
 |`directive is not allowed here`
-|指令放錯 Context。
+|指令放錯 context；檢查是否應放在 Main、`http`、`server` 或 `location`。
 
 |`duplicate default server`
-|相同 IP/port 定義多個 `default_server`。
+|相同 IP/port 定義了多個 `default_server`。
 
 |`host not found in upstream`
-|upstream 主機名無法解析。
+|upstream 主機名無法解析；檢查 DNS、容器服務名稱與啟動順序。
 
 |`upstream sent too big header`
-|後端 Header 過大；先檢查 Cookie 或 JWT。
+|後端回應 Header 超過 buffer；先檢查 Cookie 或 JWT 是否過大。
 
 |`client intended to send too large body`
 |Request Body 超過 `client_max_body_size`。
 
 |`rewrite or internal redirection cycle`
-|`rewrite`、`try_files` 或 `error_page` 形成循環。
+|`rewrite`、`try_files` 或 `error_page` 造成循環內部導向。
 
 |`permission denied`
-|執行帳號缺少權限，或受到 SELinux 限制。
+|Nginx 執行帳號缺少檔案權限，或受到 SELinux 限制。
 |===
 
 == 套用前檢查
@@ -504,4 +489,6 @@ nginx -T
 systemctl reload nginx
 ----
 
-更多完整範例與排查流程請參考 xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]。
+* `nginx -t`：驗證語法與引用檔案是否可讀。
+* `nginx -T`：顯示 include 展開後的完整設定。
+* reload 後應再使用 `curl`、瀏覽器與 log 驗證實際行為。
