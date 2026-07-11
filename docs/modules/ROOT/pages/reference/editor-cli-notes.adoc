@@ -1,0 +1,19 @@
+= 文字編輯器與 CLI 工具筆記
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:imagesdir: ../../assets/images
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+ifdef::env-site[:image-link-prefix: ../_images/common]
+ifndef::env-site[:image-link-prefix: ../assets/images/common]
+:last-update-label!:
+:nofooter:
+
+本頁整理 Nano、vi / vim、文字編輯器快捷鍵、grep 與 Git 基本操作等內容。
+
+include::misc-notes.adoc[lines=748..1340,leveloffset=+1]

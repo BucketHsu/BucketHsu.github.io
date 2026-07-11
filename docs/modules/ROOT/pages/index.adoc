@@ -48,7 +48,7 @@
 
 == Reference
 
-綜合參考筆記，適合查閱常用指令、工具小抄、名詞對照與公開資料表。
+綜合參考筆記已依大分類拆分，方便直接查找需要的主題。
 
 [cols="30%,45%,25%", options="header"]
 |===
@@ -58,9 +58,37 @@
 |整理 Maven、AsciiDoc、PlantUML、Font Awesome、SweetAlert2、Linux 命令列等常用參考連結。
 |查找官方文件、工具文件與常用參考來源。
 
-|xref:reference/misc-notes.adoc[其餘說明]
-|整理 HTTP、Linux、Git、Curl、JavaScript、Maven、Docker、Kubernetes、SQL、AI CLI 等綜合小抄。
-|快速查找尚未拆成獨立主題的筆記。
+|xref:reference/http-network-notes.adoc[HTTP 與網路基礎]
+|整理 HTTP 狀態碼、Request Method、Windows 網路指令與 OSI 網路協定。
+|查找 Web 請求、回應狀態與網路基礎概念。
+
+|xref:reference/linux-shell-notes.adoc[Linux 與 Shell]
+|整理 Bash、Linux 指令、發行版、根目錄、權限與套件管理器。
+|操作 Linux 主機或查找 Shell 指令時使用。
+
+|xref:reference/editor-cli-notes.adoc[文字編輯器與 CLI 工具]
+|整理 Nano、vi / vim、grep 與 Git 基本操作。
+|在終端機編輯檔案、搜尋內容或操作 Git 時使用。
+
+|xref:reference/development-tools-notes.adoc[開發與建置工具]
+|整理 Curl、JavaScript DOM 與 Maven 等工具內容。
+|開發、測試 API 或處理 Java 建置時使用。
+
+|xref:reference/container-k8s-notes.adoc[Container 與 Kubernetes]
+|整理 Docker、Dockerfile、Kubernetes 與 Minikube 指令。
+|操作容器或 Kubernetes 開發測試環境時使用。
+
+|xref:reference/database-javascript-notes.adoc[資料庫與 JavaScript]
+|整理 SQL 執行順序、JOIN、JavaScript 陣列與 Gemini CLI。
+|查詢 SQL、處理前端陣列或使用 Gemini CLI 時使用。
+
+|xref:reference/java-frontend-concepts.adoc[Java 與前端觀念]
+|整理 Java 分層、Spring Boot Profile、UI 元件與前端架構名詞。
+|規劃 Java 專案結構或釐清前端設計名詞時使用。
+
+|xref:reference/ai-cli-notes.adoc[AI CLI 與模型工具]
+|整理 SELinux 容器目錄、RamaLama、Codex CLI 與相關 AI 工具。
+|操作地端模型、AI CLI 或容器化模型工具時使用。
 
 |xref:reference/land-office-terms-en.adoc[地政名詞英文對照]
 |整理常見地政名詞的中英文對照，作為文件撰寫與系統欄位命名參考。

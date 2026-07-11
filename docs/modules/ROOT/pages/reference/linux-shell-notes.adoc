@@ -1,0 +1,19 @@
+= Linux 與 Shell 筆記
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:imagesdir: ../../assets/images
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+ifdef::env-site[:image-link-prefix: ../_images/common]
+ifndef::env-site[:image-link-prefix: ../assets/images/common]
+:last-update-label!:
+:nofooter:
+
+本頁整理 Bash 語法、Linux 基本指令、發行版家族、根目錄、檔案權限與套件管理器等內容。
+
+include::misc-notes.adoc[lines=138..747,leveloffset=+1]
