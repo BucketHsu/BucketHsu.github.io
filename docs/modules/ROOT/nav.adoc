@@ -26,6 +26,7 @@
 * 網路與容器
 ** Nginx
 *** xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]
+*** xref:network/nginx-trailing-slash.adoc[Nginx 路徑尾端斜線規則]
 *** xref:network/nginx-directive-reference.adoc[Nginx 常用設定指令參考]
 ** xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異]
 ** xref:container/docker-compose-notes.adoc[Docker Compose 整理]
