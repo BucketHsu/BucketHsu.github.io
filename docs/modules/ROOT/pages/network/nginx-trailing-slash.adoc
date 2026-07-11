@@ -1,0 +1,473 @@
+= Nginx 路徑尾端斜線規則
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本頁整理 Nginx 設定中路徑最後有 `/` 與沒有 `/` 的差異，包含 `location`、`proxy_pass`、`root` 與 `alias`。這些差異會直接影響請求是否匹配、是否重新導向，以及轉送給後端的 URI。
+
+== 先看結論
+
+最常見的反向代理規則如下：
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+}
+----
+
+請求：
+
+[source,text]
+----
+/api/users
+----
+
+後端收到：
+
+[source,text]
+----
+/api/users
+----
+
+如果 `proxy_pass` 最後加上 `/`：
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080/;
+}
+----
+
+後端收到：
+
+[source,text]
+----
+/users
+----
+
+簡單記法：
+
+* `proxy_pass` 沒有 URI 部分時，通常保留原始請求 URI。
+* `proxy_pass` 有 URI 部分時，會以該 URI 取代匹配到的 `location` 前綴。
+* 單獨的 `/` 也是 URI，因此 `http://backend/` 與 `http://backend` 行為不同。
+
+== `location /api` 與 `location /api/`
+
+=== `location /api`
+
+[source,nginx]
+----
+location /api {
+    return 200 "matched";
+}
+----
+
+這是一般前綴比對，可能同時匹配：
+
+[source,text]
+----
+/api
+/api/
+/api/users
+/apitest
+----
+
+因為 `/apitest` 也以 `/api` 開頭，所以可能被意外匹配。
+
+=== `location /api/`
+
+[source,nginx]
+----
+location /api/ {
+    return 200 "matched";
+}
+----
+
+通常會匹配：
+
+[source,text]
+----
+/api/
+/api/users
+/api/users/1
+----
+
+但不會匹配：
+
+[source,text]
+----
+/api
+/apitest
+----
+
+因此代理一個明確的 URL 目錄時，通常建議使用帶尾端斜線的 `location /api/`。
+
+== `/api` 自動導向到 `/api/`
+
+當 prefix `location` 最後有 `/`，且內容使用 `proxy_pass`、`fastcgi_pass` 等處理器時，Nginx 對不含尾端斜線的請求可能回傳 301，將 `/api` 導向 `/api/`。
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+}
+----
+
+請求：
+
+[source,text]
+----
+GET /api
+----
+
+可能收到：
+
+[source,text]
+----
+301 Location: /api/
+----
+
+若不希望依賴自動導向，可明確處理：
+
+[source,nginx]
+----
+location = /api {
+    return 301 /api/;
+}
+
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+}
+----
+
+若 `/api` 本身應直接代理，而不是導向，也可另外建立完全相符規則：
+
+[source,nginx]
+----
+location = /api {
+    proxy_pass http://127.0.0.1:8080/api;
+}
+
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+}
+----
+
+== `proxy_pass` 尾端斜線差異
+
+以下範例均假設用戶端請求：
+
+[source,text]
+----
+GET /api/users?id=10
+----
+
+=== `proxy_pass` 沒有尾端 `/`
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+}
+----
+
+後端收到：
+
+[source,text]
+----
+/api/users?id=10
+----
+
+`proxy_pass` 只有 scheme、host 與 port，沒有指定 URI，因此通常保留完整原始 URI。
+
+=== `proxy_pass` 有尾端 `/`
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080/;
+}
+----
+
+後端收到：
+
+[source,text]
+----
+/users?id=10
+----
+
+Nginx 會以 `proxy_pass` 中的 `/` 取代已匹配的 `/api/`。
+
+=== `proxy_pass` 指定其他 URI
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080/backend/;
+}
+----
+
+後端收到：
+
+[source,text]
+----
+/backend/users?id=10
+----
+
+已匹配的 `/api/` 被替換成 `/backend/`。
+
+== 四種常見組合
+
+[cols="25%,30%,45%", options="header"]
+|===
+|設定 |請求 |後端 URI
+
+|`location /api/` + `proxy_pass http://backend;`
+|`/api/users`
+|`/api/users`
+
+|`location /api/` + `proxy_pass http://backend/;`
+|`/api/users`
+|`/users`
+
+|`location /api` + `proxy_pass http://backend;`
+|`/api/users`
+|`/api/users`
+
+|`location /api` + `proxy_pass http://backend/;`
+|`/api/users`
+|`//users` 或其他不直覺結果的風險較高，不建議這樣搭配。
+|===
+
+[WARNING]
+====
+`location` 沒有尾端 `/`，但 `proxy_pass` 有尾端 `/` 時，URI 替換邊界容易與預期不同，也可能誤匹配 `/apitest`。實務上應避免這種組合。
+====
+
+== 推薦寫法
+
+=== 後端需要保留 `/api`
+
+後端 Controller 本身就是以 `/api` 開頭：
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+----
+
+外部請求與後端 URI：
+
+[source,text]
+----
+/api/users → /api/users
+----
+
+=== 外部有 `/api`，後端沒有 `/api`
+
+後端 Controller 是 `/users`，但對外希望使用 `/api/users`：
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+----
+
+外部請求與後端 URI：
+
+[source,text]
+----
+/api/users → /users
+----
+
+=== 外部與後端使用不同前綴
+
+[source,nginx]
+----
+location /public-api/ {
+    proxy_pass http://127.0.0.1:8080/internal-api/;
+}
+----
+
+外部請求與後端 URI：
+
+[source,text]
+----
+/public-api/users → /internal-api/users
+----
+
+== `root` 尾端斜線
+
+`root` 通常不需要依靠尾端 `/` 決定 URI 替換，因為 Nginx 會將完整 URI 接到 root 後方。
+
+以下兩種通常效果相同：
+
+[source,nginx]
+----
+root /var/www/html;
+----
+
+[source,nginx]
+----
+root /var/www/html/;
+----
+
+搭配：
+
+[source,nginx]
+----
+location /images/ {
+    root /var/www/html;
+}
+----
+
+請求 `/images/logo.png` 對應：
+
+[source,text]
+----
+/var/www/html/images/logo.png
+----
+
+雖然尾端 `/` 通常不影響 `root`，但建議整個專案保持一致格式。
+
+== `alias` 尾端斜線
+
+`alias` 是把匹配的 location 路徑替換成實體目錄，因此尾端斜線必須特別注意。
+
+推薦寫法：
+
+[source,nginx]
+----
+location /downloads/ {
+    alias /data/files/;
+}
+----
+
+請求：
+
+[source,text]
+----
+/downloads/report.pdf
+----
+
+實體檔案：
+
+[source,text]
+----
+/data/files/report.pdf
+----
+
+建議讓 `location` 與 `alias` 的尾端斜線一致：
+
+[source,text]
+----
+location /downloads/  → alias /data/files/
+location /downloads   → alias /data/files
+----
+
+混用可能造成路徑拼接錯誤、404 或讀取到非預期位置。
+
+== 查詢參數是否保留
+
+一般情況下，使用 `proxy_pass` 進行上述 URI 替換時，原本的 query string 會保留。
+
+[source,text]
+----
+/api/users?page=2
+----
+
+使用：
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080/;
+}
+----
+
+後端收到：
+
+[source,text]
+----
+/users?page=2
+----
+
+若自行在 `proxy_pass` 中組合變數或新的 query string，則需另外確認 `$args`、`$query_string` 與 `?` 的行為。
+
+== 使用變數時的注意事項
+
+當 `proxy_pass` 使用變數時，URI 處理規則與固定字串不同，不應直接套用一般尾端斜線規則。
+
+[source,nginx]
+----
+set $backend http://127.0.0.1:8080;
+
+location /api/ {
+    proxy_pass $backend;
+}
+----
+
+使用變數時還可能涉及 DNS resolver、完整 URI 組合與執行期解析，建議明確測試後端實際收到的 URI。
+
+== 排查方式
+
+=== 查看 Nginx 完整設定
+
+[source,bash]
+----
+nginx -T
+----
+
+=== 加入 URI 測試 Header
+
+測試環境可暫時加入：
+
+[source,nginx]
+----
+add_header X-Debug-Request-URI $request_uri always;
+add_header X-Debug-URI $uri always;
+----
+
+* `$request_uri`：原始請求 URI，包含 query string。
+* `$uri`：Nginx 正規化後的目前 URI，不包含 query string。
+
+=== 使用 curl 驗證
+
+[source,bash]
+----
+curl -i "https://example.com/api/users?id=10"
+----
+
+後端也應記錄實際收到的 request URI，確認 Nginx 與應用程式的理解一致。
+
+== 建議原則
+
+* URL 目錄型 prefix 優先使用 `location /api/`。
+* 後端要保留 prefix：`proxy_pass http://backend;`。
+* 後端要移除 prefix：`proxy_pass http://backend/;`。
+* 不要只看設定外觀，應以後端實際收到的 URI 驗證。
+* 修改後先執行 `nginx -t`，再 reload 並以 `curl` 測試。
+
+延伸閱讀：
+
+* xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]
+* xref:network/nginx-directive-reference.adoc[Nginx 常用設定指令參考]
