@@ -18,8 +18,9 @@
 * xref:container/docker-compose-notes.adoc[Docker Compose 整理]
 * xref:container/container-shell-backspace.adoc[使用 sh 進入 container 時 Backspace 無法使用]
 
-== Java 與 Web Server
+== Web Server 與反向代理
 
+* xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]
 * xref:java/tomcat-server-xml.adoc[Tomcat server.xml 設定]
 * xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
 
