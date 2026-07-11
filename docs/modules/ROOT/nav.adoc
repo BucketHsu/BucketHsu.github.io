@@ -7,7 +7,15 @@
 * xref:troubleshooting.adoc[疑難排解]
 * 參考資料
 ** xref:reference/technical-links.adoc[技術相關參考網頁]
-** xref:reference/misc-notes.adoc[其餘說明]
+** 綜合技術筆記
+*** xref:reference/http-network-notes.adoc[HTTP 與網路基礎]
+*** xref:reference/linux-shell-notes.adoc[Linux 與 Shell]
+*** xref:reference/editor-cli-notes.adoc[文字編輯器與 CLI 工具]
+*** xref:reference/development-tools-notes.adoc[開發與建置工具]
+*** xref:reference/container-k8s-notes.adoc[Container 與 Kubernetes]
+*** xref:reference/database-javascript-notes.adoc[資料庫與 JavaScript]
+*** xref:reference/java-frontend-concepts.adoc[Java 與前端觀念]
+*** xref:reference/ai-cli-notes.adoc[AI CLI 與模型工具]
 ** xref:reference/land-office-terms-en.adoc[地政名詞英文對照]
 ** xref:reference/taiwan-county-id-codes.adoc[台灣縣市英文、代碼與身分證字號對照表]
 * Java 與前端
