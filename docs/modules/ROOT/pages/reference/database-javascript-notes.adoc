@@ -14,6 +14,6 @@ ifndef::env-site[:image-link-prefix: ../assets/images/common]
 :last-update-label!:
 :nofooter:
 
-本頁整理 SQL 查詢執行順序、JOIN、JavaScript 陣列與 Gemini CLI 等內容。
+本頁整理 SQL 查詢執行順序、JOIN 與 JavaScript 陣列等內容。
 
-include::misc-notes.adoc[lines=2181..2350,leveloffset=+1]
+include::misc-notes.adoc[lines=2122..2350,leveloffset=+1]
