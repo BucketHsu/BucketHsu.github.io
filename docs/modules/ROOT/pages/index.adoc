@@ -179,6 +179,10 @@
 |NVD Mirror、CLI、Maven、GitLab CI 與報表判讀。
 |建立內網弱點掃描流程。
 
+|xref:tools/gitlab-github-operations-guide.adoc[GitLab 與 GitHub 操作差異及 Repository 初始設定]
+|MR/PR、Reviewer、Assignee、CI/CD、Ruleset、分支保護與新 repository 檢查清單。
+|從 GitLab 轉換到 GitHub，或建立新的 GitHub repository。
+
 |xref:tools/ide-shortcuts-comparison.adoc[Eclipse、IntelliJ IDEA 與 VS Code 快捷鍵對照]
 |搜尋、導航、重構、執行、除錯與視窗快捷鍵。
 |跨 IDE 開發與快捷鍵查找。
