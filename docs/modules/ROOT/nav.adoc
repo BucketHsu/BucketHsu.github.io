@@ -42,6 +42,7 @@
 ** xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header 說明]
 ** xref:security/web-crypto-basics.adoc[加密、Hash、HMAC 與簽章基礎說明]
 ** xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
+** xref:security/dependency-check-nvd-mirror-guide.adoc[OWASP Dependency-Check 與內網 NVD Mirror 指南]
 ** xref:tools/ai-cli-notes.adoc[AI-CLI注意事項]
 ** xref:tools/dependency-update-guide.adoc[套件依賴更新流程]
 * 文件維護
