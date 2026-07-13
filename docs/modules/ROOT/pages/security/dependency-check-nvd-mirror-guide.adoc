@@ -1,0 +1,833 @@
+= OWASP Dependency-Check 內網 NVD Mirror 建置與弱點掃描指南
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本篇整理 OWASP Dependency-Check、內網 NVD Mirror、Maven 與 CLI 掃描、CI/CD 整合、報表判讀、弱點修補與常見問題排除。
+
+所有主機、網域、路徑、帳號與專案名稱均使用通用範例，不代表任何實際環境。
+
+== 適用情境
+
+本篇適合下列情境：
+
+* Maven、Spring Boot 或傳統 Java 專案。
+* `jar`、`war`、`ear`、`zip` 與 `WEB-INF/lib` 掃描。
+* JavaScript 專案的套件描述檔掃描。
+* 無法直接連線 NVD 的內網環境。
+* GitLab Runner 或其他 CI/CD Runner。
+* 組織內部統一維護 NVD 弱點資料來源。
+
+本篇不涵蓋：
+
+* 滲透測試與漏洞利用驗證。
+* 原始碼 SAST 掃描。
+* 商業 SCA 平台的採購與授權。
+* 修補後的完整業務回歸測試。
+
+== 先看這裡
+
+一般開發人員不需要自行建立 NVD Mirror，也不需要將 NVD API Key 放進專案。
+
+最短使用流程如下：
+
+. 確認組織提供的 Mirror URL，例如 `https://mirror.example.internal/owasp/`。
+. 在 Maven Plugin 或 Dependency-Check CLI 指定 Mirror datafeed。
+. 執行掃描並產生 HTML 與 JSON 報表。
+. 優先確認 CVSS 9.0 以上弱點。
+. 升級直接或間接相依套件。
+. 確認誤判時，建立有原因與期限的 suppression。
+
+== 基本概念
+
+=== OWASP Dependency-Check
+
+OWASP Dependency-Check 是 Software Composition Analysis（SCA）工具，用來比對第三方套件與公開弱點資料。
+
+常見掃描目標包括：
+
+* Maven dependency。
+* Gradle dependency。
+* `jar`、`war`、`ear`。
+* `WEB-INF/lib`。
+* `package-lock.json` 與其他套件描述檔。
+* Dependency-Check Analyzer 可辨識的封裝格式。
+
+掃描報表通常會列出：
+
+* 套件名稱與版本。
+* CPE 或 Package URL。
+* CVE 編號。
+* CVSS 分數與向量。
+* 弱點描述與參考連結。
+* Evidence 與比對信心程度。
+
+=== NVD
+
+NVD（National Vulnerability Database）是由 NIST 維護的公開弱點資料來源。
+
+Dependency-Check 會下載 NVD 資料並建立本機資料庫，再用該資料庫比對專案相依套件。
+
+第一次建立資料庫通常較久；後續只需更新新增或異動的弱點資料。
+
+=== CVE
+
+CVE 是公開弱點編號，例如：
+
+[source,text]
+----
+CVE-2021-44228
+----
+
+處理弱點時，不應只看 CVE 標題，還要確認：
+
+* 實際套件與版本。
+* 是否真的使用到受影響功能。
+* 弱點是否可由外部觸發。
+* 官方修補版本。
+* 是否存在可行的暫時緩解措施。
+
+=== CVSS
+
+CVSS 是弱點風險評分。常見處理方式如下：
+
+[cols="20%,20%,60%", options="header"]
+|===
+|分數 |等級 |建議
+
+|0.1 ～ 3.9
+|Low
+|列入一般維護追蹤。
+
+|4.0 ～ 6.9
+|Medium
+|評估實際暴露面並排入修補。
+
+|7.0 ～ 8.9
+|High
+|優先修補，必要時建立風險例外。
+
+|9.0 ～ 10.0
+|Critical
+|原則上阻擋建置或部署，需完成修補或核准例外。
+|===
+
+同一 CVE 可能同時有 CVSS v2、v3.0、v3.1 或 v4.0 分數。正式判讀時應確認報表採用的版本與 vector string。
+
+=== 建置阻擋門檻
+
+Maven Plugin 可使用：
+
+[source,xml]
+----
+<failBuildOnCVSS>9</failBuildOnCVSS>
+----
+
+CLI 對應參數：
+
+[source,bash]
+----
+dependency-check.sh \
+  --project "sample-application" \
+  --scan "/opt/project" \
+  --failOnCVSS 9
+----
+
+CVSS 門檻適合做自動化初步阻擋，但不能取代人工風險判斷。
+
+== 為什麼需要內網 NVD Mirror
+
+若每台開發機與 Runner 都直接連線 NVD，常見問題包括：
+
+* NVD API Rate Limit。
+* 第一次更新耗時很長。
+* CI 大量並行時重複下載相同資料。
+* 內網主機無法直接連外。
+* NVD API Key 分散在多個專案或 CI 變數中。
+
+內網 Mirror 的目的，是由一台更新主機統一取得 NVD 資料，再透過 HTTPS 提供給掃描端下載。
+
+[source,text]
+----
+NVD API
+   ↓
+Mirror 更新主機
+   ↓ 產生 nvdcve-*.json.gz
+內部 HTTPS Server
+   ↓
+開發機 / CI Runner / 掃描主機
+----
+
+== Mirror 架構與目錄規劃
+
+=== 建議角色
+
+[cols="25%,75%", options="header"]
+|===
+|角色 |責任
+
+|更新主機
+|定期連線 NVD，產生與更新 datafeed 檔案。
+
+|HTTPS Server
+|透過 Nginx 或其他 Web Server 提供唯讀下載。
+
+|掃描端
+|使用 Maven Plugin 或 CLI 下載 Mirror 資料並建立本機資料庫。
+
+|CI Runner
+|在 Pipeline 內執行掃描並保存報表。
+|===
+
+=== 範例目錄
+
+[source,text]
+----
+/opt/nvd-mirror/
+├── bin/
+│   └── update-nvd-mirror.sh
+├── cache/
+│   ├── cache.properties
+│   ├── nvdcve-2025.json.gz
+│   ├── nvdcve-2025.meta
+│   ├── nvdcve-modified.json.gz
+│   └── nvdcve-modified.meta
+└── log/
+    └── update.log
+----
+
+=== Mirror 應提供的檔案
+
+一般需包含：
+
+* `nvdcve-<year>.json.gz`
+* `nvdcve-<year>.meta`
+* `nvdcve-modified.json.gz`
+* `nvdcve-modified.meta`
+* `cache.properties`
+
+實際檔名需以使用的 open-vulnerability-cli 與 Dependency-Check 版本為準。
+
+== 建立 Mirror 更新流程
+
+=== 環境需求
+
+更新主機通常需要：
+
+* Java 17 或 Java 21。
+* `curl` 或 `wget`。
+* `gzip`、`unzip`、`sha256sum`。
+* 可連線 NVD API。
+* 可安全保存 NVD API Key。
+* 固定且可監控的資料與 log 目錄。
+
+=== API Key 管理
+
+NVD API Key 應只存在於更新主機的安全設定中，不應：
+
+* 寫入 Git repository。
+* 寫死在公開 Shell Script。
+* 放入一般開發人員的設定檔。
+* 顯示在 CI log。
+
+可使用環境變數或僅 root 可讀的設定檔：
+
+[source,bash]
+----
+export NVD_API_KEY="${NVD_API_KEY:?NVD_API_KEY is required}"
+----
+
+=== 更新腳本範例
+
+以下使用通用變數示範：
+
+[source,bash]
+----
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+BASE_DIR="/opt/nvd-mirror"
+CACHE_DIR="${BASE_DIR}/cache"
+LOG_DIR="${BASE_DIR}/log"
+VULNZ_JAR="${BASE_DIR}/bin/vulnz.jar"
+
+mkdir -p "${CACHE_DIR}" "${LOG_DIR}"
+
+: "${NVD_API_KEY:?NVD_API_KEY is required}"
+
+java -jar "${VULNZ_JAR}" cve \
+  --cache \
+  --directory "${CACHE_DIR}" \
+  --nvdApiKey "${NVD_API_KEY}"
+----
+
+參數名稱可能隨版本調整，升級 open-vulnerability-cli 前應先確認官方說明。
+
+=== 第一次更新
+
+[source,bash]
+----
+export NVD_API_KEY="<secret>"
+/opt/nvd-mirror/bin/update-nvd-mirror.sh
+----
+
+第一次更新需處理多年資料，時間會明顯長於後續增量更新。
+
+=== 驗證檔案
+
+[source,bash]
+----
+find /opt/nvd-mirror/cache -maxdepth 1 -type f -printf '%f %s bytes\n' | sort
+
+gzip -t /opt/nvd-mirror/cache/nvdcve-modified.json.gz
+----
+
+檢查重點：
+
+* 檔案不是 0 bytes。
+* `.json.gz` 可通過 `gzip -t`。
+* `.meta` 與 `cache.properties` 已產生。
+* 檔案修改時間符合最近更新時間。
+
+== 使用 Nginx 提供 Mirror
+
+=== URL 規劃
+
+範例 URL：
+
+[source,text]
+----
+https://mirror.example.internal/owasp/
+----
+
+Dependency-Check datafeed URL：
+
+[source,text]
+----
+https://mirror.example.internal/owasp/nvdcve-{0}.json.gz
+----
+
+`{0}` 會由 Dependency-Check 替換成年份或 `modified` 等值。
+
+=== Nginx 設定
+
+[source,nginx]
+----
+server {
+    listen 443 ssl;
+    server_name mirror.example.internal;
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/private.key;
+
+    location /owasp/ {
+        alias /opt/nvd-mirror/cache/;
+        autoindex off;
+        default_type application/octet-stream;
+
+        limit_except GET HEAD {
+            deny all;
+        }
+    }
+}
+----
+
+`location /owasp/` 與 `alias /opt/nvd-mirror/cache/` 的尾端斜線應保持一致。
+
+更多斜線規則可參考 xref:network/nginx-trailing-slash.adoc[Nginx 路徑尾端斜線規則]。
+
+=== 驗證 Nginx
+
+[source,bash]
+----
+nginx -t
+systemctl reload nginx
+
+curl -I https://mirror.example.internal/owasp/cache.properties
+curl -I https://mirror.example.internal/owasp/nvdcve-modified.meta
+----
+
+正式環境不應長期依賴 `curl -k` 略過憑證驗證。應將組織 CA 匯入作業系統與 Java truststore。
+
+== 排程更新
+
+=== 更新頻率
+
+常見做法是每日更新一次。若弱點資料時效要求較高，也可提高頻率，但需注意 NVD API 限制與更新主機負載。
+
+=== cron 範例
+
+[source,cron]
+----
+15 1 * * * /opt/nvd-mirror/bin/update-nvd-mirror.sh >> /opt/nvd-mirror/log/update.log 2>&1
+----
+
+建議同步監控：
+
+* 排程是否成功。
+* 最近一次成功時間。
+* cache 檔案修改時間。
+* 磁碟容量。
+* HTTPS 端點是否可下載。
+
+== 掃描端本機資料與 Cache
+
+Mirror cache 與掃描端本機資料是不同概念：
+
+* Mirror cache：提供 `nvdcve-*.json.gz` 給掃描端下載。
+* 掃描端資料：Dependency-Check 下載並轉換後建立的本機資料庫。
+
+在 CI 中，若每次都刪除本機資料庫，掃描時間會增加。可依 Runner 隔離方式評估安全地共用 cache。
+
+== Dependency-Check CLI
+
+=== 安裝原則
+
+建議：
+
+* 固定核准版本，不使用未驗證的 latest。
+* 下載後驗證 checksum 或簽章。
+* 安裝目錄由管理者維護。
+* cache 與報表目錄授權給 Runner 帳號。
+
+通用 Linux 安裝流程：
+
+[source,bash]
+----
+sudo mkdir -p /opt/dependency-check
+sudo mkdir -p /var/cache/dependency-check
+sudo mkdir -p /var/log/dependency-check
+
+sudo unzip dependency-check-<version>-release.zip -d /opt/
+sudo chmod +x /opt/dependency-check/bin/dependency-check.sh
+
+/opt/dependency-check/bin/dependency-check.sh --version
+----
+
+=== Windows 掃描整個 WebRoot
+
+[source,powershell]
+----
+& 'C:\Tools\dependency-check\bin\dependency-check.bat' `
+  --project 'sample-webapp' `
+  --scan 'D:\Project\sample-webapp\WebRoot' `
+  --out 'D:\Reports\dependency-check' `
+  --format HTML `
+  --format JSON `
+  --failOnCVSS 9 `
+  --nvdDatafeed 'https://mirror.example.internal/owasp/nvdcve-{0}.json.gz'
+----
+
+=== Windows 掃描 JAR 目錄
+
+[source,powershell]
+----
+& 'C:\Tools\dependency-check\bin\dependency-check.bat' `
+  --project 'sample-legacy-app' `
+  --scan 'D:\Project\sample-legacy-app\WebRoot\WEB-INF\lib' `
+  --out 'D:\Reports\dependency-check' `
+  --format HTML `
+  --format JSON `
+  --failOnCVSS 9 `
+  --nvdDatafeed 'https://mirror.example.internal/owasp/nvdcve-{0}.json.gz'
+----
+
+=== Linux 掃描整個 WebRoot
+
+[source,bash]
+----
+/opt/dependency-check/bin/dependency-check.sh \
+  --project "sample-webapp" \
+  --scan "/srv/project/sample-webapp/WebRoot" \
+  --out "/srv/reports/dependency-check" \
+  --format HTML \
+  --format JSON \
+  --failOnCVSS 9 \
+  --nvdDatafeed "https://mirror.example.internal/owasp/nvdcve-{0}.json.gz"
+----
+
+=== 掃描 WAR、EAR 或 ZIP
+
+[source,bash]
+----
+/opt/dependency-check/bin/dependency-check.sh \
+  --project "sample-package" \
+  --scan "/srv/artifacts/sample-application.war" \
+  --out "/srv/reports/dependency-check" \
+  --format HTML \
+  --format JSON \
+  --failOnCVSS 9 \
+  --nvdDatafeed "https://mirror.example.internal/owasp/nvdcve-{0}.json.gz"
+----
+
+封裝檔掃描結果仍取決於 Analyzer 是否能辨識內部套件與版本資訊。
+
+== Maven 專案整合
+
+=== Plugin 範例
+
+[source,xml]
+----
+<plugin>
+    <groupId>org.owasp</groupId>
+    <artifactId>dependency-check-maven</artifactId>
+    <version>${dependency-check.version}</version>
+    <configuration>
+        <nvdDatafeedUrl>https://mirror.example.internal/owasp/nvdcve-{0}.json.gz</nvdDatafeedUrl>
+        <failBuildOnCVSS>9</failBuildOnCVSS>
+        <formats>
+            <format>HTML</format>
+            <format>JSON</format>
+        </formats>
+    </configuration>
+</plugin>
+----
+
+版本建議集中在 property：
+
+[source,xml]
+----
+<properties>
+    <dependency-check.version>12.2.2</dependency-check.version>
+</properties>
+----
+
+此版本僅為範例。正式使用前應確認組織核准版本與 Java 相容性。
+
+=== 不修改 POM 直接掃描
+
+Linux：
+
+[source,bash]
+----
+mvn -B -DskipTests \
+  org.owasp:dependency-check-maven:12.2.2:check \
+  -DnvdDatafeedUrl=https://mirror.example.internal/owasp/nvdcve-{0}.json.gz \
+  -DfailBuildOnCVSS=9 \
+  -Dformats=HTML,JSON
+----
+
+PowerShell：
+
+[source,powershell]
+----
+mvn -B -DskipTests `
+  'org.owasp:dependency-check-maven:12.2.2:check' `
+  '-DnvdDatafeedUrl=https://mirror.example.internal/owasp/nvdcve-{0}.json.gz' `
+  '-DfailBuildOnCVSS=9' `
+  '-Dformats=HTML,JSON'
+----
+
+多模組專案可依需求使用 `aggregate` goal。
+
+=== 報表位置
+
+Maven Plugin 常見輸出：
+
+[source,text]
+----
+target/dependency-check-report.html
+target/dependency-check-report.json
+----
+
+== npm 與 pnpm 專案
+
+Dependency-Check 可掃描部分 JavaScript 套件描述檔，但不應直接假設它能取代專門的 npm audit、pnpm audit、Snyk 或其他 Node.js SCA 工具。
+
+package.json script 範例：
+
+[source,json]
+----
+{
+  "scripts": {
+    "security:dependency-check": "dependency-check --project sample-frontend --scan . --out dependency-check-report --format HTML --format JSON --failOnCVSS 9 --nvdDatafeed https://mirror.example.internal/owasp/nvdcve-{0}.json.gz"
+  }
+}
+----
+
+執行：
+
+[source,bash]
+----
+npm run security:dependency-check
+# 或
+pnpm security:dependency-check
+----
+
+== GitLab CI/CD 整合
+
+=== Maven Pipeline
+
+[source,yaml]
+----
+dependency-check:
+  stage: test
+  script:
+    - >-
+      mvn -B -DskipTests
+      org.owasp:dependency-check-maven:12.2.2:check
+      -DnvdDatafeedUrl=https://mirror.example.internal/owasp/nvdcve-{0}.json.gz
+      -DfailBuildOnCVSS=9
+      -Dformats=HTML,JSON
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - target/dependency-check-report.html
+      - target/dependency-check-report.json
+----
+
+=== CLI Pipeline
+
+[source,yaml]
+----
+dependency-check:
+  stage: test
+  script:
+    - mkdir -p dependency-check-report
+    - >-
+      /opt/dependency-check/bin/dependency-check.sh
+      --project "$CI_PROJECT_NAME"
+      --scan "$CI_PROJECT_DIR"
+      --out "$CI_PROJECT_DIR/dependency-check-report"
+      --format HTML
+      --format JSON
+      --failOnCVSS 9
+      --nvdDatafeed "https://mirror.example.internal/owasp/nvdcve-{0}.json.gz"
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - dependency-check-report/
+----
+
+=== Cache 策略
+
+可將 Dependency-Check 本機資料目錄加入 Runner cache，但需考量：
+
+* 多專案共用是否會造成權限問題。
+* Cache 損毀時如何重建。
+* Runner 是否為一次性容器。
+* 是否需要依 Dependency-Check 版本區分 cache key。
+
+== 報表判讀
+
+=== HTML 報表
+
+HTML 適合人工檢視，建議依序查看：
+
+. Summary。
+. Vulnerable Dependencies。
+. CVE 與 CVSS。
+. Evidence 與 Confidence。
+. Identifiers，例如 CPE 與 Package URL。
+. References。
+
+=== JSON 報表
+
+JSON 適合：
+
+* CI 後處理。
+* 匯入弱點管理平台。
+* 建立趨勢報表。
+* 依 CVSS、CVE 或套件進行自動分類。
+
+=== False Positive 判斷
+
+可能誤判的情況包括：
+
+* JAR 檔名與實際版本不一致。
+* 套件名稱與另一個產品相似。
+* CPE 推測錯誤。
+* 重新封裝導致 metadata 不完整。
+* 舊版 JAR 缺少 Maven POM properties。
+
+判斷誤判時，應保留：
+
+* 套件 SHA-256。
+* 實際來源與版本。
+* Dependency-Check Evidence。
+* CVE 影響條件。
+* 判斷人、日期與重新檢查期限。
+
+== 弱點修補
+
+=== 直接相依升級
+
+[source,xml]
+----
+<dependency>
+    <groupId>org.example</groupId>
+    <artifactId>example-lib</artifactId>
+    <version>${example-lib.version}</version>
+</dependency>
+----
+
+升級後應執行：
+
+* 單元測試。
+* 整合測試。
+* 相依衝突檢查。
+* 重新掃描。
+* 主要業務流程回歸測試。
+
+=== Transitive Dependency
+
+先確認來源：
+
+[source,bash]
+----
+mvn dependency:tree
+----
+
+可採用：
+
+* 升級上層 dependency。
+* 使用 dependencyManagement 統一版本。
+* 排除舊版 transitive dependency，再加入新版。
+
+不要只覆蓋版本而忽略上層套件是否相容。
+
+=== Legacy JAR
+
+非 Maven 專案可依序處理：
+
+. 找出 JAR 的正式來源與版本。
+. 查閱官方 release notes。
+. 替換為已修補版本。
+. 確認是否有相依 JAR 需一併更新。
+. 執行編譯與回歸測試。
+. 重新執行 Dependency-Check。
+
+不要只修改 JAR 檔名，因為工具可能仍可從 manifest、class 或 checksum 辨識套件。
+
+=== Suppression File
+
+只有確認誤判、不可達程式碼或已有核准例外時，才應使用 suppression。
+
+[source,xml]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
+    <suppress>
+        <notes><![CDATA[
+        已確認套件比對錯誤；請於指定日期前重新檢查。
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.example/example-lib@.*$</packageUrl>
+        <cve>CVE-20XX-XXXXX</cve>
+    </suppress>
+</suppressions>
+----
+
+Maven 設定：
+
+[source,xml]
+----
+<suppressionFiles>
+    <suppressionFile>dependency-check-suppression.xml</suppressionFile>
+</suppressionFiles>
+----
+
+Suppression 必須包含原因、核准人或責任角色、建立日期與到期日，避免永久忽略弱點。
+
+== 常見問題排除
+
+=== NVD 更新過慢
+
+第一次建立資料庫較久屬正常。若每次都很慢，請確認：
+
+* 是否真的使用內網 Mirror。
+* 本機 cache 是否每次被刪除。
+* Runner 是否無法保存資料目錄。
+* Mirror 檔案是否完整。
+* DNS、TLS 或 Proxy 是否造成重試。
+
+=== SSL 憑證錯誤
+
+常見訊息：
+
+[source,text]
+----
+PKIX path building failed
+unable to find valid certification path
+----
+
+處理方式：
+
+* 確認 Mirror 提供完整憑證鏈。
+* 將組織 CA 匯入作業系統信任庫。
+* 將 CA 匯入實際執行 Dependency-Check 的 Java truststore。
+* 確認 CI image 內也有相同 CA。
+
+=== Cache 損毀
+
+可先停止並行掃描，再刪除掃描端本機資料庫後重建。
+
+刪除前應確認該目錄不是共用中的 Mirror cache。
+
+=== 無法辨識 JAR 版本
+
+請確認：
+
+* `META-INF/MANIFEST.MF`。
+* `pom.properties`。
+* 檔名是否被任意修改。
+* 套件是否經過重新封裝。
+* 是否能從正式 repository 重新取得。
+
+=== Nginx 404 或 403
+
+[source,bash]
+----
+nginx -t
+nginx -T
+ls -ld /opt/nvd-mirror /opt/nvd-mirror/cache
+curl -I https://mirror.example.internal/owasp/cache.properties
+----
+
+常見原因：
+
+* `location` 與 `alias` 尾端斜線不一致。
+* Nginx Worker 無權限讀取目錄。
+* SELinux 阻擋。
+* 實際檔名與 URL 不一致。
+* Include 的設定檔未被主 `nginx.conf` 載入。
+
+== 維運檢查清單
+
+Mirror 維運：
+
+* 最近一次更新成功。
+* cache 檔案可解壓縮。
+* HTTPS 憑證未過期。
+* API Key 未出現在 log。
+* 磁碟空間足夠。
+* Mirror URL 可由 Runner 連線。
+
+專案掃描：
+
+* Dependency-Check 版本固定。
+* Mirror URL 使用通用設定，不寫死秘密。
+* HTML 與 JSON 報表均保存。
+* Critical 弱點會阻擋 Pipeline。
+* Suppression 有原因與期限。
+* 修補後已重新掃描與回歸測試。
+
+== 延伸閱讀
+
+* link:https://owasp.org/www-project-dependency-check/[OWASP Dependency-Check Project ^]
+* link:https://dependency-check.github.io/DependencyCheck/dependency-check-maven/[Dependency-Check Maven Plugin ^]
+* link:https://dependency-check.github.io/DependencyCheck/dependency-check-cli/index.html[Dependency-Check CLI ^]
+* link:https://github.com/jeremylong/open-vulnerability-cli/blob/main/README.md[open-vulnerability-cli README ^]
+* link:https://nvd.nist.gov/developers/start-here[NVD Developers ^]
+* link:https://www.first.org/cvss/v4.0/specification-document[CVSS v4.0 Specification ^]
+* xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]
+* xref:network/nginx-config-organization.adoc[Nginx 設定檔分層、Template 與 Include]
