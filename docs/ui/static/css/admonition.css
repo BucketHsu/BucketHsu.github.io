@@ -1,0 +1,115 @@
+.doc .admonitionblock {
+  --admonition-accent: var(--spring-green);
+  margin: 1.25rem 0;
+  padding: 1rem 1.15rem;
+  border-left: 0.28rem solid var(--admonition-accent);
+  border-radius: 0.2rem;
+  background: var(--admonition-bg);
+}
+
+.doc .admonitionblock.note {
+  --admonition-accent: #3b82f6;
+}
+
+.doc .admonitionblock.tip {
+  --admonition-accent: #4f9f2f;
+}
+
+.doc .admonitionblock.important {
+  --admonition-accent: #7c3aed;
+}
+
+.doc .admonitionblock.warning {
+  --admonition-accent: #d97706;
+}
+
+.doc .admonitionblock.caution {
+  --admonition-accent: #dc2626;
+}
+
+.doc .admonitionblock > table {
+  width: 100%;
+  border: 0;
+  border-collapse: collapse;
+}
+
+.doc .admonitionblock td.icon,
+.doc .admonitionblock td.content {
+  border: 0;
+  background: transparent;
+}
+
+.doc .admonitionblock td.icon {
+  width: 3rem;
+  padding: 0.1rem 0.9rem 0.1rem 0;
+  text-align: center;
+  vertical-align: top;
+}
+
+.doc .admonitionblock td.content {
+  padding: 0;
+}
+
+.doc .admonitionblock td.content > :first-child {
+  margin-top: 0;
+}
+
+.doc .admonitionblock td.content > :last-child {
+  margin-bottom: 0;
+}
+
+.doc .admonitionblock td.icon i {
+  display: inline-grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--admonition-accent);
+  font-family: "Segoe UI Symbol", "Noto Sans Symbols", sans-serif;
+  font-size: 1.1rem;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.doc .admonitionblock td.icon i::before {
+  display: block;
+}
+
+.doc .admonitionblock td.icon .icon-note::before {
+  content: "i";
+}
+
+.doc .admonitionblock td.icon .icon-tip::before {
+  content: "✓";
+}
+
+.doc .admonitionblock td.icon .icon-important::before {
+  content: "★";
+}
+
+.doc .admonitionblock td.icon .icon-warning::before {
+  content: "!";
+}
+
+.doc .admonitionblock td.icon .icon-caution::before {
+  content: "×";
+}
+
+@media (max-width: 640px) {
+  .doc .admonitionblock {
+    padding: 0.85rem 0.9rem;
+  }
+
+  .doc .admonitionblock td.icon {
+    width: 2.5rem;
+    padding-right: 0.65rem;
+  }
+
+  .doc .admonitionblock td.icon i {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 1rem;
+  }
+}
