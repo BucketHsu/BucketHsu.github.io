@@ -1,0 +1,535 @@
+= Eclipse、IntelliJ IDEA 與 VS Code 快捷鍵對照指南
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本頁整理 Windows 環境下 Eclipse、IntelliJ IDEA 與 Visual Studio Code 的常用快捷鍵，並依功能分類，方便在不同 IDE 間切換時快速查找。
+
+[NOTE]
+====
+快捷鍵可能因 IDE 版本、Keymap、作業系統、語言套件或擴充套件而不同。本頁以常見的 Windows 預設配置為主，實際結果應以目前 IDE 的快捷鍵設定畫面為準。
+====
+
+== 使用前注意事項
+
+=== 快捷鍵可能被作業系統或其他軟體占用
+
+例如輸入法、顯示卡工具、遠端桌面軟體或螢幕錄影工具，都可能攔截 IDE 快捷鍵。
+
+遇到快捷鍵無反應時，可依序檢查：
+
+. IDE 是否已綁定該快捷鍵。
+. 是否存在同一快捷鍵的衝突設定。
+. 作業系統或常駐工具是否先攔截按鍵。
+. 當前焦點是否位於編輯器、終端機或工具視窗。
+
+=== IntelliJ IDEA Keymap
+
+IntelliJ IDEA 可切換不同 Keymap，例如：
+
+* Windows
+* Eclipse
+* Visual Studio
+* VS Code
+
+設定位置：
+
+[source,text]
+----
+Settings → Keymap
+----
+
+若從 Eclipse 移轉到 IntelliJ IDEA，可先使用 Eclipse Keymap 降低轉換成本，再逐步改回 IntelliJ IDEA 預設配置。
+
+=== VS Code 快捷鍵受擴充套件影響
+
+VS Code 的 Java、Git、Vim、Emacs 等擴充套件可能覆寫或新增快捷鍵。
+
+設定位置：
+
+[source,text]
+----
+File → Preferences → Keyboard Shortcuts
+----
+
+也可使用：
+
+[source,text]
+----
+Ctrl + K，接著 Ctrl + S
+----
+
+== 快速總覽
+
+[cols="28%,24%,24%,24%", options="header"]
+|===
+|功能 |Eclipse |IntelliJ IDEA |VS Code
+
+|單行註解
+|kbd:[Ctrl+/]
+|kbd:[Ctrl+/]
+|kbd:[Ctrl+/]
+
+|格式化程式碼
+|kbd:[Ctrl+Shift+F]
+|kbd:[Ctrl+Alt+L]
+|kbd:[Shift+Alt+F]
+
+|依檔名搜尋
+|kbd:[Ctrl+Shift+R]
+|kbd:[Ctrl+Shift+N]
+|kbd:[Ctrl+P]
+
+|全專案文字搜尋
+|kbd:[Ctrl+H]
+|kbd:[Ctrl+Shift+F]
+|kbd:[Ctrl+Shift+F]
+
+|跳到定義
+|kbd:[F3]
+|kbd:[Ctrl+B]
+|kbd:[F12]
+
+|快速修正
+|kbd:[Ctrl+1]
+|kbd:[Alt+Enter]
+|kbd:[Ctrl+.]
+
+|重新命名
+|kbd:[Alt+Shift+R]
+|kbd:[Shift+F6]
+|kbd:[F2]
+
+|整理 import
+|kbd:[Ctrl+Shift+O]
+|kbd:[Ctrl+Alt+O]
+|kbd:[Shift+Alt+O]
+
+|執行
+|kbd:[Ctrl+F11]
+|kbd:[Shift+F10]
+|kbd:[Ctrl+F5]
+
+|開始或繼續除錯
+|kbd:[F8]
+|kbd:[F9]
+|kbd:[F5]
+|===
+
+== 註解與格式化
+
+[cols="30%,23%,23%,24%", options="header"]
+|===
+|功能 |Eclipse |IntelliJ IDEA |VS Code
+
+|單行註解切換
+|kbd:[Ctrl+/]
+|kbd:[Ctrl+/]
+|kbd:[Ctrl+/]
+
+|區塊註解
+|kbd:[Ctrl+Shift+/]
+|kbd:[Ctrl+Shift+/]
+|kbd:[Shift+Alt+A]
+
+|格式化目前檔案
+|kbd:[Ctrl+Shift+F]
+|kbd:[Ctrl+Alt+L]
+|kbd:[Shift+Alt+F]
+
+|整理或最佳化 import
+|kbd:[Ctrl+Shift+O]
+|kbd:[Ctrl+Alt+O]
+|kbd:[Shift+Alt+O]
+
+|自動補全
+|kbd:[Ctrl+Space]
+|kbd:[Ctrl+Space]
+|kbd:[Ctrl+Space]
+|===
+
+[NOTE]
+====
+Windows 的輸入法切換或系統快捷鍵可能攔截 kbd:[Ctrl+Space]。若無法呼叫自動補全，可在 IDE 內重新綁定快捷鍵。
+====
+
+== 檔案、類別與符號搜尋
+
+[cols="30%,23%,23%,24%", options="header"]
+|===
+|功能 |Eclipse |IntelliJ IDEA |VS Code
+
+|依檔名搜尋
+|kbd:[Ctrl+Shift+R]
+|kbd:[Ctrl+Shift+N]
+|kbd:[Ctrl+P]
+
+|搜尋類別
+|kbd:[Ctrl+Shift+T]
+|kbd:[Ctrl+N]
+|kbd:[Ctrl+P]
+
+|搜尋目前檔案的方法或成員
+|kbd:[Ctrl+O]
+|kbd:[Ctrl+F12]
+|kbd:[Ctrl+Shift+O]
+
+|搜尋任意動作或命令
+|Quick Access
+|kbd:[Ctrl+Shift+A]
+|kbd:[Ctrl+Shift+P]
+
+|最近使用檔案
+|kbd:[Ctrl+E]
+|kbd:[Ctrl+E]
+|kbd:[Ctrl+Tab]
+|===
+
+=== VS Code 的 `Ctrl+P`
+
+VS Code 的 kbd:[Ctrl+P] 不只搜尋檔案，也可使用前綴切換搜尋模式：
+
+[cols="25%,75%", options="header"]
+|===
+|輸入方式 |用途
+
+|直接輸入文字
+|依檔名快速開啟檔案。
+
+|`@`
+|搜尋目前檔案內的符號。
+
+|`#`
+|搜尋工作區符號。
+
+|`:`
+|跳到指定行號。
+
+|`>`
+|執行命令，效果類似命令面板。
+|===
+
+== 文字搜尋與取代
+
+[cols="30%,23%,23%,24%", options="header"]
+|===
+|功能 |Eclipse |IntelliJ IDEA |VS Code
+
+|目前檔案搜尋
+|kbd:[Ctrl+F]
+|kbd:[Ctrl+F]
+|kbd:[Ctrl+F]
+
+|目前檔案取代
+|搜尋視窗中的 Replace
+|kbd:[Ctrl+R]
+|kbd:[Ctrl+H]
+
+|全專案搜尋
+|kbd:[Ctrl+H]
+|kbd:[Ctrl+Shift+F]
+|kbd:[Ctrl+Shift+F]
+
+|全專案取代
+|File Search → Replace
+|kbd:[Ctrl+Shift+R]
+|kbd:[Ctrl+Shift+H]
+|===
+
+[WARNING]
+====
+全專案取代前，應先確認搜尋範圍、大小寫、正規表示式與排除目錄，並透過 Git diff 檢查修改結果。
+====
+
+== 程式碼導航
+
+[cols="30%,23%,23%,24%", options="header"]
+|===
+|功能 |Eclipse |IntelliJ IDEA |VS Code
+
+|跳到定義
+|kbd:[F3]
+|kbd:[Ctrl+B]
+|kbd:[F12]
+
+|以滑鼠跳到定義
+|kbd:[Ctrl+Click]
+|kbd:[Ctrl+Click]
+|kbd:[Ctrl+Click]
+
+|查看參考或被呼叫處
+|kbd:[Ctrl+Shift+G]
+|kbd:[Alt+F7]
+|kbd:[Shift+F12]
+
+|返回上一個位置
+|kbd:[Alt+Left]
+|kbd:[Ctrl+Alt+Left]
+|kbd:[Alt+Left]
+
+|前往下一個位置
+|kbd:[Alt+Right]
+|kbd:[Ctrl+Alt+Right]
+|kbd:[Alt+Right]
+|===
+
+[NOTE]
+====
+瀏覽器、顯示卡驅動或桌面管理工具可能占用 kbd:[Ctrl+Alt+Left] 與 kbd:[Ctrl+Alt+Right]。
+====
+
+== 快速修正與程式碼產生
+
+[cols="30%,23%,23%,24%", options="header"]
+|===
+|功能 |Eclipse |IntelliJ IDEA |VS Code
+
+|快速修正或建議
+|kbd:[Ctrl+1]
+|kbd:[Alt+Enter]
+|kbd:[Ctrl+.]
+
+|產生 getter、setter 或建構子
+|kbd:[Alt+Shift+S]
+|kbd:[Alt+Insert]
+|命令面板搜尋 Generate
+
+|覆寫或實作方法
+|kbd:[Alt+Shift+S]
+|kbd:[Ctrl+O] 或 kbd:[Ctrl+I]
+|Java 擴充套件提供的 Source Action
+
+|顯示參數提示
+|kbd:[Ctrl+Shift+Space]
+|kbd:[Ctrl+P]
+|kbd:[Ctrl+Shift+Space]
+|===
+
+== Refactor 重構
+
+[cols="30%,23%,23%,24%", options="header"]
+|===
+|功能 |Eclipse |IntelliJ IDEA |VS Code
+
+|重新命名
+|kbd:[Alt+Shift+R]
+|kbd:[Shift+F6]
+|kbd:[F2]
+
+|開啟 Refactor 功能表
+|kbd:[Alt+Shift+T]
+|kbd:[Ctrl+Alt+Shift+T]
+|命令面板搜尋 Refactor
+
+|擷取區域變數
+|Refactor 選單
+|kbd:[Ctrl+Alt+V]
+|依語言擴充套件提供的 Code Action
+
+|擷取方法
+|Refactor 選單
+|kbd:[Ctrl+Alt+M]
+|依語言擴充套件提供的 Code Action
+|===
+
+[IMPORTANT]
+====
+重新命名與重構應使用 IDE 的 Refactor 功能，不建議直接用文字取代。IDE 會依語法與引用關係更新使用位置，較不容易誤改字串、註解或無關欄位。
+====
+
+== 多游標與選取
+
+[cols="30%,23%,23%,24%", options="header"]
+|===
+|功能 |Eclipse |IntelliJ IDEA |VS Code
+
+|滑鼠新增游標
+|kbd:[Alt+Shift+Click]
+|kbd:[Alt+Shift+Click]
+|kbd:[Alt+Click]
+
+|選取下一個相同文字
+|依版本或外掛而定
+|kbd:[Alt+J]
+|kbd:[Ctrl+D]
+
+|選取所有相同文字
+|依版本或外掛而定
+|kbd:[Ctrl+Alt+Shift+J]
+|kbd:[Ctrl+Shift+L]
+
+|欄位或矩形選取模式
+|kbd:[Alt+Shift+A]
+|kbd:[Alt+Shift+Insert]
+|kbd:[Shift+Alt+滑鼠拖曳]
+|===
+
+== 執行與停止
+
+[cols="30%,23%,23%,24%", options="header"]
+|===
+|功能 |Eclipse |IntelliJ IDEA |VS Code
+
+|執行目前設定
+|kbd:[Ctrl+F11]
+|kbd:[Shift+F10]
+|kbd:[Ctrl+F5]
+
+|除錯目前設定
+|kbd:[F11]
+|kbd:[Shift+F9]
+|kbd:[F5]
+
+|停止執行
+|kbd:[Ctrl+F2]
+|kbd:[Ctrl+F2]
+|kbd:[Shift+F5]
+|===
+
+[NOTE]
+====
+VS Code 的執行與除錯行為取決於 `launch.json`、語言擴充套件及目前選取的 Run Configuration。
+====
+
+== 除錯快捷鍵
+
+[cols="30%,23%,23%,24%", options="header"]
+|===
+|功能 |Eclipse |IntelliJ IDEA |VS Code
+
+|繼續執行
+|kbd:[F8]
+|kbd:[F9]
+|kbd:[F5]
+
+|Step Into
+|kbd:[F5]
+|kbd:[F7]
+|kbd:[F11]
+
+|Step Over
+|kbd:[F6]
+|kbd:[F8]
+|kbd:[F10]
+
+|Step Out
+|kbd:[F7]
+|kbd:[Shift+F8]
+|kbd:[Shift+F11]
+
+|切換中斷點
+|kbd:[Ctrl+Shift+B]
+|kbd:[Ctrl+F8]
+|kbd:[F9]
+
+|停止除錯
+|kbd:[Ctrl+F2]
+|kbd:[Ctrl+F2]
+|kbd:[Shift+F5]
+|===
+
+== 視窗與工具區域
+
+[cols="30%,23%,23%,24%", options="header"]
+|===
+|功能 |Eclipse |IntelliJ IDEA |VS Code
+
+|關閉目前編輯器頁籤
+|kbd:[Ctrl+W]
+|kbd:[Ctrl+F4]
+|kbd:[Ctrl+W]
+
+|開啟設定
+|Preferences 選單
+|kbd:[Ctrl+Alt+S]
+|kbd:[Ctrl+,]
+
+|聚焦檔案樹
+|Show In → Navigator
+|kbd:[Alt+1]
+|kbd:[Ctrl+Shift+E]
+
+|顯示或隱藏側邊欄
+|依 Perspective 設定
+|依 Tool Window 設定
+|kbd:[Ctrl+B]
+
+|開啟整合終端機
+|依 Terminal 外掛設定
+|kbd:[Alt+F12]
+|kbd:[Ctrl+`]
+|===
+
+== 如何查目前 IDE 的實際快捷鍵
+
+=== Eclipse
+
+[source,text]
+----
+Window → Preferences → General → Keys
+----
+
+可依 Command、Binding 或 Category 搜尋。
+
+=== IntelliJ IDEA
+
+[source,text]
+----
+File → Settings → Keymap
+----
+
+可搜尋動作名稱、查看衝突、增加第二組快捷鍵或切換 Keymap。
+
+=== VS Code
+
+[source,text]
+----
+File → Preferences → Keyboard Shortcuts
+----
+
+可查看：
+
+* Command ID
+* 現有快捷鍵
+* `when` 條件
+* 衝突來源
+* 使用者自訂 `keybindings.json`
+
+== Keymap 移轉建議
+
+=== 從 Eclipse 轉 IntelliJ IDEA
+
+可優先記住：
+
+* kbd:[Shift+Shift]：Search Everywhere。
+* kbd:[Alt+Enter]：快速修正。
+* kbd:[Ctrl+Alt+L]：格式化。
+* kbd:[Shift+F6]：重新命名。
+* kbd:[Alt+F7]：查看使用位置。
+
+=== 從 IntelliJ IDEA 轉 VS Code
+
+可優先記住：
+
+* kbd:[Ctrl+P]：快速開檔。
+* kbd:[Ctrl+Shift+P]：命令面板。
+* kbd:[Ctrl+Shift+F]：全工作區搜尋。
+* kbd:[Ctrl+.]：快速修正。
+* kbd:[F12]：跳到定義。
+
+== 維護原則
+
+* 快捷鍵表應標示適用作業系統與 Keymap。
+* 新增快捷鍵前應先確認是否為 IDE 預設值。
+* 擴充套件專屬快捷鍵應註明所需擴充套件。
+* 避免把多個不同功能合併成同一列。
+* 遇到版本差異時，以動作名稱比按鍵組合更可靠。
+* 調整自訂快捷鍵後，建議同步備份 IDE 設定。
