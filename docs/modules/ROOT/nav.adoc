@@ -1,6 +1,4 @@
 * xref:index.adoc[首頁]
-* xref:getting-started.adoc[快速開始]
-* xref:architecture.adoc[技術主題地圖]
 * xref:database.adoc[資料庫]
 * xref:deployment.adoc[部署]
 * xref:security.adoc[安全]

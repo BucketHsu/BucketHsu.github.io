@@ -17,26 +17,209 @@
 
 == 說明
 
-這裡整理可公開的工程筆記，內容以日後查閱、排查與實務判斷為主。
+這裡整理可公開的工程筆記，內容以日後查閱、問題排查與實務判斷為主。
 
-== 建議閱讀路線
+首頁是本站的主要入口。可直接依下方主題選擇文件，也可以使用左側導覽快速切換分類。
 
-第一次進入本站時，建議先看整體入口，再依主題查找需要的內容。
+== 常用入口
 
-. xref:getting-started.adoc[快速開始]
-. xref:architecture.adoc[技術主題地圖]
-. xref:deployment.adoc[部署]
-. xref:security.adoc[安全]
-. xref:troubleshooting.adoc[疑難排解]
+[cols="30%,45%,25%", options="header"]
+|===
+|入口 |內容 |適合情境
 
-== 文件入口
+|xref:database.adoc[資料庫]
+|資料庫、SQL 與資料處理相關整理。
+|查找資料庫語法與實務問題。
 
-* xref:getting-started.adoc[快速開始]
-* xref:architecture.adoc[技術主題地圖]
-* xref:database.adoc[資料庫]
-* xref:deployment.adoc[部署]
-* xref:security.adoc[安全]
-* xref:troubleshooting.adoc[疑難排解]
+|xref:deployment.adoc[部署]
+|Web Server、Container、Kubernetes 與部署相關整理。
+|建置或排查部署環境。
+
+|xref:security.adoc[安全]
+|Web 安全、加密、憑證與弱點掃描相關整理。
+|處理資安設定與弱點修補。
+
+|xref:troubleshooting.adoc[疑難排解]
+|常見錯誤與排查方向。
+|遇到建置、部署或執行問題。
+|===
+
+== Reference
+
+[cols="30%,45%,25%", options="header"]
+|===
+|文件 |重點 |適合情境
+
+|xref:reference/technical-links.adoc[技術相關參考網頁]
+|常用官方文件、工具文件與技術參考連結。
+|快速查找外部資料來源。
+
+|xref:reference/http-network-notes.adoc[HTTP 與網路基礎]
+|HTTP 狀態碼、Request Method、網路指令與 OSI 協定。
+|查找 Web 請求與網路基礎。
+
+|xref:reference/linux-shell-notes.adoc[Linux 與 Shell]
+|Bash、Linux 指令、權限、目錄與套件管理器。
+|操作 Linux 主機或 Shell。
+
+|xref:reference/editor-cli-notes.adoc[文字編輯器與 CLI 工具]
+|Nano、vi / vim、grep 與 Git 基本操作。
+|終端機編輯與搜尋內容。
+
+|xref:reference/development-tools-notes.adoc[開發與建置工具]
+|Curl、JavaScript DOM、Maven 等工具內容。
+|開發、測試 API 或處理建置。
+
+|xref:reference/container-k8s-notes.adoc[Container 與 Kubernetes]
+|Docker、Dockerfile、Kubernetes 與 Minikube 指令。
+|操作容器與 Kubernetes 開發環境。
+
+|xref:reference/database-javascript-notes.adoc[資料庫與 JavaScript]
+|SQL 執行順序、JOIN 與 JavaScript 陣列。
+|查詢 SQL 或處理前端陣列。
+
+|xref:reference/java-frontend-concepts.adoc[Java 與前端觀念]
+|Java 分層、Spring Boot Profile 與前端架構名詞。
+|規劃專案結構或釐清名詞。
+
+|xref:reference/ai-cli-notes.adoc[AI CLI 與模型工具]
+|SELinux、RamaLama、Codex CLI 與模型工具。
+|操作地端模型或 AI CLI。
+
+|xref:reference/land-office-terms-en.adoc[地政名詞英文對照]
+|常見地政名詞中英文對照。
+|文件撰寫與欄位命名。
+
+|xref:reference/taiwan-county-id-codes.adoc[台灣縣市英文、代碼與身分證字號對照表]
+|縣市英文名稱、行政區代碼與身分證字號首碼。
+|查找公開代碼對照。
+|===
+
+== Java 與前端
+
+[cols="30%,45%,25%", options="header"]
+|===
+|文件 |重點 |適合情境
+
+|xref:java/java-layering-dto-dao-entity.adoc[Java MVC / MVVM 分層與 DTO、DAO、Entity、Repository]
+|MVC、MVVM 與 Java 常見分層物件的責任差異。
+|討論專案分層與命名。
+
+|xref:java/character-encoding-guide.adoc[字元、字集與編碼整理]
+|ASCII、Big5、MS950、UTF-8、Java、資料庫與網頁編碼。
+|排查亂碼與資料交換問題。
+
+|xref:java/tomcat-server-xml.adoc[Tomcat server.xml 設定]
+|HTTP / HTTPS Connector、TLS 與憑證部署。
+|設定 Tomcat Connector。
+
+|xref:frontend/html5-semantic-elements.adoc[HTML5 語意化 Element 使用規範]
+|HTML5 語意元素與可維護結構。
+|改善前端頁面結構。
+|===
+
+== Nginx 與網路
+
+[cols="30%,45%,25%", options="header"]
+|===
+|文件 |重點 |適合情境
+
+|xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]
+|Nginx 基礎、反向代理、HTTPS、負載平衡與排錯。
+|第一次學習或建立完整設定。
+
+|xref:network/nginx-config-organization.adoc[Nginx 設定檔分層、Template 與 Include]
+|nginx.conf、80.conf、443.conf、template 與 include 分工。
+|規劃可維護的設定檔結構。
+
+|xref:network/nginx-site-template-error-pages.adoc[Nginx site.conf.template 與自訂錯誤頁]
+|Container template、共用 Proxy 設定與 404 / 500 錯誤頁。
+|容器化部署與自訂錯誤頁。
+
+|xref:network/nginx-trailing-slash.adoc[Nginx 路徑尾端斜線規則]
+|location、proxy_pass、root 與 alias 尾端斜線差異。
+|排查 URI 被保留或替換問題。
+
+|xref:network/nginx-directive-reference.adoc[Nginx 常用設定指令參考]
+|常用 directive 的 Context、用途與注意事項。
+|快速查找設定指令。
+
+|xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 基礎與差異]
+|網路分層、加密通道與檔案分享協定。
+|釐清連線與檔案分享問題。
+|===
+
+== Container 與 Kubernetes
+
+[cols="30%,45%,25%", options="header"]
+|===
+|文件 |重點 |適合情境
+
+|xref:container/docker-compose-notes.adoc[Docker Compose 整理]
+|環境變數、healthcheck、volume、network 與掛載範例。
+|撰寫或維護 Compose。
+
+|xref:container/docker-cleanup-policy.adoc[Docker / Podman 清理策略說明]
+|映像、容器、volume 與分環境清理策略。
+|規劃主機清理排程。
+
+|xref:container/container-shell-backspace.adoc[Container 內 Backspace 無法使用]
+|stty、TERM、sh 與 bash 的互動式操作問題。
+|排查容器 Shell 異常。
+
+|xref:k8s/ckad-practice-notes.adoc[CKAD 考古題與練習題]
+|CKAD 練習、kubectl 指令與 YAML 範本。
+|準備 CKAD。
+
+|xref:k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除]
+|Ingress、Service、forwarded headers 與多層 Proxy。
+|排查 Kubernetes 導流。
+
+|xref:k8s/pv-local-to-cifs.adoc[Kubernetes PV 由 Local 改為 CIFS / SMB CSI]
+|PV/PVC 設定、資料搬移、驗證與 rollback。
+|規劃 Storage 遷移。
+|===
+
+== 安全與工具
+
+[cols="30%,45%,25%", options="header"]
+|===
+|文件 |重點 |適合情境
+
+|xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header]
+|CSP、HSTS、CORS、Cookie 與瀏覽器安全規則。
+|設定 Web 安全 Header。
+
+|xref:security/web-crypto-basics.adoc[加密、Hash、HMAC 與簽章基礎]
+|加密、雜湊、簽章、憑證、JWT 與密碼儲存。
+|釐清安全機制用途。
+
+|xref:security/digital-certificates-guide.adoc[數位憑證與 Web Server 部署]
+|憑證格式、CSR、憑證鏈與常見 Web Server 部署。
+|申請、轉換或排查 HTTPS 憑證。
+
+|xref:security/dependency-check-nvd-mirror-guide.adoc[OWASP Dependency-Check 與內網 NVD Mirror]
+|NVD Mirror、CLI、Maven、GitLab CI 與報表判讀。
+|建立內網弱點掃描流程。
+
+|xref:tools/ide-shortcuts-comparison.adoc[Eclipse、IntelliJ IDEA 與 VS Code 快捷鍵對照]
+|搜尋、導航、重構、執行、除錯與視窗快捷鍵。
+|跨 IDE 開發與快捷鍵查找。
+
+|xref:tools/ai-cli-notes.adoc[AI CLI 注意事項]
+|Codex、Claude Code、Gemini CLI 與工作流程。
+|規劃 AI CLI 使用方式。
+
+|xref:tools/dependency-update-guide.adoc[套件依賴更新流程]
+|npm、pnpm、Maven、Gradle 更新與驗證流程。
+|處理套件升級與弱點修補。
+|===
+
+== 文件維護
+
+新增或調整文件時，請參考 xref:contributing/writing-style.adoc[文件撰寫規範]。
+
+建置指令與 GitHub Pages 發布流程請參考 repository 根目錄的 `README.adoc`。
 
 == 授權與使用限制
 
@@ -45,183 +228,3 @@
 除非另有明確書面同意，學藝不精工程師 原創內容保留所有權利，不授權他人複製、散布、轉載、改作、再發布、商業使用，或作為教材、產品文件、內部知識庫與訓練資料集使用。
 
 公開 repository 仍可能依 GitHub 服務功能被瀏覽與 fork；這不代表取得上述再利用授權。第三方樣式表、圖片或外部元件仍依其原始授權或權利聲明使用。
-
-== Reference
-
-綜合參考筆記已依大分類拆分，方便直接查找需要的主題。
-
-[cols="30%,45%,25%", options="header"]
-|===
-|文件 |重點 |適合情境
-
-|xref:reference/technical-links.adoc[技術相關參考網頁]
-|整理 Maven、AsciiDoc、PlantUML、Font Awesome、SweetAlert2、Linux 命令列等常用參考連結。
-|查找官方文件、工具文件與常用參考來源。
-
-|xref:reference/http-network-notes.adoc[HTTP 與網路基礎]
-|整理 HTTP 狀態碼、Request Method、Windows 網路指令與 OSI 網路協定。
-|查找 Web 請求、回應狀態與網路基礎概念。
-
-|xref:reference/linux-shell-notes.adoc[Linux 與 Shell]
-|整理 Bash、Linux 指令、發行版、根目錄、權限與套件管理器。
-|操作 Linux 主機或查找 Shell 指令時使用。
-
-|xref:reference/editor-cli-notes.adoc[文字編輯器與 CLI 工具]
-|整理 Nano、vi / vim、grep 與 Git 基本操作。
-|在終端機編輯檔案、搜尋內容或操作 Git 時使用。
-
-|xref:reference/development-tools-notes.adoc[開發與建置工具]
-|整理 Curl、JavaScript DOM 與 Maven 等工具內容。
-|開發、測試 API 或處理 Java 建置時使用。
-
-|xref:reference/container-k8s-notes.adoc[Container 與 Kubernetes]
-|整理 Docker、Dockerfile、Kubernetes 與 Minikube 指令。
-|操作容器或 Kubernetes 開發測試環境時使用。
-
-|xref:reference/database-javascript-notes.adoc[資料庫與 JavaScript]
-|整理 SQL 執行順序、JOIN、JavaScript 陣列與 Gemini CLI。
-|查詢 SQL、處理前端陣列或使用 Gemini CLI 時使用。
-
-|xref:reference/java-frontend-concepts.adoc[Java 與前端觀念]
-|整理 Java 分層、Spring Boot Profile、UI 元件與前端架構名詞。
-|規劃 Java 專案結構或釐清前端設計名詞時使用。
-
-|xref:reference/ai-cli-notes.adoc[AI CLI 與模型工具]
-|整理 SELinux 容器目錄、RamaLama、Codex CLI 與相關 AI 工具。
-|操作地端模型、AI CLI 或容器化模型工具時使用。
-
-|xref:reference/land-office-terms-en.adoc[地政名詞英文對照]
-|整理常見地政名詞的中英文對照，作為文件撰寫與系統欄位命名參考。
-|命名欄位、撰寫文件或確認中英文對照。
-
-|xref:reference/taiwan-county-id-codes.adoc[台灣縣市英文、代碼與身分證字號對照表]
-|整理台灣縣市英文名稱、行政區代碼與身分證字號首碼等公開資料對照。
-|查找縣市代碼、英文名稱與身分證字號首碼。
-|===
-
-== Network
-
-網路協定、連線分層、加密通道與檔案分享協定相關筆記。
-
-[cols="30%,45%,25%", options="header"]
-|===
-|文件 |重點 |適合情境
-
-|xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異]
-|整理 TCP、TLS、SMB/CIFS、NFS 的分層概念、版本差異與連線失敗排查方向。
-|釐清連線、加密通道與檔案分享協定差異。
-|===
-
-== Container
-
-Container、Docker Compose、互動式 shell 與容器環境排查筆記。
-
-[cols="30%,45%,25%", options="header"]
-|===
-|文件 |重點 |適合情境
-
-|xref:container/docker-compose-notes.adoc[Docker Compose 整理]
-|整理 Docker Compose 常用功能、環境變數、healthcheck、volume、network、NFS/CIFS 掛載等範例。
-|撰寫或維護本機、測試環境的 compose 設定。
-
-|xref:container/docker-cleanup-policy.adoc[Docker / Podman 清理策略說明]
-|整理 Docker / Podman 不自動清理的原因、常見可清理項目、volume 風險與分環境清理策略。
-|規劃 Runner、開發測試或正式服務主機的容器清理排程。
-
-|xref:container/container-shell-backspace.adoc[使用 sh 進入 container 時 Backspace 無法使用]
-|整理 container 內使用 `sh` 時 Backspace 異常的原因與 `stty erase`、`TERM`、`bash` 解法。
-|排查容器互動式 shell 操作異常。
-|===
-
-== Kubernetes
-
-Kubernetes 部署、服務導流、Storage 與實務排查筆記。
-
-[cols="30%,45%,25%", options="header"]
-|===
-|文件 |重點 |適合情境
-
-|xref:k8s/ckad-practice-notes.adoc[CKAD 考古題與練習題]
-|整理 CKAD 準備資源、練習題、kubectl create 常用指令、常見 YAML 範本與考場操作小抄。
-|準備 CKAD 或練習 kubectl 操作。
-
-|xref:k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除筆記]
-|整理 Ingress-nginx、NodePort、ClusterIP、forwarded headers 與多層 proxy 導流問題。
-|排查 Kubernetes 導流、proxy header 與 ingress 問題。
-
-|xref:k8s/pv-local-to-cifs.adoc[Kubernetes PV 由 Local 改為 CIFS / SMB CSI 筆記]
-|整理 local PV 改為 SMB CSI PV/PVC 的設定、資料搬移、驗證與 rollback 重點。
-|規劃或回顧 Kubernetes 儲存遷移。
-|===
-
-== Java
-
-Java Web 分層、資料物件命名與企業應用常見架構筆記。
-
-[cols="30%,45%,25%", options="header"]
-|===
-|文件 |重點 |適合情境
-
-|xref:java/java-layering-dto-dao-entity.adoc[Java MVC / MVVM 分層與 DTO、DAO、Entity、Repository 名詞說明]
-|整理 MVC / MVVM、DTO、Entity、DAO、Mapper、Repository、Service 的用途與命名差異。
-|討論 Java 專案分層、命名與責任邊界。
-
-|xref:java/character-encoding-guide.adoc[字元、字集與編碼整理]
-|整理 ASCII、ISO-8859-1、Big5、MS950、UTF-8、UTF-16、Java String、資料庫、網頁與 PDF 報表之間的編碼邊界與常見亂碼排查方式。
-|排查亂碼、資料庫編碼、檔案與報表輸出問題。
-
-|xref:java/tomcat-server-xml.adoc[Tomcat server.xml 設定]
-|整理 Tomcat HTTP / HTTPS Connector、TLS 憑證格式、keystore / PEM 寫法與 server.xml 實務設定。
-|設定 Tomcat connector、TLS 與憑證部署。
-|===
-
-== Frontend
-
-前端 HTML 結構、語意化元素與可維護性筆記。
-
-[cols="30%,45%,25%", options="header"]
-|===
-|文件 |重點 |適合情境
-
-|xref:frontend/html5-semantic-elements.adoc[HTML5 語意化 Element 使用規範]
-|整理常見 HTML5 語意化元素、使用情境與取代 `div` 的判斷方式。
-|撰寫更清楚、可維護的前端頁面結構。
-|===
-
-== Security
-
-Web 安全 Header、瀏覽器安全規則與常見弱點名詞筆記。
-
-[cols="30%,45%,25%", options="header"]
-|===
-|文件 |重點 |適合情境
-
-|xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header 說明]
-|整理 COOP、COEP、CORP、CSP、HSTS、CORS、Cookie 與常見 Web 弱點名詞。
-|設定 Web 安全 Header 或釐清瀏覽器安全機制。
-
-|xref:security/web-crypto-basics.adoc[加密、Hash、HMAC 與簽章基礎說明]
-|整理對稱加密、非對稱加密、Hash、HMAC、數位簽章、憑證、JWT、密碼儲存與常見誤解。
-|釐清加密、簽章、雜湊與密碼儲存用途。
-
-|xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
-|整理常見憑證格式副檔名（cer/crt, p12/pfx）、CSR 申請、憑證鏈順序，以及 Tomcat、Spring Boot、Nginx、IIS、Apache、HAProxy 的 HTTPS 部署設定與常用指令。
-|申請、轉換、部署或排查 HTTPS 憑證。
-|===
-
-== Tools
-
-開發工具、AI CLI 與工程工作流筆記。
-
-[cols="30%,45%,25%", options="header"]
-|===
-|文件 |重點 |適合情境
-
-|xref:tools/ai-cli-notes.adoc[AI CLI 注意事項]
-|整理 Codex、Claude Code、Gemini CLI 等工具使用策略，以及 Spec / Skill 對 CLI 成本與結果穩定性的影響。
-|規劃 AI CLI 使用方式與工作流程。
-
-|xref:tools/dependency-update-guide.adoc[套件依賴更新流程]
-|整理 pnpm、npm、Maven 與 Gradle 的版本盤點、套件更新、lockfile 處理、建置測試、異動檢視與提交流程。
-|處理套件升級、弱點修補與 lockfile 檢查。
-|===
