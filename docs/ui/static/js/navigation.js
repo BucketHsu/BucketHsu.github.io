@@ -42,6 +42,10 @@
       });
     });
 
+    navRoot.querySelectorAll(':scope > .nav-list > .nav-item.has-children').forEach(function (item) {
+      setExpanded(item, true);
+    });
+
     navRoot.querySelectorAll('.nav-link[aria-current="page"]').forEach(function (currentLink) {
       var currentItem = currentLink.closest('.nav-item');
       var ancestor = currentItem;
