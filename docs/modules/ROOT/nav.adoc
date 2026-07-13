@@ -1,8 +1,4 @@
 * xref:index.adoc[首頁]
-* xref:database.adoc[資料庫]
-* xref:deployment.adoc[部署]
-* xref:security.adoc[安全]
-* xref:troubleshooting.adoc[疑難排解]
 * 參考資料
 ** xref:reference/technical-links.adoc[技術相關參考網頁]
 ** 綜合技術筆記
