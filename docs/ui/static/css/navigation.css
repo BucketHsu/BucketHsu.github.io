@@ -84,6 +84,14 @@
   display: none;
 }
 
+/* 第一層分類固定展開，因此不需要顯示連接子項目的導引線。 */
+.site-nav__menu > .nav-list > .nav-item > .nav-list--nested,
+.mobile-nav nav > .nav-list > .nav-item > .nav-list--nested {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+
 .nav-item.is-current > .nav-item__row > .nav-link,
 .nav-link[aria-current="page"] {
   position: relative;
