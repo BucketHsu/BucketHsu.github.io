@@ -21,29 +21,6 @@
 
 首頁是本站的主要入口。可直接依下方主題選擇文件，也可以使用左側導覽快速切換分類。
 
-== 常用入口
-
-[cols="30%,45%,25%", options="header"]
-|===
-|入口 |內容 |適合情境
-
-|xref:database.adoc[資料庫]
-|資料庫、SQL 與資料處理相關整理。
-|查找資料庫語法與實務問題。
-
-|xref:deployment.adoc[部署]
-|Web Server、Container、Kubernetes 與部署相關整理。
-|建置或排查部署環境。
-
-|xref:security.adoc[安全]
-|Web 安全、加密、憑證與弱點掃描相關整理。
-|處理資安設定與弱點修補。
-
-|xref:troubleshooting.adoc[疑難排解]
-|常見錯誤與排查方向。
-|遇到建置、部署或執行問題。
-|===
-
 == Reference
 
 [cols="30%,45%,25%", options="header"]

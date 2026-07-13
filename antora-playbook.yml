@@ -1,7 +1,6 @@
 site:
   title: 學藝不精工程師 技術筆記
-  url: https://novice-engineer.github.io/
-  start_page: novice-engineer-notes::index.adoc
+  url: https://buckethsu.github.io/
 
 content:
   sources:
