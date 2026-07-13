@@ -1,6 +1,8 @@
 static_files:
   - css/site.css
+  - css/navigation.css
+  - css/admonition.css
   - js/theme.js
+  - js/navigation.js
   - favicon.ico
   - icon.png
-

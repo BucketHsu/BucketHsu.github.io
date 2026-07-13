@@ -1,0 +1,116 @@
+.nav-item__row {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.nav-toggle,
+.nav-toggle-spacer {
+  width: 1.5rem;
+  height: 1.75rem;
+}
+
+.nav-toggle {
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0.2rem;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.nav-toggle:hover {
+  color: var(--text);
+  background: var(--hover-bg);
+}
+
+.nav-toggle:focus-visible {
+  outline: 2px solid var(--spring-green);
+  outline-offset: 1px;
+}
+
+.nav-toggle__icon {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 0.12rem solid currentColor;
+  border-bottom: 0.12rem solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+.nav-item.is-expanded > .nav-item__row .nav-toggle__icon {
+  transform: rotate(45deg);
+}
+
+.nav-item__row > .nav-link,
+.nav-item__row > .nav-text {
+  display: block;
+  min-width: 0;
+  padding: 0.3rem 0.45rem;
+  border-radius: 0.2rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.nav-item__row > .nav-link:hover {
+  color: var(--link-hover);
+  background: var(--hover-bg);
+  text-decoration: none;
+}
+
+.nav-item__row > .nav-text {
+  font-weight: 600;
+  cursor: default;
+}
+
+.nav-item.is-current > .nav-item__row > .nav-link,
+.nav-link[aria-current="page"] {
+  position: relative;
+  color: var(--link-hover);
+  background: var(--hover-bg);
+  font-weight: 700;
+}
+
+.nav-item.is-current > .nav-item__row > .nav-link::before,
+.nav-link[aria-current="page"]::before {
+  position: absolute;
+  top: 0.3rem;
+  bottom: 0.3rem;
+  left: -0.35rem;
+  width: 0.2rem;
+  border-radius: 0.2rem;
+  background: var(--spring-green);
+  content: "";
+}
+
+.nav-enhanced .nav-item.has-children:not(.is-expanded) > .nav-list--nested {
+  display: none;
+}
+
+.nav-enhanced .nav-item.has-children > .nav-list--nested {
+  animation: nav-expand 0.12s ease-out;
+}
+
+@keyframes nav-expand {
+  from {
+    opacity: 0;
+    transform: translateY(-0.15rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-toggle__icon {
+    transition: none;
+  }
+
+  .nav-enhanced .nav-item.has-children > .nav-list--nested {
+    animation: none;
+  }
+}

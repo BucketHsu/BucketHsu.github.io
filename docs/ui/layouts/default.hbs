@@ -17,6 +17,8 @@
       }());
     </script>
     <link rel="stylesheet" href="{{uiRootPath}}/static/css/site.css">
+    <link rel="stylesheet" href="{{uiRootPath}}/static/css/navigation.css">
+    <link rel="stylesheet" href="{{uiRootPath}}/static/css/admonition.css">
     <link rel="icon" href="{{uiRootPath}}/static/favicon.ico" type="image/x-icon">
     <link rel="icon" href="{{uiRootPath}}/static/icon.png" type="image/png">
   </head>
@@ -39,7 +41,7 @@
         <div class="site-nav__heading">
           <span>文件導覽</span>
         </div>
-        <nav class="site-nav__menu">
+        <nav class="site-nav__menu" aria-label="文件導覽">
           <ul class="nav-list">
             {{> nav-tree items=page.navigation}}
           </ul>
@@ -72,5 +74,6 @@
       </main>
     </div>
     <script src="{{uiRootPath}}/static/js/theme.js"></script>
+    <script src="{{uiRootPath}}/static/js/navigation.js"></script>
   </body>
 </html>

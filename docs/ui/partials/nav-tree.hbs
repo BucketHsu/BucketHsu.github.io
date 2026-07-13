@@ -1,10 +1,21 @@
 {{#each items}}
-  <li class="nav-item">
-    {{#if url}}
-      <a href="{{{relativize url}}}">{{content}}</a>
-    {{else}}
-      <span>{{content}}</span>
-    {{/if}}
+  <li class="nav-item{{#if current}} is-current{{/if}}{{#if items}} has-children{{/if}}">
+    <div class="nav-item__row">
+      {{#if items}}
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-label="展開或收合 {{content}}">
+          <span class="nav-toggle__icon" aria-hidden="true"></span>
+        </button>
+      {{else}}
+        <span class="nav-toggle-spacer" aria-hidden="true"></span>
+      {{/if}}
+
+      {{#if url}}
+        <a class="nav-link{{#if current}} is-current{{/if}}" href="{{{relativize url}}}"{{#if current}} aria-current="page"{{/if}}>{{content}}</a>
+      {{else}}
+        <span class="nav-text">{{content}}</span>
+      {{/if}}
+    </div>
+
     {{#if items}}
       <ul class="nav-list nav-list--nested">
         {{> nav-tree items=items}}
