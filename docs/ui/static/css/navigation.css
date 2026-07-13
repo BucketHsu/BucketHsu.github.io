@@ -27,7 +27,8 @@
   background: var(--hover-bg);
 }
 
-.nav-toggle:focus-visible {
+.nav-toggle:focus-visible,
+.nav-text[role="button"]:focus-visible {
   outline: 2px solid var(--spring-green);
   outline-offset: 1px;
 }
@@ -55,7 +56,8 @@
   overflow-wrap: anywhere;
 }
 
-.nav-item__row > .nav-link:hover {
+.nav-item__row > .nav-link:hover,
+.nav-item__row > .nav-text[role="button"]:hover {
   color: var(--link-hover);
   background: var(--hover-bg);
   text-decoration: none;
@@ -64,6 +66,22 @@
 .nav-item__row > .nav-text {
   font-weight: 600;
   cursor: default;
+}
+
+.nav-item__row > .nav-text[role="button"] {
+  cursor: pointer;
+}
+
+.site-nav__menu > .nav-list > .nav-item > .nav-item__row,
+.mobile-nav nav > .nav-list > .nav-item > .nav-item__row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.site-nav__menu > .nav-list > .nav-item > .nav-item__row > .nav-toggle,
+.site-nav__menu > .nav-list > .nav-item > .nav-item__row > .nav-toggle-spacer,
+.mobile-nav nav > .nav-list > .nav-item > .nav-item__row > .nav-toggle,
+.mobile-nav nav > .nav-list > .nav-item > .nav-item__row > .nav-toggle-spacer {
+  display: none;
 }
 
 .nav-item.is-current > .nav-item__row > .nav-link,
