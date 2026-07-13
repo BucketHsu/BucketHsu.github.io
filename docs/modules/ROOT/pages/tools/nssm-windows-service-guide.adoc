@@ -1,0 +1,566 @@
+= 使用 NSSM 將 Java 與批次程式註冊為 Windows Service
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本頁整理如何使用 NSSM（Non-Sucking Service Manager）將原本透過批次檔啟動的 Java 或 Spring Boot 應用程式，改為由 Windows Service 管理。
+
+範例中的服務名稱、路徑、Jar 名稱與帳號皆為通用占位內容，實際使用時請依環境調整。
+
+== 為什麼要改成 Windows Service
+
+直接執行 `.bat` 或命令列雖然簡單，但通常存在下列限制：
+
+* 使用者登出或視窗被關閉後，程式可能停止。
+* Windows 重新啟動後，需要人工重新執行。
+* 不容易統一管理啟動、停止與服務狀態。
+* 啟動失敗時，缺少標準化的服務紀錄與復原機制。
+* 執行帳號與檔案權限不容易明確管理。
+
+註冊為 Windows Service 後，可以透過 `services.msc`、`sc.exe`、PowerShell 或 NSSM 管理應用程式，並設定自動啟動、服務帳號、輸出紀錄與失敗復原策略。
+
+== NSSM 是什麼
+
+NSSM 是一個 Windows Service Wrapper，可將一般可執行程式包裝成 Windows Service。
+
+它不是把 `.bat` 或 Jar 轉換成另一種檔案，而是由 NSSM 擔任 Windows Service 主程序，再啟動指定的應用程式，例如：
+
+[source,text]
+----
+Windows Service Control Manager
+              ↓
+             NSSM
+              ↓
+          java.exe -jar application.jar
+----
+
+NSSM 常見用途包括：
+
+* Java 或 Spring Boot Jar。
+* Node.js、Python 或其他長時間執行程式。
+* 原本由批次檔啟動的背景服務。
+* 不具原生 Windows Service 支援的工具。
+
+[NOTE]
+====
+NSSM 只負責包裝與管理程序。應用程式本身的健康檢查、交易一致性、Logback 輪替與安全設定仍需由應用程式或監控系統負責。
+====
+
+== 使用前準備
+
+建議先準備以下目錄：
+
+[source,text]
+----
+C:\services\sample-app\
+├── application.jar
+├── config\
+├── extra\
+├── logs\
+└── tools\
+    └── nssm.exe
+----
+
+確認項目：
+
+* 使用支援版本的 Java Runtime。
+* `java.exe`、Jar 與設定目錄確實存在。
+* 執行帳號具備讀取程式與設定、寫入 Log 的權限。
+* 服務使用的連接埠未被占用。
+* 使用系統管理員權限執行安裝與移除操作。
+* NSSM 來源與檔案完整性已確認。
+
+== 原本的批次檔與 Service 設定差異
+
+批次檔常見寫法：
+
+[source,batch]
+----
+@echo off
+pushd "%~dp0"
+
+set "JAVA_HOME=C:\runtime\jdk"
+set "CONFIG_DIR=file:./config/"
+set "EXTRA_STATIC=file:./extra/"
+
+"%JAVA_HOME%\bin\java.exe" ^
+  -Dfile.encoding=UTF-8 ^
+  -Duser.dir=%cd% ^
+  -Dspring.config.additional-location=%CONFIG_DIR% ^
+  -Dspring.web.resources.static-locations=%EXTRA_STATIC%,classpath:/static/ ^
+  -jar application.jar
+----
+
+註冊成 NSSM Service 後，這些內容會拆成：
+
+[cols="28%,72%", options="header"]
+|===
+|批次檔內容 |NSSM 對應設定
+
+|Java 執行路徑
+|Application `Path`
+
+|目前工作目錄
+|Application `Startup directory` 或 `AppDirectory`
+
+|Java 與 Spring Boot 參數
+|Application `Arguments` 或 `AppParameters`
+
+|`set KEY=VALUE`
+|Environment 或 `AppEnvironmentExtra`
+
+|Console 輸出
+|I/O 的 stdout 與 stderr
+
+|手動關閉視窗
+|Shutdown 停止方式與 Timeout
+|===
+
+[IMPORTANT]
+====
+NSSM 的 Arguments 必須視為單一命令列字串，不可保留批次檔的 `^` 折行符號。GUI 看似可輸入多行，也不代表 Java 能正確解析多行參數。
+====
+
+== 透過 GUI 安裝
+
+以系統管理員身分開啟命令提示字元：
+
+[source,powershell]
+----
+.\nssm.exe install sample-app
+----
+
+=== Application
+
+Path::
+指定實際執行程式，Java 應用通常是完整的 `java.exe` 路徑。
+
+[source,text]
+----
+C:\runtime\jdk\bin\java.exe
+----
+
+Startup directory::
+指定應用程式工作目錄。相對路徑、`user.dir`、外部設定與 Log 通常都會受到此目錄影響。
+
+[source,text]
+----
+C:\services\sample-app
+----
+
+Arguments::
+放置 JVM、Spring Boot 與 Jar 參數，必須寫成單一行。
+
+[source,text]
+----
+-Dfile.encoding=UTF-8 -Duser.dir=C:\services\sample-app -Dspring.config.additional-location=file:./config/ -jar application.jar
+----
+
+=== Details
+
+Display name::
+Windows 服務管理介面顯示的名稱，可使用較容易閱讀的文字。
+
+Description::
+說明服務用途、應用類型或維運責任。
+
+Startup type::
+常見選項：
+
+* `Automatic`：開機時自動啟動。
+* `Automatic (Delayed Start)`：延遲啟動，適合需等待網路或其他服務的應用程式。
+* `Manual`：由管理者或其他程序啟動。
+* `Disabled`：停用服務。
+
+正式環境不一定都適合直接使用 Automatic。若應用程式依賴資料庫、掛載磁碟或其他服務，應評估延遲啟動、依賴服務或應用程式重試機制。
+
+=== I/O
+
+建議設定 NSSM 自己的 stdout 與 stderr：
+
+[source,text]
+----
+C:\services\sample-app\logs\service-stdout.log
+C:\services\sample-app\logs\service-stderr.log
+----
+
+即使 Spring Boot 已透過 Logback 寫入應用程式 Log，仍建議保留 NSSM I/O，因為下列錯誤可能發生在 Logback 初始化之前：
+
+* 找不到 Java。
+* 找不到 Jar。
+* JVM 參數錯誤。
+* 工作目錄錯誤。
+* 設定檔無法讀取。
+* JVM 無法建立或程式立即結束。
+
+=== File rotation
+
+NSSM 的輪替只處理 NSSM 捕捉的 stdout 與 stderr，不會取代 Logback Rolling Policy。
+
+建議原則：
+
+* 啟用 NSSM rotation 作為保底。
+* 不要在每次啟動時直接覆蓋舊檔。
+* 正式應用 Log 仍由 Logback 或集中式 Log 系統管理。
+* 設定合理大小上限，避免長期執行造成磁碟滿載。
+
+例如設定約 20 MiB：
+
+[source,powershell]
+----
+.\nssm.exe set sample-app AppRotateFiles 1
+.\nssm.exe set sample-app AppRotateOnline 1
+.\nnssm.exe set sample-app AppRotateBytes 20971520
+----
+
+[NOTE]
+====
+若 `AppRotateBytes` 設為 `0`，代表不以大小限制輪替。這雖可保留完整內容，但不適合視為正式環境的磁碟保護策略。
+====
+
+=== Shutdown
+
+停止服務時，應讓應用程式有時間完成 Graceful Shutdown，例如：
+
+* 關閉資料庫連線池。
+* 停止 Scheduler 與 Executor。
+* 等待進行中的請求完成。
+* 刷新尚未寫出的 Log 或資料。
+
+可依序允許 Console、Window、Threads，最後才強制終止程序。
+
+[source,powershell]
+----
+.\nssm.exe set sample-app AppStopMethodConsole 15000
+.\nssm.exe set sample-app AppStopMethodWindow 5000
+.\nssm.exe set sample-app AppStopMethodThreads 5000
+.\nssm.exe set sample-app AppStopMethodSkip 0
+----
+
+Spring Boot 亦可搭配：
+
+[source,yaml]
+----
+server:
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+----
+
+NSSM 的總等待時間應大於或至少涵蓋應用程式的 Graceful Shutdown 時間，否則應用程式尚未完成關閉就可能被強制終止。
+
+=== Environment
+
+Environment 適合放置只對此服務生效的環境變數：
+
+[source,text]
+----
+JAVA_HOME=C:\runtime\jdk
+SPRING_PROFILES_ACTIVE=production
+----
+
+但不建議將密碼、Token 或其他敏感資訊直接寫進一般批次檔、Git repository 或可被一般使用者讀取的設定。
+
+若 Application Path 已直接指定完整的 `java.exe`，通常不需要依賴 `JAVA_HOME` 才能啟動。
+
+=== Log on
+
+Local System 權限很高，不應因為設定方便就一律使用。
+
+建議依最小權限原則建立專用服務帳號，只授予：
+
+* 讀取 Java、Jar 與設定檔。
+* 寫入應用程式 Log 與必要輸出目錄。
+* 連線必要的資料庫、檔案分享或內部服務。
+* `Log on as a service` 權限。
+
+若需存取 UNC 路徑，應使用具有相應網路權限的服務帳號，並直接使用 UNC 路徑；Windows Service 通常看不到互動式登入使用者映射的網路磁碟代號。
+
+== 使用命令列安裝
+
+GUI 適合初次理解各項設定；正式維運建議使用可版本化、可審查的安裝腳本。
+
+以下為匿名化範例：
+
+[source,batch]
+----
+@echo off
+setlocal EnableExtensions
+
+REM 請使用系統管理員身分執行
+set "SERVICE_NAME=sample-app"
+set "DISPLAY_NAME=Sample Application"
+set "DESCRIPTION=Java application managed by NSSM"
+
+set "APP_DIR=C:\services\sample-app"
+set "JAVA_HOME=C:\runtime\jdk"
+set "JAVA_EXE=%JAVA_HOME%\bin\java.exe"
+set "JAR_NAME=application.jar"
+set "NSSM=%~dp0nssm.exe"
+
+set "LOG_DIR=%APP_DIR%\logs"
+set "STDOUT_LOG=%LOG_DIR%\service-stdout.log"
+set "STDERR_LOG=%LOG_DIR%\service-stderr.log"
+set "START_TYPE=SERVICE_AUTO_START"
+
+set "JAVA_ARGS=-Dfile.encoding=UTF-8 -Duser.dir=%APP_DIR%"
+set "JAVA_ARGS=%JAVA_ARGS% -Dspring.config.additional-location=file:./config/"
+set "JAVA_ARGS=%JAVA_ARGS% -jar %JAR_NAME%"
+
+if not exist "%NSSM%" (
+    echo [ERROR] nssm.exe not found: %NSSM%
+    exit /b 1
+)
+
+if not exist "%JAVA_EXE%" (
+    echo [ERROR] java.exe not found: %JAVA_EXE%
+    exit /b 1
+)
+
+if not exist "%APP_DIR%\%JAR_NAME%" (
+    echo [ERROR] Jar not found: %APP_DIR%\%JAR_NAME%
+    exit /b 1
+)
+
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+
+"%NSSM%" status "%SERVICE_NAME%" >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo [ERROR] Service already exists: %SERVICE_NAME%
+    echo Use the update procedure instead of reinstalling it directly.
+    exit /b 1
+)
+
+"%NSSM%" install "%SERVICE_NAME%" "%JAVA_EXE%"
+if %ERRORLEVEL% NEQ 0 exit /b 1
+
+"%NSSM%" set "%SERVICE_NAME%" AppDirectory "%APP_DIR%"
+"%NSSM%" set "%SERVICE_NAME%" AppParameters "%JAVA_ARGS%"
+"%NSSM%" set "%SERVICE_NAME%" DisplayName "%DISPLAY_NAME%"
+"%NSSM%" set "%SERVICE_NAME%" Description "%DESCRIPTION%"
+"%NSSM%" set "%SERVICE_NAME%" Start "%START_TYPE%"
+"%NSSM%" set "%SERVICE_NAME%" AppEnvironmentExtra "JAVA_HOME=%JAVA_HOME%"
+"%NSSM%" set "%SERVICE_NAME%" AppStdout "%STDOUT_LOG%"
+"%NSSM%" set "%SERVICE_NAME%" AppStderr "%STDERR_LOG%"
+"%NSSM%" set "%SERVICE_NAME%" AppRotateFiles 1
+"%NSSM%" set "%SERVICE_NAME%" AppRotateOnline 1
+"%NSSM%" set "%SERVICE_NAME%" AppRotateBytes 20971520
+"%NSSM%" set "%SERVICE_NAME%" AppStopMethodConsole 15000
+"%NSSM%" set "%SERVICE_NAME%" AppStopMethodWindow 5000
+"%NSSM%" set "%SERVICE_NAME%" AppStopMethodThreads 5000
+"%NSSM%" set "%SERVICE_NAME%" AppStopMethodSkip 0
+
+"%NSSM%" start "%SERVICE_NAME%"
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Service start failed. Check:
+    echo %STDERR_LOG%
+    echo %STDOUT_LOG%
+    exit /b 1
+)
+
+echo [OK] Service installed and started: %SERVICE_NAME%
+endlocal
+----
+
+此版本遇到既有服務時會停止，而不是直接刪除再重建。自動移除既有 Service 可能導致：
+
+* 原本服務帳號與密碼遺失。
+* Recovery、Dependency 或自訂 ACL 被重設。
+* 維運中誤刪正式服務。
+* 服務短時間不可用。
+
+== 服務操作
+
+[source,powershell]
+----
+# NSSM
+.\nssm.exe status sample-app
+.\nssm.exe start sample-app
+.\nssm.exe stop sample-app
+.\nssm.exe restart sample-app
+.\nssm.exe edit sample-app
+
+# Windows 內建命令
+sc.exe query sample-app
+sc.exe start sample-app
+sc.exe stop sample-app
+
+# PowerShell
+Get-Service -Name sample-app
+Start-Service -Name sample-app
+Stop-Service -Name sample-app
+Restart-Service -Name sample-app
+----
+
+== 設定服務失敗復原
+
+NSSM 可以在應用程式異常結束時重新啟動程序，但 Windows Service Control Manager 的 Recovery 設定也應一併規劃。
+
+[source,powershell]
+----
+sc.exe failure sample-app reset= 86400 actions= restart/60000/restart/60000/none/0
+sc.exe failureflag sample-app 1
+----
+
+上述範例代表前兩次失敗各等待 60 秒後重新啟動，之後不再無限重試。
+
+[IMPORTANT]
+====
+不要設定成無間隔、無上限地持續重新啟動。若設定錯誤、Port 衝突或資料庫不可用，可能形成 restart loop，快速產生大量 Log 並增加主機負載。
+====
+
+== 應用程式更新流程
+
+建議更新步驟：
+
+. 先備份目前 Jar、設定檔與安裝腳本。
+. 確認新版本可在測試環境啟動。
+. 停止服務並等待程序完全結束。
+. 替換 Jar 或切換版本目錄。
+. 執行必要的設定與資料庫遷移。
+. 啟動服務。
+. 檢查 Windows Service、stdout、stderr 與應用程式 Log。
+. 執行健康檢查與主要功能驗證。
+. 失敗時還原前一版 Jar 與設定。
+
+[source,powershell]
+----
+Stop-Service -Name sample-app
+Copy-Item .\application-new.jar C:\services\sample-app\application.jar -Force
+Start-Service -Name sample-app
+Get-Service -Name sample-app
+----
+
+更穩定的做法是以版本目錄保存檔案，再透過固定名稱或部署腳本切換，避免更新失敗後找不到前一版。
+
+== 移除服務
+
+[source,powershell]
+----
+.\nssm.exe stop sample-app
+.\nssm.exe remove sample-app confirm
+----
+
+移除前應確認：
+
+* 服務確實停止。
+* 沒有其他服務依賴它。
+* Log、設定與資料已備份。
+* 移除的是正確環境與正確服務名稱。
+
+NSSM remove 只移除 Windows Service 註冊，不一定會刪除 Jar、設定檔與 Log 目錄。
+
+== 常見問題排除
+
+=== 服務顯示啟動後立即停止
+
+優先檢查：
+
+* `service-stderr.log`。
+* `service-stdout.log`。
+* Windows Event Viewer。
+* Java 與 Jar 路徑。
+* `AppDirectory`。
+* Port 是否被占用。
+* 服務帳號的檔案權限。
+
+=== 找不到設定檔或靜態資源
+
+Windows Service 的工作目錄不一定等於 Jar 所在目錄。應明確設定 `AppDirectory`，並確認相對路徑是從該目錄解析。
+
+可檢查：
+
+[source,powershell]
+----
+.\nssm.exe get sample-app AppDirectory
+.\nssm.exe get sample-app AppParameters
+----
+
+=== Arguments 被拆錯
+
+常見原因：
+
+* 保留批次檔的 `^`。
+* 路徑含空白但未正確加引號。
+* 將 JVM 參數放到 `-jar` 之後。
+* Spring Boot application arguments 與 JVM system properties 順序混淆。
+
+正確順序通常是：
+
+[source,text]
+----
+java [JVM options] -jar application.jar [application arguments]
+----
+
+=== 服務帳號無法存取網路資源
+
+* 不要依賴登入使用者映射的磁碟機代號。
+* 使用 UNC 路徑。
+* 確認服務帳號具有分享與 NTFS 雙重權限。
+* 確認密碼未過期或帳號未被鎖定。
+* 檢查是否具備 `Log on as a service` 權限。
+
+=== 停止服務時被強制終止
+
+* 增加 NSSM stop timeout。
+* 啟用 Spring Boot graceful shutdown。
+* 檢查是否有無法結束的非 daemon thread。
+* 檢查 Scheduler、Executor 與連線池關閉設定。
+* 不要在服務停止期間執行耗時過長的新工作。
+
+== 安全與維運建議
+
+* NSSM、Java 與應用程式目錄只允許管理者及服務帳號修改。
+* 不要讓一般使用者覆寫 `nssm.exe`、`java.exe` 或 Jar，避免服務劫持。
+* 避免把密碼、Token 放進公開批次檔與 repository。
+* 使用專用服務帳號與最小權限，不預設使用高權限帳號。
+* 監控服務狀態、Port、健康檢查、磁碟空間與 Log 成長。
+* 安裝腳本應保留版本並經過 Code Review。
+* 變更前執行 `nssm get` 或匯出目前設定，保留回復依據。
+* 對正式環境設定明確的維護窗口與 rollback 流程。
+
+== NSSM 與其他方案
+
+[cols="25%,75%", options="header"]
+|===
+|方案 |適合情境
+
+|NSSM
+|快速將既有程式包裝成 Windows Service，GUI 與 CLI 都容易使用。
+
+|WinSW
+|偏好以 XML 宣告服務設定，並將設定與程式一起版本化。
+
+|原生 Windows Service
+|應用程式本身就是 Windows Service，能直接整合 Service Control Manager。
+
+|Task Scheduler
+|適合排程或一次性工作，不適合取代需要長期監控的背景服務。
+
+|Container
+|已有容器平台與標準化部署流程時，可改由容器 Runtime 或 Kubernetes 管理。
+|===
+
+NSSM 適合既有程式快速服務化，但若需要高度標準化部署、完整健康檢查、自動擴展或多節點調度，應評估其他服務管理或容器平台。
+
+== 驗證清單
+
+* `Get-Service` 顯示服務狀態為 Running。
+* 主機重新啟動後，服務依設定自動啟動。
+* stdout、stderr 與應用程式 Log 可正常寫入。
+* 設定檔與外部資源可正常讀取。
+* 停止服務時能完成 Graceful Shutdown。
+* 服務帳號只有必要權限。
+* 失敗復原不會形成無限 restart loop。
+* 更新與 rollback 流程已實際演練。
+* 磁碟與 Log 輪替有監控或限制。
