@@ -1,0 +1,710 @@
+= Nginx site.conf.template 與自訂錯誤頁
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本頁說明 `site.conf.template` 與一般 `.conf` 的差異、官方 Nginx Container 的範本產生流程、主設定檔與共用 Proxy 設定的分工，以及 404、500、502、503、504 自訂錯誤頁的處理方式。
+
+本文範例已改用通用名稱，不包含實際專案名稱、網域、IP、節點名稱、Cookie 名稱或其他環境識別資訊。
+
+== `site.conf.template` 是什麼
+
+`site.conf.template` 不是 Nginx 直接載入的正式設定檔，而是一份在容器啟動時產生 `site.conf` 的範本。
+
+常見流程：
+
+[source,text]
+----
+/etc/nginx/templates/site.conf.template
+                 ↓ 環境變數展開
+/etc/nginx/conf.d/site.conf
+                 ↓ include
+/etc/nginx/nginx.conf
+----
+
+真正由 Nginx 解析的是產生後的 `site.conf`，不是原始 `.template`。
+
+=== 一般 `.conf` 與 `.template` 的差異
+
+[cols="28%,36%,36%", options="header"]
+|===
+|項目 |一般 `.conf` |`.conf.template`
+
+|讀取時機
+|Nginx 啟動或 reload 時直接讀取。
+|容器啟動前先展開變數，再產生 `.conf`。
+
+|是否可直接包含環境變數
+|Nginx 不會自動把 `${SERVER_NAME}` 當作容器環境變數展開。
+|可由 `envsubst` 或官方 image entrypoint 展開。
+
+|適合情境
+|設定固定、由組態管理工具產生，或不需要依環境變動。
+|同一 image 需要部署到不同網域、context path 或後端環境。
+
+|Nginx 實際載入
+|直接載入該檔案。
+|載入範本輸出的 `.conf`。
+|===
+
+== 官方 Nginx Container 的 Template 機制
+
+官方 Nginx Container 常將範本放在：
+
+[source,text]
+----
+/etc/nginx/templates/*.template
+----
+
+啟動時產生到：
+
+[source,text]
+----
+/etc/nginx/conf.d/*.conf
+----
+
+例如：
+
+[source,text]
+----
+/etc/nginx/templates/site.conf.template
+→ /etc/nginx/conf.d/site.conf
+----
+
+Docker Compose 可採用以下結構：
+
+[source,yaml]
+----
+services:
+  reverse-proxy:
+    image: nginx:alpine
+    environment:
+      SERVER_NAME: app.example.invalid
+      ALLOWED_HOST_PATTERN: app\.example\.invalid
+      APPLICATION_PATH: application
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - ./nginx/error-pages:/usr/share/nginx/html:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+----
+
+[WARNING]
+====
+範本中的 Nginx 變數，例如 `$host`、`$request_uri`、`$remote_addr`，與容器環境變數使用相同的 `$` 符號。應確認使用的 entrypoint 或 `envsubst` 指令只替換預期的環境變數，避免把 Nginx 變數誤展開成空字串。
+====
+
+== 建議檔案分工
+
+[source,text]
+----
+/etc/nginx/
+├── nginx.conf
+├── templates/
+│   └── site.conf.template
+├── conf.d/
+│   ├── site.conf
+│   └── proxy-common.conf
+├── certs/
+│   ├── server.crt
+│   └── server.key
+└── html/
+    ├── 404.html
+    ├── 500.html
+    └── error.css
+----
+
+[cols="28%,72%", options="header"]
+|===
+|檔案 |責任
+
+|`nginx.conf`
+|程序、events、HTTP 共用參數、Log、gzip、`map`、`upstream` 與站台設定 include。
+
+|`site.conf.template`
+|依環境產生 HTTP 與 HTTPS 的 `server` 設定。
+
+|`site.conf`
+|由範本產生，實際被 Nginx 載入的站台設定。
+
+|`proxy-common.conf`
+|多個 `location` 共用的 Proxy Header、Timeout、Failover 與上傳限制。
+
+|`404.html`
+|找不到資源時顯示的靜態頁面。
+
+|`500.html`
+|後端無法服務或閘道錯誤時顯示的通用靜態頁面。
+
+|`error.css`
+|404 與 500 頁面共用樣式。
+|===
+
+== 主設定檔如何載入產生後的 `site.conf`
+
+主 `nginx.conf` 可明確載入單一站台設定：
+
+[source,nginx]
+----
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    # 共用 HTTP 設定、map、upstream 等內容。
+
+    include /etc/nginx/conf.d/site.conf;
+}
+----
+
+也可以使用萬用字元：
+
+[source,nginx]
+----
+http {
+    include /etc/nginx/conf.d/*.conf;
+}
+----
+
+兩者差異：
+
+* 明確指定 `site.conf`：載入範圍清楚，不會意外載入備份檔或其他站台設定。
+* 使用 `*.conf`：新增站台方便，但必須控管目錄內所有 `.conf`。
+
+[IMPORTANT]
+====
+若 `site.conf` 包含完整 `server {}`，它必須在 `http {}` context 內 include。
+====
+
+== 同一份 Template 同時包含 Port 80 與 443
+
+`site.conf.template` 可以同時包含兩個 `server`：
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name ${SERVER_NAME};
+
+    return 301 https://${SERVER_NAME}$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${SERVER_NAME};
+
+    ssl_certificate /etc/nginx/certs/server.crt;
+    ssl_certificate_key /etc/nginx/certs/server.key;
+
+    location /${APPLICATION_PATH}/ {
+        proxy_pass http://application_backend;
+        include /etc/nginx/conf.d/proxy-common.conf;
+    }
+}
+----
+
+這種寫法的優點：
+
+* HTTP 與 HTTPS 使用同一組環境變數。
+* 同一站台的 redirect、路徑與 Proxy 設定集中管理。
+* 只產生一個 `site.conf`，主設定只需 include 一個檔案。
+
+可能的缺點：
+
+* Port 80 與 443 的設定較長時，單一檔案容易膨脹。
+* 只調整 HTTPS 時仍會修改同一份範本。
+* 多網域或多站台時，責任邊界可能不夠清楚。
+
+== 與 `80.conf`、`443.conf` 分檔寫法的差異
+
+另一種方式是拆成：
+
+[source,text]
+----
+80.conf.template  → 80.conf
+443.conf.template → 443.conf
+----
+
+主設定載入：
+
+[source,nginx]
+----
+http {
+    include /etc/nginx/conf.d/80.conf;
+    include /etc/nginx/conf.d/443.conf;
+}
+----
+
+或：
+
+[source,nginx]
+----
+http {
+    include /etc/nginx/conf.d/*.conf;
+}
+----
+
+建議判斷方式：
+
+* 單一站台、HTTP 只負責 redirect：使用一份 `site.conf.template` 通常較簡單。
+* 多網域、多憑證、Port 80 另有 ACME 或特殊路由：拆成 `80.conf.template` 與 `443.conf.template` 較清楚。
+* 多個站台共用 Proxy 規則：將 Proxy 規則再拆成 `proxy-common.conf`。
+
+== 匿名化的 `site.conf.template` 範例
+
+以下範例保留設計概念，但不包含真實網域、IP、專案名稱、節點名稱或 Cookie 名稱。
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name ${SERVER_NAME};
+
+    # 僅接受允許的 Host，降低 Host Header Injection 風險。
+    if ($host !~* ^(${ALLOWED_HOST_PATTERN})$) {
+        return 444;
+    }
+
+    # 固定導向到預期網域，不直接信任使用者傳入的 Host。
+    return 301 https://${SERVER_NAME}$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${SERVER_NAME};
+
+    if ($host !~* ^(${ALLOWED_HOST_PATTERN})$) {
+        return 444;
+    }
+
+    ssl_certificate /etc/nginx/certs/server.crt;
+    ssl_certificate_key /etc/nginx/certs/server.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    error_page 404 /404.html;
+    error_page 502 503 504 /500.html;
+
+    location = /404.html {
+        root /usr/share/nginx/html;
+        internal;
+        include /etc/nginx/conf.d/error-headers.conf;
+    }
+
+    location = /500.html {
+        root /usr/share/nginx/html;
+        internal;
+        include /etc/nginx/conf.d/error-headers.conf;
+    }
+
+    location = /error.css {
+        root /usr/share/nginx/html;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Cache-Control "no-store" always;
+    }
+
+    location = / {
+        return 302 /${APPLICATION_PATH}/;
+    }
+
+    location = /${APPLICATION_PATH} {
+        return 301 /${APPLICATION_PATH}/;
+    }
+
+    location /${APPLICATION_PATH}/ {
+        proxy_pass http://application_backend;
+        include /etc/nginx/conf.d/proxy-common.conf;
+    }
+}
+----
+
+== 為什麼使用環境變數
+
+範本中的通用環境變數可分為：
+
+[cols="35%,65%", options="header"]
+|===
+|變數 |用途
+
+|`${SERVER_NAME}`
+|站台對外網域，同時用於 `server_name` 與固定 HTTPS redirect。
+
+|`${ALLOWED_HOST_PATTERN}`
+|允許的 Host 正規表示式，避免任意 Host 被接受。
+
+|`${APPLICATION_PATH}`
+|應用程式的 URL context path，例如 `/application/`。
+|===
+
+這種方式比把網域、IP 或專案代碼寫死在 repository 中更容易跨環境部署，也較不容易洩漏環境資訊。
+
+== 共用 `proxy-common.conf`
+
+Proxy 共用設定適合放置：
+
+* Proxy Header。
+* 連線、傳送與讀取逾時。
+* 上傳大小限制。
+* upstream failover 條件。
+* 是否攔截 upstream 錯誤。
+
+匿名化範例：
+
+[source,nginx]
+----
+proxy_http_version 1.1;
+
+proxy_set_header Connection "close";
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+
+proxy_connect_timeout 2s;
+proxy_send_timeout 60s;
+proxy_read_timeout 600s;
+
+proxy_next_upstream error invalid_header http_502 http_503 http_504;
+proxy_next_upstream_tries 2;
+
+client_max_body_size 100m;
+proxy_intercept_errors on;
+----
+
+=== `Connection "close"` 與 upstream keepalive
+
+以下設定會要求 Nginx 與後端完成回應後關閉連線：
+
+[source,nginx]
+----
+proxy_set_header Connection "close";
+----
+
+適合：
+
+* 後端節點經常輪流重新啟動。
+* 曾因舊 upstream 連線短暫產生 502。
+* 流量不高，優先考慮部署穩定性。
+
+若要使用 upstream keepalive，通常改成：
+
+[source,nginx]
+----
+proxy_http_version 1.1;
+proxy_set_header Connection "";
+----
+
+並在 upstream 內設定：
+
+[source,nginx]
+----
+upstream application_backend {
+    server backend-a:8080;
+    server backend-b:8080;
+    keepalive 32;
+}
+----
+
+兩者不應混用：設定 `Connection "close"` 時，upstream keepalive 無法正常發揮連線重用效果。
+
+== 自訂 404 與 500 頁面
+
+建議錯誤頁保持簡單，不顯示：
+
+* Framework 版本。
+* Exception、Stack Trace 或 SQL。
+* 內部主機名稱、IP、port。
+* 實際檔案路徑。
+* 使用者帳號或請求敏感參數。
+* 專案或機關內部識別名稱。
+
+=== 404 頁面
+
+匿名化範例：
+
+[source,html]
+----
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>找不到頁面</title>
+    <link rel="stylesheet" href="/error.css">
+</head>
+<body>
+<main class="container">
+    <section class="card">
+        <h1>找不到頁面</h1>
+        <p>您存取的網址不存在或已被移除。</p>
+        <p>請確認網址是否正確。</p>
+        <div class="code">HTTP 404</div>
+    </section>
+</main>
+</body>
+</html>
+----
+
+=== 通用伺服器錯誤頁
+
+[source,html]
+----
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>服務暫時無法使用</title>
+    <link rel="stylesheet" href="/error.css">
+</head>
+<body>
+<main class="container">
+    <section class="card">
+        <h1>服務暫時無法使用</h1>
+        <p>系統目前無法完成請求，請稍後再試。</p>
+        <div class="code">Server Error</div>
+    </section>
+</main>
+</body>
+</html>
+----
+
+使用 `Server Error` 而不是固定寫 `HTTP 500`，可避免實際 HTTP status 是 502、503 或 504，但畫面卻顯示 500。
+
+== `error_page` 的狀態碼行為
+
+[source,nginx]
+----
+error_page 404 /404.html;
+error_page 502 503 504 /500.html;
+----
+
+這種寫法會顯示指定頁面，但通常保留原本狀態碼：
+
+* 404 仍回傳 404。
+* 502 仍回傳 502。
+* 503 仍回傳 503。
+* 504 仍回傳 504。
+
+因此把 502、503、504 全部導到名為 `500.html` 的檔案沒有問題，但頁面文字不宜宣稱實際狀態一定是 HTTP 500。
+
+若明確要把 502、503、504 都改成 500，可寫：
+
+[source,nginx]
+----
+error_page 502 503 504 =500 /500.html;
+----
+
+但這會失去原始狀態碼資訊，不一定適合監控、Load Balancer 或故障排查。
+
+一般建議保留原始 502、503、504 狀態碼，只共用同一份通用錯誤頁。
+
+== `proxy_intercept_errors` 的實際作用
+
+[source,nginx]
+----
+proxy_intercept_errors on;
+----
+
+啟用後，Nginx 可以攔截 upstream 回傳、且已由 `error_page` 定義的錯誤狀態，改用 Nginx 自訂頁面回應。
+
+例如同一 context 中存在：
+
+[source,nginx]
+----
+proxy_intercept_errors on;
+error_page 404 /404.html;
+error_page 502 503 504 /500.html;
+----
+
+可能產生以下結果：
+
+* upstream 回傳 404：Nginx 可能改顯示 `/404.html`。
+* upstream 回傳 502、503、504：Nginx 改顯示 `/500.html`。
+* upstream 回傳 500，但沒有設定 `error_page 500`：通常維持 upstream 原始 500 回應。
+
+因此不能簡化理解成「只處理 Nginx 自己產生的 502、503、504」。它也可能攔截後端回傳、且符合 `error_page` 的狀態碼。
+
+若希望應用程式自己的 404 JSON 或錯誤頁保持原樣，不應在該 Proxy context 同時攔截 404；可以只設定：
+
+[source,nginx]
+----
+error_page 502 503 504 /500.html;
+proxy_intercept_errors on;
+----
+
+== 為錯誤頁設定獨立 `location`
+
+推薦設定：
+
+[source,nginx]
+----
+location = /404.html {
+    root /usr/share/nginx/html;
+    internal;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+
+location = /500.html {
+    root /usr/share/nginx/html;
+    internal;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+
+location = /error.css {
+    root /usr/share/nginx/html;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+----
+
+`internal` 的用途是禁止使用者直接請求 `/404.html` 或 `/500.html`，但仍允許 Nginx 透過 `error_page` 內部導向。
+
+`error.css` 不應加 `internal`，因為瀏覽器需要另外請求該 CSS。
+
+== `add_header` 的繼承注意事項
+
+只要目前層級內出現任何 `add_header`，舊版與常見版本的 Nginx 可能不再繼承父層定義的其他 `add_header`。
+
+因此錯誤頁的 `location` 若自行加入：
+
+[source,nginx]
+----
+add_header Cache-Control "no-store" always;
+----
+
+就應重新加入該錯誤頁需要的其他安全 Header，或拆成共用 include：
+
+[source,nginx]
+----
+# /etc/nginx/conf.d/error-headers.conf
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Cache-Control "no-store" always;
+add_header Pragma "no-cache" always;
+add_header Content-Security-Policy "default-src 'none'; style-src 'self'; base-uri 'none'; frame-ancestors 'self'; form-action 'none'" always;
+----
+
+再於錯誤頁載入：
+
+[source,nginx]
+----
+location = /404.html {
+    root /usr/share/nginx/html;
+    internal;
+    include /etc/nginx/conf.d/error-headers.conf;
+}
+----
+
+[NOTE]
+====
+若 `error-headers.conf` 位於 `/etc/nginx/conf.d/`，而主設定使用 `include /etc/nginx/conf.d/*.conf;`，該片段可能被錯誤地在 `http` context 再載入一次。共用片段更適合放在 `/etc/nginx/snippets/`，或使用不會被萬用字元掃到的副檔名。
+====
+
+推薦改為：
+
+[source,nginx]
+----
+include /etc/nginx/snippets/error-headers.conf;
+----
+
+== 自訂錯誤頁 CSS
+
+錯誤頁樣式應避免外部 CDN，確保後端、外網或 DNS 異常時仍可正常顯示。
+
+[source,css]
+----
+body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    background: #f5f6f8;
+    color: #333;
+}
+
+.container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+}
+
+.card {
+    background: #fff;
+    padding: 48px 56px;
+    border-radius: 12px;
+    max-width: 560px;
+}
+----
+
+== 安全與隱私檢查清單
+
+公開文件或 repository 中的 Nginx 範例應移除或替換：
+
+* 真實網域與內部 DNS 名稱。
+* 公網與私網 IP。
+* 實際應用程式代碼、系統名稱與機關名稱。
+* Container、Pod、VM 或實體主機名稱。
+* 實際 Cookie 名稱與內部 Session 策略名稱。
+* 憑證檔名中帶有組織名稱的資訊。
+* 帳號、密碼、Token、Basic Auth 檔案內容。
+* Log 範例中的使用者識別資料與請求參數。
+
+建議通用替換：
+
+[source,text]
+----
+example.com             → app.example.invalid
+真實應用代碼            → application
+真實 upstream 名稱      → application_backend
+真實節點名稱            → backend-a / backend-b
+真實 Cookie 名稱        → route_key
+真實憑證名稱            → server.crt / server.key
+----
+
+== 驗證流程
+
+[source,bash]
+----
+# 確認環境變數是否存在
+printenv | sort
+
+# 確認範本已產生正式設定
+ls -l /etc/nginx/conf.d/
+cat /etc/nginx/conf.d/site.conf
+
+# 檢查 Nginx 語法
+nginx -t
+
+# 顯示 include 展開後的完整設定
+nginx -T
+
+# 驗證 HTTP redirect
+curl -I http://app.example.invalid/
+
+# 驗證 404
+curl -i https://app.example.invalid/not-found
+
+# 驗證 CSS
+curl -I https://app.example.invalid/error.css
+----
+
+== 延伸閱讀
+
+* xref:network/nginx-config-organization.adoc[Nginx 設定檔分層、Template 與 Include]
+* xref:network/nginx-trailing-slash.adoc[Nginx 路徑尾端斜線規則]
+* xref:network/nginx-directive-reference.adoc[Nginx 常用設定指令參考]
+* xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header 說明]
