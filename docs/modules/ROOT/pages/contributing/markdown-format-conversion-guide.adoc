@@ -1,0 +1,623 @@
+= Markdown 文件轉換與輸出格式指南
+:toc:
+:toc-title: 目錄
+:toclevels: 3
+:sectnums:
+:source-highlighter: highlight.js
+
+本文件整理 Markdown（`.md`）轉換為 PDF、HTML、DOCX、AsciiDoc 等格式的常見方式，並說明中文字型、圖片內嵌、批次處理及 CI/CD 使用時的注意事項。
+
+== 工具選擇
+
+[cols="22%,28%,50%", options="header"]
+|===
+|工具 |適合情境 |說明
+
+|Pandoc
+|批次轉換、CI/CD、多格式輸出
+|可將 Markdown 轉為 HTML、PDF、DOCX、AsciiDoc、EPUB 等格式，最適合建立可重複執行的文件流程。
+
+|瀏覽器列印
+|臨時產生 PDF
+|先轉為 HTML，再由 Edge 或 Chrome 列印成 PDF。中文、表格與程式碼通常較容易維持正常版面。
+
+|VS Code Markdown PDF
+|偶爾手動轉換
+|透過擴充套件直接匯出 PDF、HTML 或圖片。適合個人操作，但不適合作為正式 CI/CD 流程。
+|===
+
+== 安裝 Pandoc
+
+=== Windows 使用 WinGet
+
+先確認套件 ID：
+
+[source,powershell]
+----
+winget search Pandoc
+----
+
+安裝 Pandoc：
+
+[source,powershell]
+----
+winget install --id JohnMacFarlane.Pandoc --exact
+----
+
+確認版本：
+
+[source,powershell]
+----
+pandoc --version
+----
+
+TIP: 使用 `--id` 搭配 `--exact`，可避免 WinGet 因名稱相近而選錯套件。
+
+== Markdown 轉 PDF
+
+Pandoc 本身負責解析與轉換文件，但輸出 PDF 時通常還需要 PDF engine。
+
+=== 方法一：使用 XeLaTeX
+
+Windows 可安裝 MiKTeX：
+
+[source,powershell]
+----
+winget search MiKTeX
+winget install --id MiKTeX.MiKTeX --exact
+----
+
+基本轉換：
+
+[source,powershell]
+----
+pandoc README.md -o README.pdf --pdf-engine=xelatex
+----
+
+有中文時指定字型：
+
+[source,powershell]
+----
+pandoc README.md `
+  -o README.pdf `
+  --from=gfm `
+  --pdf-engine=xelatex `
+  -V CJKmainfont="Microsoft JhengHei"
+----
+
+常用完整範例：
+
+[source,powershell]
+----
+pandoc README.md `
+  -o README.pdf `
+  --from=gfm `
+  --pdf-engine=xelatex `
+  -V CJKmainfont="Microsoft JhengHei" `
+  -V geometry:margin=2cm `
+  --highlight-style=tango `
+  --metadata title="文件說明"
+----
+
+參數說明：
+
+[cols="32%,68%", options="header"]
+|===
+|參數 |用途
+
+|`--from=gfm`
+|使用 GitHub Flavored Markdown 解析器，支援表格、刪除線、Task List 等常見 GitHub 語法。
+
+|`--pdf-engine=xelatex`
+|使用 XeLaTeX 產生 PDF，較適合 Unicode 與中日韓文字。
+
+|`-V CJKmainfont=...`
+|指定中文字型。字型必須已安裝在執行轉換的電腦上。
+
+|`-V geometry:margin=2cm`
+|設定 PDF 頁面邊界。
+
+|`--highlight-style=tango`
+|指定程式碼語法高亮樣式。
+
+|`--metadata title=...`
+|設定文件標題，避免產生 HTML 或 PDF 時缺少標題資訊。
+|===
+
+=== 方法二：先轉 HTML，再由瀏覽器輸出 PDF
+
+先產生完整 HTML：
+
+[source,powershell]
+----
+pandoc README.md `
+  -o README.html `
+  --from=gfm `
+  --standalone `
+  --metadata title="文件說明"
+----
+
+接著：
+
+. 使用 Edge 或 Chrome 開啟 `README.html`。
+. 按 kbd:[Ctrl+P]。
+. 印表機選擇「另存為 PDF」。
+. 設定紙張、邊界、背景圖形及頁首頁尾後儲存。
+
+這種方式通常適合：
+
+* 中文字型設定困難。
+* Markdown 內有大量 HTML、表格或圖片。
+* 希望以瀏覽器 CSS 控制版面。
+* 只需要偶爾手動輸出 PDF。
+
+=== 方法三：VS Code Markdown PDF
+
+在 VS Code Marketplace 安裝 `Markdown PDF` 擴充套件後：
+
+. 開啟 `.md` 文件。
+. 按 kbd:[Ctrl+Shift+P]。
+. 執行 `Markdown PDF: Export (pdf)`。
+
+WARNING: VS Code 擴充套件由第三方維護。正式文件流程應確認擴充套件版本、維護狀態與安全性，不建議把個人操作流程直接當成 CI/CD 的唯一方案。
+
+== Markdown 轉 HTML
+
+=== 基本 HTML
+
+[source,powershell]
+----
+pandoc README.md -o README.html --standalone
+----
+
+若沒有指定標題，Pandoc 可能顯示缺少 `<title>` 的警告。可透過 metadata 補上：
+
+[source,powershell]
+----
+pandoc README.md `
+  -o README.html `
+  --standalone `
+  --metadata title="文件說明"
+----
+
+=== 產生圖片與樣式內嵌的單一 HTML
+
+[source,powershell]
+----
+pandoc README.md `
+  -o README.html `
+  --from=gfm `
+  --standalone `
+  --embed-resources `
+  --metadata title="文件說明"
+----
+
+`--embed-resources` 會嘗試把圖片、CSS 等資源以 data URI 方式嵌入輸出文件；`--standalone` 則產生包含 `<html>`、`<head>` 與 `<body>` 的完整 HTML。
+
+NOTE: 兩個參數用途不同。要產生方便單檔傳送的完整 HTML，建議同時使用 `--standalone --embed-resources`。
+
+=== 套用自訂 CSS
+
+[source,powershell]
+----
+pandoc README.md `
+  -o README.html `
+  --standalone `
+  --css=styles/document.css `
+  --metadata title="文件說明"
+----
+
+若希望 CSS 也內嵌：
+
+[source,powershell]
+----
+pandoc README.md `
+  -o README.html `
+  --standalone `
+  --embed-resources `
+  --css=styles/document.css `
+  --metadata title="文件說明"
+----
+
+== Markdown 轉 DOCX
+
+基本轉換：
+
+[source,powershell]
+----
+pandoc README.md -o README.docx --from=gfm
+----
+
+使用 Word 範本控制字型、標題與頁面樣式：
+
+[source,powershell]
+----
+pandoc README.md `
+  -o README.docx `
+  --from=gfm `
+  --reference-doc=reference.docx
+----
+
+`reference.docx` 可事先設定：
+
+* 正文與標題字型。
+* 頁面大小與邊界。
+* 標題層級樣式。
+* 表格、程式碼與引用樣式。
+* 頁首頁尾。
+
+產生 Pandoc 預設 Word 範本：
+
+[source,powershell]
+----
+pandoc --print-default-data-file reference.docx > reference.docx
+----
+
+NOTE: 若目前版本的 Pandoc 不支援上述預設資料指令，請先執行 `pandoc --help` 或查閱對應版本手冊，再建立或匯出 reference document。
+
+== Markdown 轉 AsciiDoc
+
+[source,powershell]
+----
+pandoc README.md `
+  --from=gfm `
+  --to=asciidoc `
+  --wrap=none `
+  -o README.adoc
+----
+
+轉換後必須人工檢查：
+
+* 標題層級。
+* 表格欄位與跨欄。
+* 圖片路徑。
+* HTML block。
+* Task List。
+* Mermaid、PlantUML 或其他 fenced code block。
+* GitHub 專用語法。
+
+Pandoc 能完成格式初步轉換，但無法保證所有 Markdown 擴充語法都能一對一轉成 AsciiDoc。
+
+== Markdown 轉 EPUB
+
+[source,powershell]
+----
+pandoc README.md `
+  --from=gfm `
+  -o README.epub `
+  --metadata title="文件說明" `
+  --metadata author="作者名稱"
+----
+
+若有封面：
+
+[source,powershell]
+----
+pandoc README.md `
+  -o README.epub `
+  --epub-cover-image=images/cover.png `
+  --metadata title="文件說明"
+----
+
+== 圖片路徑處理
+
+建議目錄：
+
+[source,text]
+----
+document/
+├─ README.md
+├─ images/
+│  ├─ architecture.png
+│  └─ flow.svg
+└─ styles/
+   └─ document.css
+----
+
+Markdown 內使用相對路徑：
+
+[source,markdown]
+----
+![系統架構](images/architecture.png)
+----
+
+轉換時應在文件所在目錄執行：
+
+[source,powershell]
+----
+Set-Location document
+pandoc README.md -o README.html --standalone --embed-resources
+----
+
+若從其他目錄執行，可指定資源搜尋路徑：
+
+[source,powershell]
+----
+pandoc document/README.md `
+  -o output/README.html `
+  --standalone `
+  --embed-resources `
+  --resource-path="document;document/images"
+----
+
+NOTE: Windows 上 `--resource-path` 的分隔符通常使用分號；Linux 與 macOS 使用冒號。實際行為應以執行環境與 Pandoc 版本為準。
+
+== 使用 Defaults File 簡化指令
+
+建立 `pandoc-html.yaml`：
+
+[source,yaml]
+----
+from: gfm
+standalone: true
+embed-resources: true
+metadata:
+  title: 文件說明
+highlight-style: tango
+----
+
+執行：
+
+[source,powershell]
+----
+pandoc README.md --defaults=pandoc-html.yaml -o README.html
+----
+
+建立 `pandoc-pdf.yaml`：
+
+[source,yaml]
+----
+from: gfm
+pdf-engine: xelatex
+variables:
+  CJKmainfont: Microsoft JhengHei
+  geometry: margin=2cm
+highlight-style: tango
+metadata:
+  title: 文件說明
+----
+
+執行：
+
+[source,powershell]
+----
+pandoc README.md --defaults=pandoc-pdf.yaml -o README.pdf
+----
+
+Defaults File 適合：
+
+* 統一多人使用的轉換參數。
+* 降低長指令拼寫錯誤。
+* 在本機與 CI/CD 共用相同設定。
+* 將格式規範納入版本控制。
+
+== 批次轉換
+
+=== PowerShell：批次轉 HTML
+
+[source,powershell]
+----
+$OutputDirectory = "output/html"
+New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+
+Get-ChildItem -Filter "*.md" | ForEach-Object {
+    $OutputFile = Join-Path $OutputDirectory ($_.BaseName + ".html")
+
+    pandoc $_.FullName `
+        --from=gfm `
+        --standalone `
+        --embed-resources `
+        --metadata "title=$($_.BaseName)" `
+        -o $OutputFile
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "轉換失敗：$($_.FullName)"
+    }
+}
+----
+
+=== PowerShell：批次轉 PDF
+
+[source,powershell]
+----
+$OutputDirectory = "output/pdf"
+New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+
+Get-ChildItem -Filter "*.md" | ForEach-Object {
+    $OutputFile = Join-Path $OutputDirectory ($_.BaseName + ".pdf")
+
+    pandoc $_.FullName `
+        --from=gfm `
+        --pdf-engine=xelatex `
+        -V CJKmainfont="Microsoft JhengHei" `
+        -V geometry:margin=2cm `
+        -o $OutputFile
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "轉換失敗：$($_.FullName)"
+    }
+}
+----
+
+== CI/CD 範例
+
+=== GitHub Actions：產生 HTML artifact
+
+[source,yaml]
+----
+name: Build Markdown
+
+on:
+  push:
+    paths:
+      - "docs/**/*.md"
+      - ".github/workflows/build-markdown.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Pandoc
+        run: sudo apt-get update && sudo apt-get install -y pandoc
+
+      - name: Build HTML
+        run: |
+          mkdir -p output
+          pandoc docs/README.md \
+            --from=gfm \
+            --standalone \
+            --embed-resources \
+            --metadata title="文件說明" \
+            -o output/README.html
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: markdown-html
+          path: output/
+----
+
+WARNING: CI 使用作業系統套件管理器安裝 Pandoc 時，版本可能隨 runner image 改變。需要可重現建置時，應固定 container image、套件版本或使用專案自行管理的工具版本。
+
+== 常見問題
+
+=== `xelatex not found`
+
+表示 Pandoc 已安裝，但找不到 XeLaTeX。
+
+處理方式：
+
+. 安裝 MiKTeX 或 TeX Live。
+. 關閉並重新開啟終端機。
+. 執行 `xelatex --version`。
+. 確認執行檔所在目錄已加入 `PATH`。
+
+=== 中文顯示為方框或空白
+
+檢查：
+
+* `CJKmainfont` 指定的字型是否存在。
+* 字型名稱是否正確。
+* CI runner 是否也安裝同一套字型。
+* 是否使用支援 Unicode 的 PDF engine。
+
+列出 Windows 字型可使用 PowerShell：
+
+[source,powershell]
+----
+Get-ChildItem C:/Windows/Fonts
+----
+
+=== 圖片找不到
+
+檢查：
+
+* Markdown 圖片是否使用相對路徑。
+* 執行 Pandoc 時的工作目錄。
+* `--resource-path` 是否包含圖片目錄。
+* 檔名大小寫是否一致；Linux 會區分大小寫。
+
+=== HTML 顯示圖片，但寄給別人後圖片消失
+
+一般 HTML 只保留圖片連結。可改用：
+
+[source,powershell]
+----
+pandoc README.md `
+  -o README.html `
+  --standalone `
+  --embed-resources
+----
+
+=== 缺少 `<title>` 警告
+
+加入：
+
+[source,powershell]
+----
+--metadata title="文件說明"
+----
+
+或在 Markdown 開頭使用 YAML metadata：
+
+[source,yaml]
+----
+---
+title: 文件說明
+author: 作者名稱
+date: 2026-07-17
+---
+----
+
+=== PDF 表格超出頁面
+
+可考慮：
+
+* 改用橫向頁面。
+* 縮小頁面邊界。
+* 調整 Markdown 表格欄位內容。
+* 先輸出 HTML，再由瀏覽器列印。
+* 使用自訂 LaTeX template。
+
+== 公開前資料檢查
+
+轉換後的 HTML、PDF、DOCX 可能包含文件 metadata、原始圖片與連結。公開前應檢查：
+
+* 姓名、Email、電話與地址。
+* Windows 使用者目錄，例如 `C:/Users/<username>/`。
+* 公司名稱、部門、客戶或內部系統名稱。
+* 內網 IP、主機名稱與網域。
+* 密碼、Token、API Key、Connection String。
+* 圖片中的工作列、瀏覽器帳號、通知與檔案路徑。
+* Word 文件的作者、公司與修訂紀錄。
+* PDF 文件屬性與附件。
+
+可先用 PowerShell 搜尋常見敏感字串：
+
+[source,powershell]
+----
+Get-ChildItem -Recurse -File | Select-String -Pattern `
+  "C:/Users/", `
+  "password", `
+  "token", `
+  "secret", `
+  "api[_-]?key", `
+  "jdbc:", `
+  "192\.168\.", `
+  "10\."
+----
+
+WARNING: 自動搜尋只能協助初步檢查，不能取代人工檢閱。
+
+== 建議選擇
+
+[cols="35%,65%", options="header"]
+|===
+|需求 |建議方式
+
+|偶爾手動輸出 PDF
+|VS Code Markdown PDF，或 HTML 後由瀏覽器列印。
+
+|中文字型與複雜版面
+|Pandoc 轉 HTML，再由瀏覽器列印；或使用 XeLaTeX 並明確指定中文字型。
+
+|批次轉換與 CI/CD
+|Pandoc 搭配 Defaults File、PowerShell 或 CI workflow。
+
+|傳送單一 HTML
+|`--standalone --embed-resources`。
+
+|交付可編輯 Word
+|Pandoc 輸出 DOCX，並搭配 `--reference-doc`。
+
+|移轉到本站 AsciiDoc
+|Pandoc 先轉 AsciiDoc，再人工檢查語法與圖片。
+|===
+
+== 參考資料
+
+* https://pandoc.org/MANUAL.html[Pandoc User's Guide]
+* https://pandoc.org/installing.html[Installing Pandoc]
+* https://learn.microsoft.com/windows/package-manager/winget/install[Microsoft WinGet install command]
