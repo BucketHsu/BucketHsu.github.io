@@ -1,0 +1,591 @@
+= Windows WSL 2 移除 Docker Desktop 並安裝 Docker Engine
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:last-update-label!:
+:nofooter:
+
+本文整理在 Windows 11 的 WSL 2 Linux 發行版中，移除 Docker Desktop 後直接安裝 Docker Engine、Docker Compose Plugin，以及讓 VS Code 使用 WSL 內 Docker 的方式。
+
+[IMPORTANT]
+====
+Docker 官方仍將 Docker Desktop 視為 Windows 10／11 上最容易使用的方案。直接在 WSL 2 內安裝 Docker Engine，適合希望自行管理 Linux daemon、降低 Docker Desktop 相依性，且能自行處理 WSL、systemd、網路與權限問題的人。
+====
+
+== 適用範圍
+
+本文假設環境如下：
+
+* Windows 11。
+* WSL 2。
+* Ubuntu 或其他可使用 `apt` 的 Debian 系 Linux 發行版。
+* WSL 已支援 systemd。
+* 使用 Linux container，而不是 Windows container。
+
+先在 PowerShell 確認 WSL 狀態：
+
+[source,powershell]
+----
+wsl --version
+wsl --status
+wsl --list --verbose
+----
+
+預期發行版的 `VERSION` 為 `2`。
+
+== 一、解除安裝 Docker Desktop
+
+先從 Windows 的「已安裝的應用程式」解除安裝 Docker Desktop。
+
+解除安裝前，若 Docker Desktop 內仍有需要保留的 image、container 或 volume，應先匯出或備份。Docker Desktop 與 WSL 內自行安裝的 Docker Engine 使用的資料位置不同，不會自動搬移。
+
+=== 清理 Docker Desktop 的 WSL 發行版
+
+先確認目前 WSL 發行版：
+
+[source,powershell]
+----
+wsl --list --verbose
+----
+
+若清單仍存在以下 Docker Desktop 專用發行版，可在確認不再需要其中資料後移除：
+
+[source,powershell]
+----
+wsl --unregister docker-desktop
+wsl --unregister docker-desktop-data
+----
+
+[WARNING]
+====
+`wsl --unregister` 會永久刪除該發行版內的檔案與 Docker 資料。執行前必須確認資料已備份。
+====
+
+=== 清理目前 Linux 使用者的 Docker Desktop context
+
+進入主要 WSL 發行版後，先查看現有 context：
+
+[source,bash]
+----
+docker context ls
+----
+
+若 `~/.docker` 內只剩 Docker Desktop 遺留設定，可先備份再清理：
+
+[source,bash]
+----
+cp -a ~/.docker ~/.docker.backup
+rm -rf ~/.docker/contexts
+rm -f ~/.docker/features.json
+----
+
+不要直接刪除整個 `~/.docker`，其中可能還包含登入憑證、CLI 設定或其他 context。
+
+最後重新啟動 WSL：
+
+[source,powershell]
+----
+wsl --shutdown
+----
+
+== 二、啟用 WSL 的 systemd
+
+近期透過 `wsl --install` 安裝的 Ubuntu 通常已預設使用 systemd。先在 WSL 內確認：
+
+[source,bash]
+----
+ps -p 1 -o comm=
+systemctl status
+----
+
+若 PID 1 不是 `systemd`，編輯 `/etc/wsl.conf`：
+
+[source,bash]
+----
+sudo nano /etc/wsl.conf
+----
+
+加入：
+
+[source,ini]
+----
+[boot]
+systemd=true
+----
+
+回到 PowerShell 重新啟動 WSL：
+
+[source,powershell]
+----
+wsl --shutdown
+----
+
+再次開啟 WSL 後驗證：
+
+[source,bash]
+----
+systemctl status
+systemctl list-unit-files --type=service
+----
+
+== 三、安裝 Docker Engine 與 Docker Compose Plugin
+
+Docker 官方建議使用套件 repository 安裝，以便後續透過 `apt` 更新。`get.docker.com` convenience script 適合測試或開發，但不建議作為正式環境的主要安裝方式。
+
+=== 移除可能衝突的套件
+
+[source,bash]
+----
+sudo apt remove -y \
+  docker.io \
+  docker-compose \
+  docker-compose-v2 \
+  docker-doc \
+  podman-docker \
+  containerd \
+  runc
+----
+
+若套件原本不存在，`apt` 顯示找不到或未安裝通常可忽略。
+
+=== 加入 Docker 官方 apt repository
+
+[source,bash]
+----
+sudo apt update
+sudo apt install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+----
+
+建立 repository 設定：
+
+[source,bash]
+----
+sudo tee /etc/apt/sources.list.d/docker.sources > /dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+----
+
+更新套件索引並安裝：
+
+[source,bash]
+----
+sudo apt update
+sudo apt install -y \
+  docker-ce \
+  docker-ce-cli \
+  containerd.io \
+  docker-buildx-plugin \
+  docker-compose-plugin
+----
+
+=== 啟動並設定開機啟動
+
+[source,bash]
+----
+sudo systemctl enable --now docker
+systemctl status docker --no-pager
+----
+
+驗證版本：
+
+[source,bash]
+----
+sudo docker version
+sudo docker compose version
+----
+
+== 四、讓一般使用者執行 Docker
+
+將目前使用者加入 `docker` 群組：
+
+[source,bash]
+----
+sudo usermod -aG docker "$USER"
+----
+
+套用新群組權限，可重新登入 WSL，或暫時執行：
+
+[source,bash]
+----
+newgrp docker
+----
+
+驗證：
+
+[source,bash]
+----
+docker version
+docker compose version
+docker run --rm hello-world
+----
+
+[WARNING]
+====
+加入 `docker` 群組等同允許該使用者控制以 root 權限執行的 Docker daemon。不要將不可信任的帳號加入此群組。對權限隔離要求較高時，可評估 Docker Rootless mode。
+====
+
+== 五、Windows 與 VS Code 如何使用 Docker
+
+=== 建議方案：直接使用 VS Code WSL
+
+安裝 VS Code 的 WSL 與 Container Tools／Dev Containers 擴充套件，然後在 WSL 專案目錄執行：
+
+[source,bash]
+----
+code .
+----
+
+當 VS Code 視窗顯示已連入 WSL 時，擴充套件與終端機會直接使用 WSL 內的 Unix socket：
+
+[source,text]
+----
+/var/run/docker.sock
+----
+
+此方式通常不需要在 Windows 額外安裝 Docker CLI，也不需要開放 TCP 2375。
+
+=== 驗證 VS Code WSL 終端機
+
+[source,bash]
+----
+docker context show
+docker info
+docker ps
+----
+
+預設 context 通常為 `default`，並連向本機 Unix socket。
+
+== 六、選用：讓 Windows Docker CLI 連到 WSL Docker
+
+只在確實需要從 Windows PowerShell 呼叫 WSL 內的 daemon 時才設定 TCP。
+
+[CAUTION]
+====
+未使用 TLS 的 Docker TCP API 不提供身分驗證。即使綁定 `127.0.0.1`，本機其他程式仍可能取得近似 root 的 Docker 控制權。不要綁定 `0.0.0.0:2375`，也不要將 2375 暴露到區域網路或 Internet。
+====
+
+=== 使用 systemd override 設定監聽位置
+
+不要同時在 `/etc/docker/daemon.json` 的 `hosts` 與 systemd `ExecStart` 設定監聽位置，兩者並存可能造成啟動衝突。
+
+建立 override：
+
+[source,bash]
+----
+sudo systemctl edit docker.service
+----
+
+加入：
+
+[source,ini]
+----
+[Service]
+ExecStart=
+ExecStart=/usr/bin/dockerd -H fd:// -H tcp://127.0.0.1:2375 \
+  --containerd=/run/containerd/containerd.sock
+----
+
+重新載入並啟動：
+
+[source,bash]
+----
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+systemctl status docker --no-pager
+ss -lntp | grep 2375
+----
+
+預期只出現：
+
+[source,text]
+----
+127.0.0.1:2375
+----
+
+若顯示 `0.0.0.0:2375`，代表所有介面都可連線，應立即停止並修正。
+
+=== Windows PowerShell 設定 DOCKER_HOST
+
+Windows 端需先安裝 Docker CLI。設定目前 PowerShell session：
+
+[source,powershell]
+----
+$env:DOCKER_HOST = "tcp://localhost:2375"
+docker version
+docker ps
+----
+
+取消設定：
+
+[source,powershell]
+----
+Remove-Item Env:DOCKER_HOST
+----
+
+對 VS Code Container Tools，可在 Windows 端 `settings.json` 設定：
+
+[source,json]
+----
+{
+  "containers.environment": {
+    "DOCKER_HOST": "tcp://localhost:2375"
+  }
+}
+----
+
+不過若專案本來就放在 WSL，優先使用 VS Code WSL，而不是經由未加密 TCP 連線。
+
+== 七、基本測試
+
+=== Hello World
+
+[source,bash]
+----
+docker run --rm hello-world
+----
+
+=== Nginx
+
+[source,bash]
+----
+docker run -d \
+  --name nginx-test \
+  -p 8080:80 \
+  nginx:alpine
+----
+
+在 Windows 瀏覽器開啟：
+
+[source,text]
+----
+http://localhost:8080
+----
+
+測試後清理：
+
+[source,bash]
+----
+docker rm -f nginx-test
+----
+
+=== SQL Server
+
+不要把正式密碼直接寫入可提交到 Git 的 shell script。測試時可先用環境變數：
+
+[source,bash]
+----
+read -s -p "SQL Server SA password: " MSSQL_SA_PASSWORD
+echo
+
+docker run -d \
+  --name sqlserver-test \
+  -e ACCEPT_EULA=Y \
+  -e MSSQL_SA_PASSWORD="$MSSQL_SA_PASSWORD" \
+  -p 1433:1433 \
+  mcr.microsoft.com/mssql/server:2022-latest
+
+unset MSSQL_SA_PASSWORD
+----
+
+檢查：
+
+[source,bash]
+----
+docker ps
+docker logs sqlserver-test
+----
+
+測試後移除：
+
+[source,bash]
+----
+docker rm -f sqlserver-test
+----
+
+=== Portainer
+
+[source,bash]
+----
+docker volume create portainer_data
+
+docker run -d \
+  --name portainer \
+  --restart=always \
+  -p 9443:9443 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v portainer_data:/data \
+  portainer/portainer-ce:latest
+----
+
+開啟：
+
+[source,text]
+----
+https://localhost:9443
+----
+
+[NOTE]
+====
+Portainer 掛載 Docker socket 後具備管理 daemon 的高權限。請設定強密碼，且不要把管理埠直接暴露到不可信任的網路。
+====
+
+== 八、常見問題
+
+=== Docker service 無法啟動
+
+[source,bash]
+----
+systemctl status docker --no-pager
+journalctl -u docker.service -n 100 --no-pager
+----
+
+常見原因：
+
+* `/etc/docker/daemon.json` 與 systemd `ExecStart` 同時設定 `hosts`。
+* JSON 格式錯誤。
+* Docker Desktop 遺留的 CLI plugin 或 context 干擾。
+* WSL 尚未啟用 systemd。
+
+檢查 daemon 設定：
+
+[source,bash]
+----
+sudo dockerd --validate --config-file=/etc/docker/daemon.json
+----
+
+如果沒有建立 `daemon.json`，此步驟可以略過。
+
+=== 執行 docker 出現 permission denied
+
+確認群組：
+
+[source,bash]
+----
+id
+groups
+ls -l /var/run/docker.sock
+----
+
+若剛執行 `usermod -aG docker`，需要重新登入 WSL 或使用 `newgrp docker`。
+
+=== Windows 無法連線 localhost:2375
+
+先在 WSL 檢查：
+
+[source,bash]
+----
+ss -lntp | grep 2375
+curl http://127.0.0.1:2375/_ping
+----
+
+預期 `_ping` 回傳：
+
+[source,text]
+----
+OK
+----
+
+再從 Windows PowerShell 測試：
+
+[source,powershell]
+----
+Test-NetConnection localhost -Port 2375
+----
+
+若只為 VS Code WSL 開發，不需要排查 2375，直接使用 WSL 內 Unix socket 即可。
+
+== 九、更新與移除
+
+=== 更新 Docker Engine
+
+[source,bash]
+----
+sudo apt update
+sudo apt upgrade \
+  docker-ce \
+  docker-ce-cli \
+  containerd.io \
+  docker-buildx-plugin \
+  docker-compose-plugin
+----
+
+=== 移除 Docker Engine
+
+[source,bash]
+----
+sudo apt purge -y \
+  docker-ce \
+  docker-ce-cli \
+  containerd.io \
+  docker-buildx-plugin \
+  docker-compose-plugin \
+  docker-ce-rootless-extras
+----
+
+若確定 container、image、volume 與設定都不再需要，才刪除資料：
+
+[source,bash]
+----
+sudo rm -rf /var/lib/docker
+sudo rm -rf /var/lib/containerd
+sudo rm -rf /etc/docker
+----
+
+[WARNING]
+====
+刪除 `/var/lib/docker` 與 `/var/lib/containerd` 會永久移除 Docker 資料。
+====
+
+== 十、公開筆記的資料安全檢查
+
+將操作紀錄移到公開 repository 前，至少檢查：
+
+* Windows 使用者名稱與 `C:\Users\帳號` 路徑。
+* Linux 使用者名稱與 `/home/帳號` 路徑。
+* 公司網域、主機名稱、VPN 位址與內網 IP。
+* Email、工號、客戶名稱、專案代號。
+* Access Token、API Key、SSH private key、密碼與 cookie。
+* Registry、Nexus、GitLab、資料庫的內部網址與帳密。
+* 截圖中的瀏覽器帳號、大頭貼、書籤列、通知、工作列與檔案路徑。
+* 指令歷史中直接寫入的密碼或 token。
+
+安全的範例值可使用：
+
+[source,text]
+----
+example.com
+user@example.com
+192.0.2.10
+198.51.100.20
+203.0.113.30
+YOUR_TOKEN
+YOUR_PASSWORD
+----
+
+其中 `192.0.2.0/24`、`198.51.100.0/24`、`203.0.113.0/24` 是文件用途的保留位址，適合取代真實 IP。
+
+== 參考資料
+
+* https://docs.docker.com/engine/install/ubuntu/[Docker Docs：Install Docker Engine on Ubuntu]
+* https://docs.docker.com/engine/install/linux-postinstall/[Docker Docs：Linux post-installation steps]
+* https://docs.docker.com/engine/daemon/remote-access/[Docker Docs：Configure remote access]
+* https://docs.docker.com/engine/security/protect-access/[Docker Docs：Protect the Docker daemon socket]
+* https://docs.docker.com/engine/security/rootless/[Docker Docs：Rootless mode]
+* https://learn.microsoft.com/windows/wsl/systemd[Microsoft Learn：Use systemd to manage Linux services with WSL]
+* https://learn.microsoft.com/windows/wsl/wsl-config[Microsoft Learn：Advanced settings configuration in WSL]
+* https://code.visualstudio.com/remote/advancedcontainers/develop-remote-host[VS Code：Develop on a remote Docker host]
+* https://blog.miniasp.com/post/2025/06/14/How-to-remove-Docker-Desktop-and-install-Docker-Engine-on-Windows-with-WSL-2[原筆記參考：The Will Will Web]
