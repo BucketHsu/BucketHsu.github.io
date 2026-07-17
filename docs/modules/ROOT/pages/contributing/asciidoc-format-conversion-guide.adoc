@@ -1,0 +1,679 @@
+= AsciiDoc 文件轉換與輸出格式指南
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:last-update-label!:
+:nofooter:
+
+本文件整理 AsciiDoc 轉換為 HTML、PDF、翻頁式 HTML、Reveal.js 簡報、DocBook 與 DOCX 的常用方式，也包含 DOC/DOCX 批次轉換及 Maven 整合範例。
+
+範例一律使用通用檔名與目錄，避免將內部專案名稱、客戶名稱、公司名稱、使用者名稱或私人磁碟路徑寫入公開文件。
+
+== 工具選擇
+
+[cols="24%,34%,42%", options="header"]
+|===
+|工具 |用途 |說明
+
+|Asciidoctor
+|AsciiDoc 轉 HTML、DocBook 等格式
+|Ruby 版本的主要命令列工具。
+
+|Asciidoctor PDF
+|AsciiDoc 轉 PDF
+|支援 PDF theme、CJK 字型、語法高亮與圖片。
+
+|Asciidoctor Diagram
+|產生 PlantUML、Mermaid、Graphviz 等圖表
+|必須於執行時使用 `-r asciidoctor-diagram` 載入。
+
+|Asciidoctor reveal.js
+|AsciiDoc 轉 Reveal.js HTML 簡報
+|輸出是瀏覽器播放的 HTML 簡報，不是原生 `.pptx`。
+
+|Pandoc
+|DocBook 與 DOCX 互轉
+|Asciidoctor 本身不直接輸出 DOCX，通常先轉 DocBook。
+
+|Ghostscript
+|PDF 最佳化
+|搭配 `rghost` 或其他 PDF 最佳化工具使用。
+|===
+
+== 建議目錄結構
+
+[source,text]
+----
+document-project/
+├─ guide.adoc
+├─ images/
+│  ├─ logo.png
+│  └─ architecture.png
+├─ stylesheets/
+│  └─ custom.css
+├─ pdf-theme.yml
+├─ Gemfile
+└─ output/
+----
+
+建議把文件、圖片、CSS、PDF theme 與輸出目錄分開。不要在文件中寫死個人使用者目錄，例如 `C:/Users/<name>/...`。
+
+== 文件標頭範例
+
+[source,adoc]
+----
+= 系統操作指南
+文件維護者
+:revnumber: 1.0
+:revdate: 2026-05-06
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:imagesdir: images
+:doctype: book
+:table-caption: 表
+:figure-caption: 圖
+:source-highlighter: rouge
+:last-update-label!:
+----
+
+公開文件應避免下列資訊：
+
+* 公司或客戶全名，除非已確認可公開。
+* 內部系統代號、標案名稱與部門名稱。
+* 真實主機名稱、內網 IP、網域與帳號。
+* Windows 使用者目錄、共用磁碟代號與私人專案路徑。
+* Token、密碼、憑證、API Key 與連線字串。
+
+== 安裝方式
+
+=== 直接使用 RubyGem
+
+[source,bash]
+----
+gem install asciidoctor
+gem install asciidoctor-pdf
+gem install asciidoctor-diagram
+gem install rouge
+gem install asciidoctor-revealjs
+----
+
+只有實際使用到的功能才需要安裝。一般 HTML 文件不需要同時安裝所有高亮器。
+
+=== 使用 Bundler 管理版本
+
+對長期維護或 CI/CD 建置，建議使用 `Gemfile` 固定相依套件。
+
+[source,ruby]
+----
+source 'https://rubygems.org'
+
+gem 'asciidoctor'
+gem 'asciidoctor-pdf'
+gem 'asciidoctor-diagram'
+gem 'rouge'
+gem 'asciidoctor-revealjs'
+----
+
+安裝並執行：
+
+[source,bash]
+----
+bundle install
+bundle exec asciidoctor --version
+----
+
+== 轉換成 HTML
+
+=== 基本轉換
+
+[source,bash]
+----
+asciidoctor guide.adoc
+----
+
+預設會在來源檔旁產生：
+
+[source,text]
+----
+guide.html
+----
+
+=== 指定輸出目錄
+
+[source,bash]
+----
+asciidoctor -D output guide.adoc
+----
+
+=== 將本機圖片嵌入 HTML
+
+HTML 預設會保留圖片的外部相對路徑。需要單一 HTML 檔時，可啟用 `data-uri`：
+
+[source,bash]
+----
+asciidoctor -a data-uri guide.adoc
+----
+
+[NOTE]
+====
+`data-uri` 會將圖片編碼後嵌入 HTML，方便單檔傳送，但也會增加 HTML 檔案大小。
+====
+
+=== 使用 CSS 與圖表
+
+[source,bash]
+----
+asciidoctor \
+  -r asciidoctor-diagram \
+  -a data-uri \
+  -a stylesheet=stylesheets/custom.css \
+  -D output \
+  guide.adoc
+----
+
+PowerShell 可改用反引號換行：
+
+[source,powershell]
+----
+asciidoctor `
+  -r asciidoctor-diagram `
+  -a data-uri `
+  -a stylesheet=stylesheets/custom.css `
+  -D output `
+  .\guide.adoc
+----
+
+== 轉換成翻頁式 HTML
+
+`asciidoctor-multipage` 是第三方後端，適合把較長文件切成多個 HTML 頁面。
+
+安裝：
+
+[source,bash]
+----
+gem install asciidoctor-multipage
+----
+
+執行：
+
+[source,bash]
+----
+asciidoctor \
+  -r asciidoctor-multipage \
+  -r asciidoctor-diagram \
+  -b multipage_html5 \
+  -D output \
+  -a stylesheet=stylesheets/custom.css \
+  guide.adoc
+----
+
+[CAUTION]
+====
+此後端並非 Asciidoctor 核心功能，升級 Ruby 或 Asciidoctor 前，應先確認相容版本。
+====
+
+== 轉換成 PDF
+
+=== 安裝
+
+[source,bash]
+----
+gem install asciidoctor-pdf
+gem install asciidoctor-diagram
+gem install rouge
+----
+
+=== 基本轉換
+
+[source,bash]
+----
+asciidoctor-pdf guide.adoc
+----
+
+=== 使用 CJK、PDF theme、字型與圖表
+
+[source,powershell]
+----
+asciidoctor-pdf `
+  -r asciidoctor-diagram `
+  -a scripts=cjk `
+  -a pdf-theme=pdf-theme.yml `
+  -a pdf-fontsdir="C:/Windows/Fonts" `
+  -a source-highlighter=rouge `
+  -a rouge-style=github `
+  -D output `
+  .\guide.adoc
+----
+
+Linux 範例：
+
+[source,bash]
+----
+asciidoctor-pdf \
+  -r asciidoctor-diagram \
+  -a scripts=cjk \
+  -a pdf-theme=pdf-theme.yml \
+  -a pdf-fontsdir=/usr/share/fonts \
+  -a source-highlighter=rouge \
+  -D output \
+  guide.adoc
+----
+
+=== 將屬性寫入文件
+
+可放入 `.adoc` 文件標頭的設定：
+
+[source,adoc]
+----
+:scripts: cjk
+:source-highlighter: rouge
+:pdf-theme: pdf-theme.yml
+:pdf-fontsdir: C:/Windows/Fonts
+----
+
+此時命令可簡化為：
+
+[source,bash]
+----
+asciidoctor-pdf -r asciidoctor-diagram -D output guide.adoc
+----
+
+`-r asciidoctor-diagram` 是 Ruby 載入參數，不能只靠文件屬性取代。
+
+=== PDF 壓縮與最佳化
+
+只需要基本串流壓縮時：
+
+[source,bash]
+----
+asciidoctor-pdf -a compress guide.adoc
+----
+
+需要 Ghostscript 最佳化時：
+
+[source,bash]
+----
+gem install rghost
+asciidoctor-pdf -a optimize guide.adoc
+----
+
+Windows 通常需要設定 `GS` 環境變數，並應使用 64 位元執行檔：
+
+[source,powershell]
+----
+$env:GS = "C:/tools/ghostscript/bin/gswin64c.exe"
+asciidoctor-pdf -a optimize .\guide.adoc
+----
+
+永久設定可使用：
+
+[source,powershell]
+----
+[Environment]::SetEnvironmentVariable(
+  'GS',
+  'C:/tools/ghostscript/bin/gswin64c.exe',
+  'User'
+)
+----
+
+[NOTE]
+====
+`optimize` 不保證一定縮小檔案。文件較小時，最佳化後也可能變大。若只需一般壓縮，可先測試 `-a compress`。
+====
+
+== 轉換成 Reveal.js 簡報
+
+Reveal.js 產生的是 HTML 簡報，不是 Microsoft PowerPoint `.pptx`。
+
+[source,bash]
+----
+asciidoctor-revealjs \
+  -r asciidoctor-diagram \
+  -a data-uri \
+  -a revealjsdir=https://cdn.jsdelivr.net/npm/reveal.js \
+  -D output \
+  slides.adoc
+----
+
+基本簡報文件：
+
+[source,adoc]
+----
+= 技術分享
+:revealjs_theme: white
+
+== 第一頁
+
+內容
+
+== 第二頁
+
+* 項目一
+* 項目二
+----
+
+需要離線播放時，不應依賴 CDN，應將 Reveal.js 靜態資源下載至專案並把 `revealjsdir` 指向本機目錄。
+
+== 轉換成 DOCX
+
+Asciidoctor 不直接輸出 DOCX。常見流程為：
+
+[source,text]
+----
+AsciiDoc → DocBook XML → Pandoc → DOCX
+----
+
+=== AsciiDoc 轉 DocBook
+
+[source,bash]
+----
+asciidoctor \
+  -r asciidoctor-diagram \
+  -b docbook \
+  -o output/guide.xml \
+  guide.adoc
+----
+
+=== DocBook 轉 DOCX
+
+[source,bash]
+----
+pandoc \
+  -f docbook \
+  output/guide.xml \
+  -o output/guide.docx
+----
+
+可以合併成 PowerShell 流程：
+
+[source,powershell]
+----
+New-Item -ItemType Directory -Force -Path output | Out-Null
+
+asciidoctor `
+  -r asciidoctor-diagram `
+  -b docbook `
+  -o output/guide.xml `
+  .\guide.adoc
+
+if ($LASTEXITCODE -ne 0) {
+    throw 'AsciiDoc 轉 DocBook 失敗'
+}
+
+pandoc `
+  -f docbook `
+  output/guide.xml `
+  -o output/guide.docx
+
+if ($LASTEXITCODE -ne 0) {
+    throw 'DocBook 轉 DOCX 失敗'
+}
+----
+
+[NOTE]
+====
+複雜表格、自訂 CSS、PDF theme、互動元件與部分圖表在 DOCX 中不一定能完全保留。產出後仍應人工檢查樣式、分頁、圖片及交叉引用。
+====
+
+== DOCX 轉 AsciiDoc
+
+[source,bash]
+----
+pandoc \
+  input.docx \
+  -f docx \
+  -t asciidoc \
+  --wrap=none \
+  --extract-media=extracted-media \
+  -o converted.adoc
+----
+
+[IMPORTANT]
+====
+Pandoc 產生的是可再整理的初稿，不代表已符合專案的文件撰寫規範。轉換後應檢查標題層級、表格、圖片路徑、列表、程式碼區塊與特殊字元。
+====
+
+== 批次 DOC 轉 DOCX
+
+舊 `.doc` 格式可透過本機已安裝的 Microsoft Word COM 介面批次轉成 `.docx`。
+
+[source,powershell]
+----
+$word = New-Object -ComObject Word.Application
+$word.Visible = $false
+$word.DisplayAlerts = 0
+
+$files = Get-ChildItem -File -Filter '*.doc'
+
+try {
+    foreach ($file in $files) {
+        $document = $null
+        $outputPath = Join-Path $file.DirectoryName ($file.BaseName + '.docx')
+
+        try {
+            Write-Host "轉換：$($file.Name)"
+            $document = $word.Documents.Open(
+                $file.FullName,
+                $false,
+                $true,
+                $false
+            )
+
+            # 16 = wdFormatDocumentDefault，也就是 DOCX
+            $document.SaveAs2($outputPath, 16)
+            Write-Host "完成：$outputPath"
+        }
+        catch {
+            Write-Warning "轉換失敗：$($file.Name)"
+            Write-Warning $_.Exception.Message
+        }
+        finally {
+            if ($null -ne $document) {
+                $document.Close($false)
+                [void][Runtime.InteropServices.Marshal]::ReleaseComObject($document)
+            }
+        }
+    }
+}
+finally {
+    $word.Quit()
+    [void][Runtime.InteropServices.Marshal]::ReleaseComObject($word)
+    [GC]::Collect()
+    [GC]::WaitForPendingFinalizers()
+}
+----
+
+此方式需要 Windows 與桌面版 Microsoft Word，不適合無人值守的 Linux CI。
+
+== 批次 DOCX 轉 AsciiDoc
+
+[source,powershell]
+----
+Get-ChildItem -File -Filter '*.docx' | ForEach-Object {
+    $mediaDir = "extracted-media/$($_.BaseName)"
+    $outputFile = "$($_.BaseName).adoc"
+
+    pandoc `
+        $_.FullName `
+        -f docx `
+        -t asciidoc `
+        --wrap=none `
+        --extract-media=$mediaDir `
+        -o $outputFile
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "轉換失敗：$($_.Name)"
+    }
+}
+----
+
+== Maven 或 Spring 專案整合
+
+若 Maven 已設定 Asciidoctor Plugin，可依 `pom.xml` 綁定的生命週期執行：
+
+[source,bash]
+----
+mvn generate-resources
+----
+
+實際輸入目錄、輸出目錄、backend、圖片目錄與 attributes 都應以 `pom.xml` 為準。
+
+[NOTE]
+====
+Maven 的 Asciidoctor 文件產製、React/Vite 靜態網站建置，以及 Antora 網站建置是三套不同流程。不要假設執行其中一個命令會自動完成另外兩個流程。
+====
+
+== 常見錯誤
+
+=== 找不到 asciidoctor 命令
+
+[source,bash]
+----
+ruby --version
+gem --version
+gem env
+asciidoctor --version
+----
+
+確認 RubyGem 的 executable directory 已加入 `PATH`。
+
+=== 找不到 asciidoctor-diagram
+
+[source,bash]
+----
+gem install asciidoctor-diagram
+asciidoctor -r asciidoctor-diagram guide.adoc
+----
+
+部分圖表仍需要外部程式，例如 Graphviz、PlantUML 或 Java。應依使用的 diagram type 安裝對應工具並加入 `PATH`。
+
+=== 圖片在 HTML 中無法顯示
+
+依需求選擇：
+
+* 保留 `images/` 目錄並與 HTML 一起部署。
+* 使用 `-a data-uri` 產生單一 HTML。
+* 檢查 `:imagesdir:` 是否相對於來源文件或 base directory。
+
+=== PDF 中文顯示方框或缺字
+
+* 確認 PDF theme 指定的字型實際存在。
+* 確認 `pdf-fontsdir` 可找到字型。
+* 不要把只存在於個人電腦的商用字型放進 repository。
+* CI 環境應安裝可合法散布的 CJK 字型。
+
+=== Pandoc 轉換後格式跑掉
+
+DOCX 與 AsciiDoc 的格式模型不同。轉換後應人工整理：
+
+* 標題層級。
+* 合併儲存格與複雜表格。
+* 圖片尺寸及路徑。
+* 程式碼語言標示。
+* 章節交叉引用。
+* Word 特有的文字方塊、頁首頁尾與浮動物件。
+
+== 建議的建置腳本
+
+可建立 `build-docs.ps1`，避免每次手動輸入長指令：
+
+[source,powershell]
+----
+param(
+    [ValidateSet('html', 'pdf', 'docx')]
+    [string]$Format = 'html',
+
+    [string]$InputFile = 'guide.adoc',
+    [string]$OutputDir = 'output'
+)
+
+$ErrorActionPreference = 'Stop'
+New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+
+switch ($Format) {
+    'html' {
+        asciidoctor `
+            -r asciidoctor-diagram `
+            -a data-uri `
+            -D $OutputDir `
+            $InputFile
+    }
+    'pdf' {
+        asciidoctor-pdf `
+            -r asciidoctor-diagram `
+            -D $OutputDir `
+            $InputFile
+    }
+    'docx' {
+        $xmlPath = Join-Path $OutputDir 'document.xml'
+        $docxPath = Join-Path $OutputDir 'document.docx'
+
+        asciidoctor `
+            -r asciidoctor-diagram `
+            -b docbook `
+            -o $xmlPath `
+            $InputFile
+
+        if ($LASTEXITCODE -ne 0) {
+            throw 'AsciiDoc 轉 DocBook 失敗'
+        }
+
+        pandoc -f docbook $xmlPath -o $docxPath
+    }
+}
+
+if ($LASTEXITCODE -ne 0) {
+    throw "文件建置失敗，Exit Code：$LASTEXITCODE"
+}
+----
+
+執行：
+
+[source,powershell]
+----
+.\build-docs.ps1 -Format html
+.\build-docs.ps1 -Format pdf
+.\build-docs.ps1 -Format docx
+----
+
+== 公開前檢查
+
+在提交至公開 repository 前，至少搜尋：
+
+[source,powershell]
+----
+$patterns = @(
+    'C:\\Users\\',
+    '\\{2}[A-Za-z0-9._-]+\\',
+    '10\.[0-9]+\.[0-9]+\.[0-9]+',
+    '172\.(1[6-9]|2[0-9]|3[0-1])\.[0-9]+\.[0-9]+',
+    '192\.168\.[0-9]+\.[0-9]+',
+    'password',
+    'token',
+    'secret',
+    'api[_-]?key'
+)
+
+Get-ChildItem -Recurse -File | Select-String -Pattern $patterns
+----
+
+這只是初步檢查，仍需人工確認截圖、圖表、文件 metadata、Git 歷史與附件是否包含敏感資訊。
+
+== 官方參考
+
+* link:https://docs.asciidoctor.org/asciidoctor/latest/install/[Asciidoctor 安裝]
+* link:https://docs.asciidoctor.org/asciidoctor/latest/html-backend/manage-images/[HTML 圖片與 data-uri]
+* link:https://docs.asciidoctor.org/pdf-converter/latest/[Asciidoctor PDF]
+* link:https://docs.asciidoctor.org/pdf-converter/latest/optimize-pdf/[PDF 最佳化]
+* link:https://docs.asciidoctor.org/diagram-extension/latest/[Asciidoctor Diagram]
+* link:https://docs.asciidoctor.org/reveal.js-converter/latest/[Asciidoctor reveal.js]
+* link:https://pandoc.org/MANUAL.html[Pandoc User's Guide]

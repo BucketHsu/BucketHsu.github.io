@@ -198,7 +198,18 @@
 
 == 文件維護
 
-新增或調整文件時，請參考 xref:contributing/writing-style.adoc[文件撰寫規範]。
+[cols="30%,45%,25%", options="header"]
+|===
+|文件 |重點 |適合情境
+
+|xref:contributing/writing-style.adoc[文件撰寫規範]
+|AsciiDoc 文件的標題、命名、範例、連結與公開內容規範。
+|新增或整理網站文件。
+
+|xref:contributing/asciidoc-format-conversion-guide.adoc[AsciiDoc 文件轉換與輸出格式指南]
+|HTML、PDF、Reveal.js、DocBook、DOCX、批次轉換、Maven 與個資檢查。
+|將 AsciiDoc 發布成其他格式，或把 Word 文件移轉成 AsciiDoc。
+|===
 
 建置指令與 GitHub Pages 發布流程請參考 repository 根目錄的 `README.adoc`。
 
