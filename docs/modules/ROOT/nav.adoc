@@ -47,3 +47,4 @@
 ** xref:tools/dependency-update-guide.adoc[套件依賴更新流程]
 * 文件維護
 ** xref:contributing/writing-style.adoc[文件撰寫規範]
+** xref:contributing/asciidoc-format-conversion-guide.adoc[AsciiDoc 文件轉換與輸出格式指南]
