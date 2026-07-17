@@ -1,0 +1,1075 @@
+= SQL Server 名稱可連但 IP 無法連線與 Docker Compose 部署指南
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:last-update-label!:
+:nofooter:
+
+本文件整理 SQL Server 使用主機名稱可以連線，但改用 IP 位址卻無法連線時的排查方式，並補充 SQL Server Linux Container 的 image tag、Docker Compose 參數、環境變數與授權版本差異。
+
+[IMPORTANT]
+====
+本文中的密碼、主機名稱、IP 與目錄皆為通用範例。請勿將正式環境密碼、產品金鑰、內網 IP、公司網域或備份內容提交至公開 repository。
+====
+
+== 問題現象
+
+常見現象如下：
+
+* 使用 `localhost`、`.`、電腦名稱或 SQL Server instance name 可以連線。
+* 使用 `127.0.0.1`、主機 IP 或遠端 IP 無法連線。
+* 本機 SSMS 可以連線，其他電腦無法連線。
+* 使用 `SERVER_NAME\INSTANCE_NAME` 可以連線，但使用 `192.0.2.10,1433` 無法連線。
+* Container 內可以連線，但從 Host 或其他 Container 無法連線。
+
+這通常代表 SQL Server 本身可能有啟動，但 TCP/IP、監聽位址、通訊埠、防火牆、SQL Browser、Docker port mapping 或登入模式其中一項尚未正確設定。
+
+== 先理解不同連線方式
+
+[cols="28%,36%,36%", options="header"]
+|===
+|連線字串 |實際可能使用方式 |注意事項
+
+|`localhost`
+|本機 TCP/IP、Shared Memory 或 Named Pipes
+|本機成功不代表遠端 TCP/IP 一定可用。
+
+|`.`
+|本機預設 instance
+|通常只適合本機測試。
+
+|`SERVER01`
+|名稱解析後使用 TCP/IP，或本機協定
+|名稱能解析不代表指定 IP/Port 設定正確。
+
+|`SERVER01\SQLEXPRESS`
+|Named instance，通常由 SQL Server Browser 回報動態 port
+|需 UDP 1434，或改用固定 port。
+
+|`192.0.2.10`
+|TCP/IP，通常連到預設 port 1433
+|SQL Server 必須監聽該 IP 與 port。
+
+|`192.0.2.10,1433`
+|明確指定 TCP port
+|排查時最清楚，建議優先使用。
+
+|`tcp:192.0.2.10,1433`
+|強制使用 TCP/IP
+|可排除 Shared Memory 或 Named Pipes 造成的誤判。
+|===
+
+== Windows SQL Server 排查流程
+
+=== 1. 確認 SQL Server 服務已啟動
+
+開啟：
+
+[source,text]
+----
+SQL Server Configuration Manager
+→ SQL Server Services
+----
+
+確認目標 instance 的狀態為 `Running`，例如：
+
+[source,text]
+----
+SQL Server (MSSQLSERVER)
+SQL Server (SQLEXPRESS)
+----
+
+也可以使用 PowerShell：
+
+[source,powershell]
+----
+Get-Service | Where-Object {
+    $_.Name -like 'MSSQL*' -or $_.Name -like 'SQLBrowser'
+}
+----
+
+=== 2. 啟用 TCP/IP
+
+開啟：
+
+[source,text]
+----
+SQL Server Configuration Manager
+→ SQL Server Network Configuration
+→ Protocols for <INSTANCE_NAME>
+----
+
+將 `TCP/IP` 設為 `Enabled`。
+
+修改後必須重新啟動對應的 SQL Server 服務。
+
+=== 3. 設定固定 TCP port
+
+在 `TCP/IP` 上按右鍵選擇 `Properties`，進入 `IP Addresses`。
+
+建議排查時先確認：
+
+[source,text]
+----
+IPAll
+  TCP Dynamic Ports = 空白
+  TCP Port          = 1433
+----
+
+[NOTE]
+====
+若 `TCP Dynamic Ports` 仍有數值，SQL Server 可能使用動態 port，而不是 `TCP Port` 指定的 1433。正式環境建議明確規劃固定 port，並只開放必要來源。
+====
+
+如果是 Named instance，也可以配置其他固定 port，例如 `14330`：
+
+[source,text]
+----
+IPAll
+  TCP Dynamic Ports = 空白
+  TCP Port          = 14330
+----
+
+連線時指定：
+
+[source,text]
+----
+tcp:192.0.2.10,14330
+----
+
+=== 4. 確認 SQL Server 實際監聽 port
+
+Windows PowerShell：
+
+[source,powershell]
+----
+Get-NetTCPConnection -State Listen |
+    Where-Object LocalPort -in 1433, 14330 |
+    Select-Object LocalAddress, LocalPort, OwningProcess
+----
+
+舊版 Windows 可使用：
+
+[source,cmd]
+----
+netstat -ano | findstr LISTENING | findstr :1433
+----
+
+在 SQL Server 中也可查詢目前連線使用的協定與 port：
+
+[source,sql]
+----
+SELECT
+    net_transport,
+    local_net_address,
+    local_tcp_port,
+    client_net_address
+FROM sys.dm_exec_connections
+WHERE session_id = @@SPID;
+----
+
+=== 5. 確認防火牆
+
+建立只允許必要網段的規則比對所有來源開放更安全。
+
+PowerShell 範例：
+
+[source,powershell]
+----
+New-NetFirewallRule `
+    -DisplayName 'SQL Server TCP 1433' `
+    -Direction Inbound `
+    -Protocol TCP `
+    -LocalPort 1433 `
+    -RemoteAddress 192.0.2.0/24 `
+    -Action Allow
+----
+
+[WARNING]
+====
+不要直接將 SQL Server 1433 暴露到公網。若必須跨網路連線，應搭配 VPN、私有網路、防火牆白名單與 TLS。
+====
+
+=== 6. Named instance 與 SQL Server Browser
+
+使用下列形式時：
+
+[source,text]
+----
+SERVER01\SQLEXPRESS
+----
+
+Client 通常需透過 SQL Server Browser 查詢 instance 使用的 TCP port。SQL Server Browser 使用 UDP 1434。
+
+有兩種做法：
+
+. 啟用 SQL Server Browser，並允許 UDP 1434。
+. 更建議設定固定 port，Client 直接使用 `SERVER01,14330`，不依賴 Browser。
+
+=== 7. 確認登入模式
+
+若 Windows Authentication 可以登入，但 SQL Login 不行，確認 Server Authentication：
+
+[source,text]
+----
+SQL Server and Windows Authentication mode
+----
+
+修改後需重新啟動 SQL Server。
+
+確認登入帳號沒有停用：
+
+[source,sql]
+----
+SELECT
+    name,
+    is_disabled
+FROM sys.sql_logins
+ORDER BY name;
+----
+
+不要在應用程式中使用 `sa`。應建立權限最小化的專用帳號。
+
+=== 8. 逐層測試
+
+本機測試 port：
+
+[source,powershell]
+----
+Test-NetConnection 127.0.0.1 -Port 1433
+----
+
+遠端測試：
+
+[source,powershell]
+----
+Test-NetConnection 192.0.2.10 -Port 1433
+----
+
+Linux：
+
+[source,bash]
+----
+nc -vz 192.0.2.10 1433
+----
+
+若 TCP 不通，先處理監聽、routing 與 firewall，不要先反覆修改 JDBC URL。
+
+== 常見原因快速對照
+
+[cols="32%,34%,34%", options="header"]
+|===
+|現象 |可能原因 |處理方向
+
+|名稱可連，IP 不可連
+|本機使用 Shared Memory；TCP/IP 未啟用
+|啟用 TCP/IP 並指定 `tcp:IP,port` 測試。
+
+|本機 IP 可連，遠端不可連
+|Windows Firewall、網路 ACL 或 NAT
+|逐層測試 TCP port，確認 inbound rule。
+
+|Instance name 可連，IP 不可連
+|Named instance 使用動態 port
+|確認 SQL Browser，或改成固定 port。
+
+|1433 沒有 LISTEN
+|SQL Server 未使用 1433
+|檢查 `TCP Dynamic Ports`、`TCP Port` 與 errorlog。
+
+|Container 內可連，Host 不可連
+|未設定 `ports`，或 Host port 被占用
+|確認 `docker compose ps` 與 `docker port`。
+
+|Host 可連，其他主機不可連
+|只綁定 loopback 或 Host firewall 阻擋
+|確認 Docker publish address 與 firewall。
+
+|帳密錯誤
+|使用已棄用變數、密碼不符政策、既有 volume 保留舊密碼
+|改用 `MSSQL_SA_PASSWORD`；理解密碼只在首次初始化套用。
+|===
+
+== Docker Compose 基本範例
+
+以下範例適合開發或測試環境：
+
+[source,yaml]
+----
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql-dev
+    ports:
+      - "127.0.0.1:1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Developer"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
+      TZ: "Asia/Taipei"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    restart: unless-stopped
+
+volumes:
+  sqlserver-data:
+----
+
+`.env`：
+
+[source,dotenv]
+----
+MSSQL_SA_PASSWORD=replace-with-a-strong-local-password
+----
+
+將 `.env` 加入 `.gitignore`：
+
+[source,gitignore]
+----
+.env
+.env.*
+!.env.example
+----
+
+`.env.example` 只保留提示：
+
+[source,dotenv]
+----
+MSSQL_SA_PASSWORD=<set-a-strong-password>
+----
+
+[IMPORTANT]
+====
+原本使用的 `SA_PASSWORD` 已被 Microsoft 標示為 deprecated，應改用 `MSSQL_SA_PASSWORD`。
+====
+
+== Compose 各欄位說明
+
+=== `image`
+
+[source,yaml]
+----
+image: mcr.microsoft.com/mssql/server:2022-latest
+----
+
+指定 Microsoft Container Registry 的 SQL Server Linux image。
+
+=== `container_name`
+
+[source,yaml]
+----
+container_name: mssql-dev
+----
+
+固定 Container 名稱，方便本機操作。
+
+在多份 Compose、CI 或需要水平擴充的情境，不一定要設定 `container_name`，讓 Compose 自動產生名稱通常更有彈性。
+
+=== `ports`
+
+[source,yaml]
+----
+ports:
+  - "127.0.0.1:1433:1433"
+----
+
+格式為：
+
+[source,text]
+----
+HOST_IP:HOST_PORT:CONTAINER_PORT
+----
+
+常見差異：
+
+[source,yaml]
+----
+# 只允許本機連線
+- "127.0.0.1:1433:1433"
+
+# 對主機所有介面發布，不建議直接暴露公網
+- "1433:1433"
+
+# Host 使用 11433，Container 仍監聽 1433
+- "127.0.0.1:11433:1433"
+----
+
+Client 連線範例：
+
+[source,text]
+----
+localhost,11433
+----
+
+同一個 Compose network 的其他 service 不需要經過 Host port，應使用 service name：
+
+[source,text]
+----
+sqlserver,1433
+----
+
+=== `volumes`
+
+命名 volume：
+
+[source,yaml]
+----
+volumes:
+  - sqlserver-data:/var/opt/mssql
+----
+
+優點：
+
+* 較不容易因 Host 目錄權限造成 SQL Server 無法啟動。
+* 由 Docker 管理資料位置。
+* 適合一般開發環境。
+
+Bind mount：
+
+[source,yaml]
+----
+volumes:
+  - ./data:/var/opt/mssql
+----
+
+需特別確認：
+
+* SQL Server 2019 以上 image 預設以非 root 身分執行。
+* Host 目錄必須讓 Container 內的 `mssql` 使用者可讀寫。
+* SELinux 主機可能需要正確 label。
+* Windows、WSL、Linux 的檔案權限行為不同。
+
+也可以拆分資料、log 與 secrets：
+
+[source,yaml]
+----
+volumes:
+  - ./data:/var/opt/mssql/data
+  - ./log:/var/opt/mssql/log
+  - ./secrets:/var/opt/mssql/secrets
+----
+
+[WARNING]
+====
+`docker compose down` 不會刪除命名 volume；`docker compose down -v` 會刪除 volume 與資料。執行前必須確認是否需要保留資料。
+====
+
+=== `environment`
+
+Map 寫法較容易閱讀：
+
+[source,yaml]
+----
+environment:
+  ACCEPT_EULA: "Y"
+  MSSQL_PID: "Developer"
+  MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
+  TZ: "Asia/Taipei"
+----
+
+List 寫法也可使用：
+
+[source,yaml]
+----
+environment:
+  - ACCEPT_EULA=Y
+  - MSSQL_PID=Developer
+  - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}
+----
+
+不要把正式密碼直接寫在 Compose 檔。
+
+=== `restart`
+
+[cols="28%,72%", options="header"]
+|===
+|值 |行為
+
+|`no`
+|預設，不自動重新啟動。
+
+|`always`
+|只要 Container 停止就重啟；Docker daemon 重啟後也會啟動。
+
+|`unless-stopped`
+|除非使用者明確停止，否則會自動重啟。一般長期開發服務較常使用。
+
+|`on-failure`
+|只有非零 exit code 時重啟，可搭配次數限制。
+|===
+
+=== `healthcheck`
+
+SQL Server 啟動需要時間。應用程式若立即連線，可能在資料庫尚未 ready 時失敗。
+
+不同 image 的 `sqlcmd` 路徑可能不同，範例同時嘗試新版與舊版工具路徑：
+
+[source,yaml]
+----
+healthcheck:
+  test:
+    - CMD-SHELL
+    - >-
+      if [ -x /opt/mssql-tools18/bin/sqlcmd ]; then
+        /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -Q "SELECT 1";
+      else
+        /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -Q "SELECT 1";
+      fi
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 30s
+----
+
+`$${MSSQL_SA_PASSWORD}` 使用兩個 `$`，避免 Compose 在 Host 端先展開，讓變數留到 Container 內執行。
+
+=== `depends_on`
+
+應用程式可等待 SQL Server healthcheck 成功：
+
+[source,yaml]
+----
+services:
+  app:
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+----
+
+即使有 healthcheck，應用程式仍建議實作資料庫連線 retry。
+
+=== `networks`
+
+[source,yaml]
+----
+services:
+  sqlserver:
+    networks:
+      - backend
+
+  app:
+    networks:
+      - backend
+
+networks:
+  backend:
+----
+
+同一 network 內可用 service name 連線：
+
+[source,text]
+----
+Server=sqlserver,1433;
+----
+
+不要在 Container 內使用 `localhost` 連另一個 Container；`localhost` 代表該 Container 自己。
+
+== SQL Server image version 選擇
+
+=== 年度 latest tag
+
+常見 tag：
+
+[source,text]
+----
+mcr.microsoft.com/mssql/server:2019-latest
+mcr.microsoft.com/mssql/server:2022-latest
+mcr.microsoft.com/mssql/server:2025-latest
+----
+
+特性：
+
+* 年度版本固定，例如 `2022-latest` 不會自動跨成 SQL Server 2025。
+* 同一年度內會隨 Microsoft 發布的 CU/GDR 或安全更新移動。
+* 重新 `docker pull` 或重新建置後，取得的實際 image 內容可能不同。
+* 適合本機開發與願意持續跟隨更新的環境。
+
+=== 固定 CU/GDR tag
+
+正式環境或需要可重現建置時，應從 Microsoft Artifact Registry 選擇明確 tag，例如特定 CU 與作業系統基底的 tag。
+
+概念示例：
+
+[source,text]
+----
+mcr.microsoft.com/mssql/server:<specific-release-tag>
+----
+
+實際 tag 名稱會依版本與發布內容不同，使用前應查閱官方 release history 與 MCR tag 清單。
+
+優點：
+
+* 同一 tag 下的環境較容易重現。
+* 升級可透過 PR 明確檢視與測試。
+
+注意：
+
+* 固定 tag 不代表永遠安全，仍需定期追蹤安全更新。
+* 若供應商重新發布相同 tag，最嚴格的供應鏈控管可再固定 image digest。
+
+=== 固定 image digest
+
+[source,yaml]
+----
+image: mcr.microsoft.com/mssql/server:2022-latest@sha256:<digest>
+----
+
+特性：
+
+* 取得完全相同的 image。
+* 安全更新不會自動套用。
+* 需建立定期更新 digest 的流程。
+
+=== 版本建議
+
+[cols="30%,35%,35%", options="header"]
+|===
+|情境 |建議 |原因
+
+|個人本機開發
+|`2022-latest` 或團隊指定年度 latest
+|設定簡單，能取得同年度更新。
+
+|CI 測試
+|固定年度 latest，或固定 CU tag
+|視測試是否要追新更新決定。
+
+|正式環境
+|固定已驗證的 CU/GDR tag 或 digest
+|避免非預期更新，升級可控。
+
+|舊系統相容測試
+|使用實際正式環境相同 major/CU
+|避免只在新版測試通過。
+
+|新專案
+|先評估仍在支援生命週期內的版本
+|減少很快再次升級的成本。
+|===
+
+== SQL Server Edition 與授權差異
+
+[IMPORTANT]
+====
+Docker image 可以下載不代表可以免費用於正式環境。正式使用 Standard、Web、Enterprise 或 EnterpriseCore 前，仍須具備符合 Microsoft Product Terms 的授權。以下為技術選型摘要，不取代正式授權條款或法律意見。
+====
+
+=== Developer
+
+`MSSQL_PID=Developer`
+
+* 免費。
+* 功能大致對應 Enterprise。
+* 只能用於開發與測試。
+* 不可用於正式 production workload。
+* 適合工程師本機、CI、整合測試與非正式環境。
+
+=== Express
+
+`MSSQL_PID=Express`
+
+* 免費，可用於小型正式應用，但受功能與資源限制。
+* SQL Server 2022 Express 單一 relational database 上限為 10 GB。
+* SQL Server 2022 Database Engine 主要限制包含較少 CPU 與約 1,410 MB buffer pool。
+* 沒有 SQL Server Agent。
+* 適合小型服務、桌面應用、學習或低負載系統。
+
+[NOTE]
+====
+SQL Server 2025 Express 的容量與包裝方式已有變更，例如 relational database 上限提高；選用時應閱讀對應 major version 的官方 Edition 文件，不要將 2022 限制直接套用到所有版本。
+====
+
+=== Evaluation
+
+`MSSQL_PID=Evaluation`
+
+* 免費評估。
+* 功能對應 Enterprise。
+* 評估期限通常為 180 天。
+* 沒有正式 production 使用權。
+* 到期前必須轉換 Edition 或移除。
+
+=== Standard
+
+`MSSQL_PID=Standard`
+
+* 付費正式版本。
+* 適合一般企業應用與中階 workload。
+* SQL Server 2022 Database Engine 單一 instance 上限為較小者：4 sockets 或 24 cores。
+* SQL Server 2022 buffer pool 上限為 128 GB。
+* 支援 SQL Server Agent、基本可用性群組與多數企業功能。
+* 部分進階高可用性、線上維護與效能功能僅 Enterprise 完整支援。
+
+=== Web
+
+`MSSQL_PID=Web`
+
+* 付費版本。
+* 主要提供合格 Web hoster 與 Web VAP 使用，並非一般公司可任意選用的低價 Standard 替代品。
+* 功能與資源介於 Express、Standard 之間。
+* SQL Server 2025 起已不再提供 Web Edition。
+* 是否具備使用資格應依正式合約確認。
+
+=== Enterprise 與 EnterpriseCore
+
+舊值：
+
+[source,text]
+----
+MSSQL_PID=Enterprise
+----
+
+Microsoft 將此值描述為舊式 Enterprise Server + CAL 模型，單一 instance 有 20 cores 限制，且不適用新的合約。
+
+現行 Enterprise core-based 部署通常應使用：
+
+[source,text]
+----
+MSSQL_PID=EnterpriseCore
+----
+
+特性：
+
+* 付費正式版本。
+* 提供最高擴充性、完整 Always On Availability Groups、進階線上操作、Resource Governor 與較完整的效能功能。
+* 適合關鍵任務、高可用性、大型資料量與高效能需求。
+* 授權成本與虛擬化規則較複雜，必須依 core、VM、Software Assurance 等條件確認。
+
+=== SQL Server 2025 Developer Edition 名稱
+
+SQL Server 2025 新增更明確的開發版選項：
+
+[source,text]
+----
+MSSQL_PID=StandardDeveloper
+MSSQL_PID=EnterpriseDeveloper
+----
+
+* `StandardDeveloper`：功能對應 Standard，但僅限開發與測試。
+* `EnterpriseDeveloper`：功能對應 Enterprise，但僅限開發與測試。
+* 舊版 SQL Server 的 `Developer` 概念主要對應 Enterprise 功能。
+
+使用前應確認目標 image major version 是否支援該 `MSSQL_PID` 值。
+
+=== 快速比較
+
+[cols="18%,17%,20%,20%,25%", options="header"]
+|===
+|Edition |費用 |Production |適用情境 |重要限制
+
+|Developer
+|免費
+|否
+|開發、測試、CI
+|不可承載正式 workload。
+
+|Express
+|免費
+|可
+|小型應用、學習
+|資料庫容量、CPU、Memory、Agent 等限制。
+
+|Evaluation
+|免費試用
+|否
+|短期驗證
+|通常 180 天。
+
+|Web
+|付費
+|可
+|合格 Web hosting
+|資格受授權條款限制；2025 已取消。
+
+|Standard
+|付費
+|可
+|一般企業系統
+|規模與部分進階功能有限制。
+
+|EnterpriseCore
+|付費
+|可
+|關鍵任務、大型系統
+|成本高，授權規則需正式確認。
+|===
+
+== SQL Server Container 可用環境變數
+
+以下為 Microsoft 官方列出的主要 Linux／Container 變數。
+
+[cols="32%,68%", options="header"]
+|===
+|變數 |用途
+
+|`ACCEPT_EULA`
+|接受 End-User License Agreement，必要設定。
+
+|`MSSQL_SA_PASSWORD`
+|設定 `sa` 密碼。`SA_PASSWORD` 已 deprecated。
+
+|`MSSQL_PID`
+|設定 Edition 或產品金鑰。
+
+|`MSSQL_TCP_PORT`
+|設定 SQL Server 監聽 port，預設 1433。若改為 1234，Compose 也應 map `1234:1234`。
+
+|`MSSQL_IP_ADDRESS`
+|設定監聽 IPv4 位址，例如 `0.0.0.0`。
+
+|`MSSQL_LCID`
+|設定語言識別碼。
+
+|`MSSQL_COLLATION`
+|設定預設定序。
+
+|`MSSQL_MEMORY_LIMIT_MB`
+|限制 SQL Server 可使用的記憶體 MB。
+
+|`MSSQL_BACKUP_DIR`
+|設定預設備份目錄。
+
+|`MSSQL_DATA_DIR`
+|設定新資料檔 `.mdf` 的目錄。
+
+|`MSSQL_LOG_DIR`
+|設定新 transaction log `.ldf` 的目錄。
+
+|`MSSQL_DUMP_DIR`
+|設定 dump 與 troubleshooting 檔案目錄。
+
+|`MSSQL_ENABLE_HADR`
+|啟用或停用 availability groups。
+
+|`MSSQL_AGENT_ENABLED`
+|啟用或停用 SQL Server Agent。
+
+|`MSSQL_MASTER_DATA_FILE`
+|指定 `master.mdf` 位置，必須在第一次啟動前設定。
+
+|`MSSQL_MASTER_LOG_FILE`
+|指定 `mastlog.ldf` 位置，必須在第一次啟動前設定。
+
+|`MSSQL_ERROR_LOG_FILE`
+|設定 SQL Server errorlog 路徑。
+|===
+
+部分新 image 也可能提供初始化資料庫與非 `sa` 使用者的變數，例如 `MSSQL_DB`、`MSSQL_USER`、`MSSQL_PASSWORD`。由於支援範圍可能隨 image 版本更新，使用前應確認目標 image 的官方文件，且正式應用仍建議以 migration 或初始化 script 明確管理 schema 與帳號。
+
+== 改用自訂 port 的 Compose 範例
+
+[source,yaml]
+----
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    ports:
+      - "127.0.0.1:11433:11433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Developer"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
+      MSSQL_TCP_PORT: "11433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+
+volumes:
+  sqlserver-data:
+----
+
+Client：
+
+[source,text]
+----
+localhost,11433
+----
+
+[NOTE]
+====
+如果只把 Host port 改成 11433，但 Container 仍監聽 1433，應使用 `11433:1433`；若同時設定 `MSSQL_TCP_PORT=11433`，則使用 `11433:11433`。
+====
+
+== 完整開發環境 Compose 範例
+
+[source,yaml]
+----
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Developer"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
+      MSSQL_AGENT_ENABLED: "true"
+      MSSQL_MEMORY_LIMIT_MB: "4096"
+      TZ: "Asia/Taipei"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          if [ -x /opt/mssql-tools18/bin/sqlcmd ]; then
+            /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -Q "SELECT 1";
+          else
+            /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -Q "SELECT 1";
+          fi
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  sqlserver-data:
+----
+
+啟動：
+
+[source,bash]
+----
+docker compose up -d
+----
+
+查看狀態：
+
+[source,bash]
+----
+docker compose ps
+----
+
+查看 log：
+
+[source,bash]
+----
+docker compose logs -f sqlserver
+----
+
+確認版本與 Edition：
+
+[source,sql]
+----
+SELECT
+    SERVERPROPERTY('ProductVersion') AS PRODUCT_VERSION,
+    SERVERPROPERTY('ProductLevel') AS PRODUCT_LEVEL,
+    SERVERPROPERTY('Edition') AS EDITION,
+    SERVERPROPERTY('EngineEdition') AS ENGINE_EDITION;
+----
+
+== Container 連線除錯
+
+=== 確認 port mapping
+
+[source,bash]
+----
+docker compose ps
+docker port mssql-dev
+----
+
+=== 確認 Container log
+
+[source,bash]
+----
+docker compose logs --tail=200 sqlserver
+----
+
+常見問題：
+
+* 密碼不符合複雜度政策。
+* volume 權限不足。
+* Host port 已被其他 SQL Server 或 Container 使用。
+* Host 架構或 image 不支援。
+* 磁碟空間不足。
+* 既有 `/var/opt/mssql` 保存了舊 master database。
+
+=== 密碼修改後仍無法登入
+
+`MSSQL_SA_PASSWORD` 主要用於新 instance 初始化。若 volume 已存在，修改 `.env` 不一定會改掉既有 `sa` 密碼。
+
+不要直接刪除 production volume。開發環境確認資料可刪除後，才能使用：
+
+[source,bash]
+----
+docker compose down -v
+----
+
+再重新初始化。
+
+=== 從另一個 Container 連線
+
+錯誤：
+
+[source,text]
+----
+Server=localhost,1433
+----
+
+正確：
+
+[source,text]
+----
+Server=sqlserver,1433
+----
+
+因為 `localhost` 只代表應用程式 Container 自己。
+
+=== Host 能連，遠端主機不能連
+
+若 Compose 使用：
+
+[source,yaml]
+----
+ports:
+  - "127.0.0.1:1433:1433"
+----
+
+這是刻意只允許本機連線。若確實要開放 LAN，需調整 publish address 並建立限制來源的 firewall rule，但不得直接暴露至 Internet。
+
+== 建議排查順序
+
+. 確認 SQL Server service／Container 正常啟動。
+. 確認 SQL Server 實際監聽 TCP port。
+. 使用 `127.0.0.1,port` 由 Server 本機測試。
+. 使用 Server 的實際 IP 由 Server 本機測試。
+. 從遠端執行 `Test-NetConnection` 或 `nc`。
+. 檢查 Windows Firewall、Linux firewall、Cloud Security Group 與 NAT。
+. Named instance 改用固定 port 排除 SQL Browser 問題。
+. 確認 SQL Authentication、帳號狀態與密碼。
+. Container 環境確認 port mapping、network、volume 與初始化狀態。
+. 最後再檢查應用程式 JDBC／ADO.NET connection string。
+
+== 公開筆記前檢查
+
+提交前搜尋：
+
+[source,bash]
+----
+git grep -nEi \
+  '(password|passwd|pwd|secret|token|api[_-]?key|product[_-]?key|MSSQL_SA_PASSWORD)'
+----
+
+還應人工檢查：
+
+* 真實 `sa` 密碼或 `.env`。
+* SQL Server product key。
+* 公司內網 IP、DNS、instance name。
+* 備份檔、MDF、LDF、憑證與 connection string。
+* 截圖中的 Server Name、登入帳號、資料庫名稱與檔案路徑。
+
+== 官方參考
+
+* link:https://learn.microsoft.com/zh-tw/sql/linux/configure/environment-variables[Microsoft Learn：使用環境變數設定 Linux 上的 SQL Server]
+* link:https://learn.microsoft.com/sql/linux/containers/configure[Microsoft Learn：設定及自訂 SQL Server Docker Container]
+* link:https://learn.microsoft.com/sql/linux/containers/troubleshoot[Microsoft Learn：SQL Server Container 疑難排解]
+* link:https://learn.microsoft.com/sql/linux/containers/security[Microsoft Learn：保護 SQL Server Linux Container]
+* link:https://learn.microsoft.com/sql/sql-server/editions-and-components-of-sql-server-2022[Microsoft Learn：SQL Server 2022 Editions and supported features]
+* link:https://learn.microsoft.com/sql/sql-server/editions-and-components-of-sql-server-2025[Microsoft Learn：SQL Server 2025 Editions and supported features]
+* link:https://www.microsoft.com/licensing/product-licensing/sql-server[Microsoft SQL Server licensing resources]
+* link:https://learn.microsoft.com/troubleshoot/sql/releases/linux/release-history-2022[Microsoft Learn：SQL Server 2022 on Linux release history]
