@@ -18,6 +18,7 @@
 ** xref:java/java-layering-dto-dao-entity.adoc[Java MVC MVVM 分層與 DTO DAO Entity Repository 名詞說明]
 ** xref:java/character-encoding-guide.adoc[字元、字集與編碼整理]
 ** xref:java/tomcat-server-xml.adoc[TomcatServerXML設定]
+** xref:java/tomcat-pkcs12-objectidentifier-error.adoc[Tomcat 8 載入 PKCS#12 憑證發生 ObjectIdentifier 錯誤]
 ** xref:frontend/html5-semantic-elements.adoc[HTML5 語意化 Element 使用規範]
 * 網路與容器
 ** Nginx
