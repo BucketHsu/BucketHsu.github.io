@@ -1,0 +1,424 @@
+= Tomcat 8 載入 PKCS#12 憑證發生 ObjectIdentifier 錯誤
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:last-update-label!:
+
+== 問題現象
+
+Tomcat 8、Tomcat 8.5 或 Spring Boot 使用 PKCS#12 憑證時，服務啟動失敗，並出現類似錯誤：
+
+[source,text]
+----
+Caused by: java.io.IOException:
+ObjectIdentifier() -- data isn't an object ID (tag = 48)
+----
+
+完整堆疊通常還會包含：
+
+[source,text]
+----
+sun.security.pkcs12.PKCS12KeyStore.parseAlgParameters
+com.sun.crypto.provider.PBES2Parameters.engineInit
+java.security.KeyStore.load
+----
+
+這通常不是 Tomcat 本身無法使用 PKCS#12，而是執行中的 Java 版本無法解析該 `.p12` 或 `.pfx` 使用的加密演算法參數。
+
+== 常見原因
+
+較新的 OpenSSL、憑證工具或 Java 版本產生 PKCS#12 時，可能使用 PBES2、PBKDF2、AES 等較新的保護方式。
+
+部分舊版 Java 7、Java 8 或 Java 11 對這些 PKCS#12 參數的解析不完整，因此載入憑證時會出現：
+
+[source,text]
+----
+ObjectIdentifier() -- data isn't an object ID (tag = 48)
+----
+
+[IMPORTANT]
+====
+不要只依照「伺服器已安裝某個新版 Java」判斷。
+
+Tomcat 實際啟動時可能仍使用另一套舊版 JRE，例如：
+
+* Windows Service 指向舊的 `jvm.dll`
+* `JAVA_HOME` 與服務設定不一致
+* IDE、命令列與正式服務使用不同 Java
+* 主機同時安裝多套 JDK/JRE
+====
+
+== 第一階段：確認 Tomcat 實際使用的 Java
+
+=== 命令列確認
+
+[source,bash]
+----
+java -version
+
+# Windows
+where java
+
+# Linux
+which java
+readlink -f "$(which java)"
+----
+
+=== 確認 JAVA_HOME
+
+.Windows PowerShell
+[source,powershell]
+----
+$env:JAVA_HOME
+& "$env:JAVA_HOME/bin/java.exe" -version
+----
+
+.Linux
+[source,bash]
+----
+echo "$JAVA_HOME"
+"$JAVA_HOME/bin/java" -version
+----
+
+=== Tomcat Windows Service
+
+使用 `tomcat8w.exe` 或服務管理工具檢查 Java Virtual Machine 路徑，例如：
+
+[source,text]
+----
+C:\Java\jdk8\jre\bin\server\jvm.dll
+----
+
+該路徑所屬 Java 版本才是服務實際使用的版本。
+
+也可以查看 Tomcat 啟動記錄中的 JVM 資訊：
+
+[source,text]
+----
+JVM Version: 1.8.0_xxx
+JVM Vendor:  ...
+----
+
+== 第二階段：確認 PKCS#12 是否可被目前 Java 讀取
+
+使用 Tomcat 同一套 Java 的 `keytool` 測試：
+
+[source,bash]
+----
+keytool -list -v \
+  -storetype PKCS12 \
+  -keystore server.p12
+----
+
+Windows PowerShell：
+
+[source,powershell]
+----
+& "$env:JAVA_HOME/bin/keytool.exe" `
+  -list -v `
+  -storetype PKCS12 `
+  -keystore .\server.p12
+----
+
+如果 `keytool` 也出現相同的 `ObjectIdentifier` 錯誤，代表問題在 Java 與 PKCS#12 格式的相容性，而不是 Tomcat Connector 設定。
+
+=== 查看 alias
+
+成功讀取後，確認私鑰項目的 alias：
+
+[source,text]
+----
+Alias name: tomcat
+Entry type: PrivateKeyEntry
+----
+
+Tomcat 設定中的 alias 必須與此名稱一致。
+
+== 解法一：升級 Java
+
+最直接的處理方式是升級至仍受支援且能解析該 PKCS#12 的 Java 更新版本。
+
+升級後必須再次確認：
+
+[source,bash]
+----
+java -version
+keytool -list -storetype PKCS12 -keystore server.p12
+----
+
+[NOTE]
+====
+原始筆記記錄為 Java 8u303、Java 7u311 之後的版本才可正常處理特定案例。
+
+實際最低版本仍會受到下列因素影響：
+
+* PKCS#12 由哪一版 OpenSSL 或工具產生
+* 使用的 PBE、MAC 與加密演算法
+* JDK 發行商是否回補相關修正
+
+因此不應只依賴版本號判斷，應以相同 Java 的 `keytool -list` 實際驗證。
+====
+
+== 解法二：重新匯出成舊版 Java 相容的 PKCS#12
+
+若正式環境暫時無法升級 Java，可以使用 OpenSSL 重新匯出相容格式。
+
+=== OpenSSL 3 使用 legacy 模式
+
+假設已有：
+
+[source,text]
+----
+server.crt
+server.key
+ca-chain.crt
+----
+
+重新匯出：
+
+[source,bash]
+----
+openssl pkcs12 -export \
+  -legacy \
+  -in server.crt \
+  -inkey server.key \
+  -certfile ca-chain.crt \
+  -name tomcat \
+  -out server-legacy.p12
+----
+
+未使用憑證鏈時：
+
+[source,bash]
+----
+openssl pkcs12 -export \
+  -legacy \
+  -in server.crt \
+  -inkey server.key \
+  -name tomcat \
+  -out server-legacy.p12
+----
+
+完成後，必須使用目標 Java 驗證：
+
+[source,bash]
+----
+keytool -list -v \
+  -storetype PKCS12 \
+  -keystore server-legacy.p12
+----
+
+[WARNING]
+====
+`-legacy` 是為了舊版 Java 相容性而降低 PKCS#12 容器的保護演算法相容門檻。
+
+長期做法仍應是升級 Java，而不是永久依賴舊式演算法。
+====
+
+=== 使用 keytool 重新建立 PKCS#12
+
+若新版 Java 可以讀取原檔，也可以轉存一次：
+
+[source,bash]
+----
+keytool -importkeystore \
+  -srckeystore server.p12 \
+  -srcstoretype PKCS12 \
+  -destkeystore server-compatible.p12 \
+  -deststoretype PKCS12
+----
+
+轉換後仍要在正式環境使用的 Java 上執行 `keytool -list` 驗證。
+
+== Tomcat 8.5 設定範例
+
+建議使用 `SSLHostConfig` 與 `Certificate`：
+
+[source,xml]
+----
+<Connector
+    port="8443"
+    protocol="org.apache.coyote.http11.Http11NioProtocol"
+    maxThreads="150"
+    SSLEnabled="true">
+
+    <SSLHostConfig protocols="TLSv1.2">
+        <Certificate
+            certificateKeystoreFile="conf/server.p12"
+            certificateKeystorePassword="${env.KEYSTORE_PASSWORD}"
+            certificateKeystoreType="PKCS12"
+            certificateKeyAlias="tomcat"
+            type="RSA" />
+    </SSLHostConfig>
+</Connector>
+----
+
+[IMPORTANT]
+====
+範例中的密碼不應直接提交到公開 repository。
+
+正式環境可使用：
+
+* 環境變數
+* 密碼檔
+* 外部化設定
+* Secret 管理系統
+====
+
+== Tomcat 8.0 舊式 Connector 範例
+
+較舊的 Tomcat 8.0 設定可能使用下列屬性：
+
+[source,xml]
+----
+<Connector
+    port="8443"
+    protocol="org.apache.coyote.http11.Http11NioProtocol"
+    SSLEnabled="true"
+    scheme="https"
+    secure="true"
+    clientAuth="false"
+    sslProtocol="TLS"
+    keystoreFile="conf/server.p12"
+    keystorePass="${env.KEYSTORE_PASSWORD}"
+    keystoreType="PKCS12"
+    keyAlias="tomcat" />
+----
+
+Tomcat 8.5 以後，優先採用 `SSLHostConfig`／`Certificate` 寫法。
+
+== Spring Boot 設定範例
+
+[source,yaml]
+----
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    key-store: classpath:server.p12
+    key-store-type: PKCS12
+    key-store-password: ${KEYSTORE_PASSWORD}
+    key-alias: tomcat
+----
+
+若 `server.p12` 位於外部目錄：
+
+[source,yaml]
+----
+server:
+  ssl:
+    key-store: file:./config/server.p12
+----
+
+[NOTE]
+====
+Spring Boot 最終仍透過 Java KeyStore API 載入 PKCS#12。
+
+因此發生 `ObjectIdentifier` 時，排查重點同樣是 Java 版本與 PKCS#12 演算法相容性。
+====
+
+== 其他常見問題
+
+=== 密碼錯誤
+
+[source,text]
+----
+Keystore was tampered with, or password was incorrect
+----
+
+確認：
+
+* keystore 密碼是否正確
+* 私鑰密碼是否與 keystore 密碼一致
+* Tomcat 是否需要另外設定 key password
+
+=== alias 錯誤
+
+[source,text]
+----
+Alias name does not identify a key entry
+----
+
+查看 alias：
+
+[source,bash]
+----
+keytool -list -v -storetype PKCS12 -keystore server.p12
+----
+
+並確認該項目是：
+
+[source,text]
+----
+Entry type: PrivateKeyEntry
+----
+
+=== 憑證鏈不完整
+
+啟動成功不代表瀏覽器端一定正常。
+
+可用 OpenSSL 檢查遠端憑證鏈：
+
+[source,bash]
+----
+openssl s_client \
+  -connect localhost:8443 \
+  -servername localhost \
+  -showcerts
+----
+
+=== 檔案路徑錯誤
+
+相對路徑通常以 `CATALINA_BASE` 為基準。
+
+建議將憑證放在：
+
+[source,text]
+----
+CATALINA_BASE/conf/server.p12
+----
+
+並避免把正式憑證提交到 Git。
+
+== 建議排查順序
+
+. 確認 Tomcat 實際使用的 Java 版本。
+. 使用同一套 Java 的 `keytool -list` 讀取 PKCS#12。
+. 若重現 `ObjectIdentifier`，優先升級 Java。
+. 無法升級時，使用 OpenSSL `-legacy` 重新匯出相容檔案。
+. 確認 keystore type、密碼與 alias。
+. 確認 Tomcat Connector 或 Spring Boot SSL 設定。
+. 啟動後再驗證 TLS、憑證鏈與瀏覽器連線。
+
+== 安全與公開文件注意事項
+
+公開筆記時，不要提交：
+
+* 真實 `.p12`、`.pfx`、`.jks`、私鑰或 CSR
+* 正式環境 keystore 密碼
+* 公司網域、主機名稱與內網 IP
+* 真實憑證 Distinguished Name
+* 內部系統名稱與部署路徑
+
+文件範例統一使用：
+
+[source,text]
+----
+server.p12
+tomcat
+localhost
+8443
+${KEYSTORE_PASSWORD}
+----
+
+== 參考資料
+
+* link:https://bugs.openjdk.org/browse/JDK-8220734[OpenJDK：舊版 Java 解析 PBES2 PKCS#12 的 ObjectIdentifier 錯誤^]
+* link:https://bugs.openjdk.org/browse/JDK-8267837[OpenJDK：PKCS12 parseAlgParameters 與 tag 48 問題^]
+* link:https://tomcat.apache.org/tomcat-8.5-doc/ssl-howto.html[Apache Tomcat 8.5 SSL/TLS Configuration HOW-TO^]
+* link:https://tomcat.apache.org/tomcat-8.5-doc/config/http.html[Apache Tomcat 8.5 HTTP Connector Configuration Reference^]
