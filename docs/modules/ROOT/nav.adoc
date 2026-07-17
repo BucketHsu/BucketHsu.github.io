@@ -13,6 +13,7 @@
 ** xref:reference/taiwan-county-id-codes.adoc[台灣縣市英文、代碼與身分證字號對照表]
 * 資料庫與 SQL
 ** xref:database/sql-date-time-format-conversion.adoc[SQL 日期時間與台灣民國年月日格式轉換]
+** xref:database/sqlserver-connectivity-docker-compose-guide.adoc[SQL Server 名稱可連但 IP 無法連線與 Docker Compose 部署]
 ** xref:reference/database-javascript-notes.adoc[資料庫與 JavaScript]
 * Java 與前端
 ** xref:java/java-layering-dto-dao-entity.adoc[Java MVC MVVM 分層與 DTO DAO Entity Repository 名詞說明]
