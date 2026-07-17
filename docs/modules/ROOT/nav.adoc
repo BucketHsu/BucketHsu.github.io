@@ -51,3 +51,4 @@
 * 文件維護
 ** xref:contributing/writing-style.adoc[文件撰寫規範]
 ** xref:contributing/asciidoc-format-conversion-guide.adoc[AsciiDoc 文件轉換與輸出格式指南]
+** xref:contributing/markdown-format-conversion-guide.adoc[Markdown 文件轉換與輸出格式指南]
