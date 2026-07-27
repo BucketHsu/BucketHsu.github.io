@@ -1,0 +1,712 @@
+= 自架 AI 推論平台與 GitLab Code Review 導入指南
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:last-update-label!:
+:nofooter:
+
+本頁整理自架大型語言模型推論服務、HTTPS 代理與 GitLab Merge Request AI Code Review 的通用架構。
+
+文件刻意使用通用主機名稱、服務名稱、路徑與 Token 變數，不包含任何實際公司網路、Registry、憑證、帳號或存取權杖。
+
+== 適用範圍
+
+本指南適合下列情境：
+
+* 在具備 NVIDIA GPU 的 Linux 主機提供內部推論 API。
+* 使用 OpenAI 相容介面整合現有工具。
+* 透過 Nginx 提供 HTTPS、驗證與流量控管。
+* 在 GitLab Merge Request Pipeline 執行程式碼初步審查。
+* 將模型審查結果寫回 MR Note 或行內 Discussion。
+
+本指南不代表 AI 可以取代人工 Reviewer，也不保證模型能判斷實際業務邏輯、法規或需求正確性。
+
+[WARNING]
+====
+不得將 NGC API Key、GitLab Access Token、AI API Token、私鑰、正式憑證、內網位址或真實專案原始碼提交至公開 Repository。
+====
+
+== 架構概觀
+
+[source,text]
+----
+開發人員建立或更新 Merge Request
+                │
+                ▼
+GitLab MR Pipeline
+                │
+                ├── 取得 MR Diff
+                ├── 過濾不需審查的檔案
+                └── 分批建立 Prompt
+                │
+                ▼
+AI Code Review Job
+                │
+                ▼
+https://ai.example.test/v1
+                │
+                ▼
+Nginx
+                │
+                ├── TLS
+                ├── Token 驗證
+                ├── Rate Limit
+                └── Access Log
+                │
+                ▼
+OpenAI 相容推論服務
+                │
+                ▼
+GPU 與模型
+----
+
+主要責任如下：
+
+[cols="28%,72%", options="header"]
+|===
+|元件 |責任
+
+|推論服務
+|載入模型、管理 GPU 與記憶體，並提供 `/v1/models`、`/v1/chat/completions` 與健康檢查。
+
+|Nginx
+|提供 TLS、驗證、流量限制與反向代理，不負責 GitLab 權限與 MR 邏輯。
+
+|AI Code Review Job
+|取得 MR Diff、建立 Prompt、驗證模型輸出並回寫 GitLab。
+
+|GitLab
+|管理 Pipeline、CI/CD Variables、Merge Request、Protected Branch 與 Merge Check。
+
+|人工 Reviewer
+|判斷需求、業務邏輯、風險、AI 誤判及是否允許 Merge。
+|===
+
+== 從模型到 HTTP API
+
+模型權重本身不能直接被 GitLab Runner 呼叫，仍需由推論引擎處理：
+
+* Tokenizer 與 Chat Template。
+* GPU、記憶體與 KV Cache。
+* Batch、排程與併發。
+* Sampling、停止條件與最大輸出長度。
+* HTTP API、健康檢查與使用量資訊。
+
+建議至少提供下列端點：
+
+[source,text]
+----
+GET  /v1/models
+POST /v1/chat/completions
+GET  /v1/health/ready
+----
+
+呼叫端應先讀取 `/v1/models` 的實際模型 ID，不要只根據 Container Image 名稱推測 `model` 值。
+
+== 推論工具選擇
+
+[cols="18%,22%,25%,35%", options="header"]
+|===
+|工具 |主要定位 |優點 |注意事項
+
+|Ollama
+|本機與開發測試
+|下載及啟動流程簡單，適合快速驗證模型。
+|企業整合、精細排程與大規模併發能力需另外評估。
+
+|llama.cpp
+|GGUF 與低資源推論
+|部署彈性高，可使用量化模型。
+|不同量化格式會影響品質、速度與記憶體用量。
+
+|vLLM
+|高吞吐 OpenAI 相容服務
+|Paged Attention、Continuous Batching 與良好 API 相容性。
+|需自行管理模型、Runtime、CUDA 與啟動參數相容性。
+
+|TensorRT-LLM
+|NVIDIA GPU 最佳化
+|可針對特定硬體取得較佳效能。
+|建置、Engine 轉換與版本相依較複雜。
+
+|NVIDIA NIM
+|封裝式企業推論服務
+|整合 Runtime、模型與 OpenAI 相容 API，部署步驟較一致。
+|需確認硬體、映像、模型授權、NGC 存取權與支援矩陣。
+|===
+
+沒有單一工具適合所有情境。選型時至少比較：
+
+* 目標模型是否受支援。
+* GPU 架構與可用記憶體。
+* Context Length 與 KV Cache 需求。
+* 併發數與回應時間。
+* OpenAI API 相容程度。
+* 模型與推論工具授權。
+* 離線部署、稽核及維運需求。
+
+== 模型選擇原則
+
+參數量不是唯一品質指標。Code Review 應評估：
+
+* 對主要程式語言與框架的理解能力。
+* 是否能區分編譯錯誤、可維護性問題與實際缺陷。
+* 是否能根據 Diff 而不是憑空重寫整個檔案。
+* 是否能輸出固定 JSON Schema。
+* 誤報率與漏報率。
+* Prompt Injection 與惡意程式碼內容的抵抗能力。
+* Context 過長時的穩定性。
+* 中文說明品質。
+* 授權及資料處理限制。
+
+=== Dense 與 MoE
+
+Dense 模型每次推論通常會使用大部分參數；MoE 模型會根據 Token 啟用部分 Expert。
+
+MoE 標示的總參數量不等於每個 Token 的實際計算量，但模型權重、KV Cache、Runtime Overhead 與量化方式仍會影響記憶體需求。
+
+=== Context Length
+
+不應直接把模型可支援的最大 Context 設為服務預設值。Context 越大，通常代表更高的 KV Cache 記憶體用量。
+
+Code Review 可先採用以下策略：
+
+* 限制單次 Diff 大小。
+* 排除產生檔、鎖定檔、壓縮檔與二進位檔。
+* 依檔案或區段分批審查。
+* 每批只提供必要上下文。
+* 對大 MR 回傳「需拆分」而不是強行送入模型。
+
+== GPU Container 前置驗證
+
+確認主機已安裝 NVIDIA Driver、Docker Engine 與 NVIDIA Container Toolkit。
+
+[source,bash]
+----
+nvidia-smi
+
+docker run --rm --gpus all \
+  nvidia/cuda:12.8.0-base-ubuntu24.04 \
+  nvidia-smi
+----
+
+若 Container 內無法看到 GPU，應先修正 Driver、Runtime 或 Docker 設定，不要直接排查模型服務。
+
+== OpenAI 相容 API 基本驗證
+
+=== 模型清單
+
+[source,bash]
+----
+curl --fail --silent \
+  http://127.0.0.1:8000/v1/models
+----
+
+=== 對話完成
+
+[source,bash]
+----
+curl --fail --silent \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "model": "<MODEL_ID>",
+    "messages": [
+      {
+        "role": "user",
+        "content": "請回覆 READY"
+      }
+    ],
+    "temperature": 0,
+    "max_tokens": 32
+  }' \
+  http://127.0.0.1:8000/v1/chat/completions
+----
+
+=== Ready 檢查
+
+[source,bash]
+----
+curl --fail \
+  http://127.0.0.1:8000/v1/health/ready
+----
+
+[NOTE]
+====
+不同推論工具的健康檢查路徑可能不同。Compose `healthcheck` 必須使用該版本實際提供的端點。
+====
+
+== NIM Compose 通用範例
+
+下列範例只展示結構。實際 Image、模型與參數應依目標硬體和官方支援資訊調整。
+
+[source,yaml]
+----
+services:
+  inference:
+    image: ${NIM_IMAGE:?請設定 NIM_IMAGE}
+    container_name: ai-inference
+    restart: unless-stopped
+
+    gpus: all
+    shm_size: 16g
+
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    environment:
+      NGC_API_KEY: ${NGC_API_KEY:?請設定 NGC_API_KEY}
+      NIM_MODEL_NAME: ${NIM_MODEL_NAME:?請設定 NIM_MODEL_NAME}
+      NIM_MAX_MODEL_LEN: ${NIM_MAX_MODEL_LEN:-16384}
+      NIM_LOG_LEVEL: ${NIM_LOG_LEVEL:-INFO}
+      NIM_TELEMETRY_MODE: "0"
+
+    volumes:
+      - ./cache:/opt/nim/.cache
+
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - http://127.0.0.1:8000/v1/health/ready
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 10m
+----
+
+`.env.example` 只保留變數名稱與非機密預設值：
+
+[source,text]
+----
+NIM_IMAGE=<NIM_IMAGE>
+NIM_MODEL_NAME=<MODEL_NAME>
+NIM_MAX_MODEL_LEN=16384
+NIM_LOG_LEVEL=INFO
+NGC_API_KEY=<DO_NOT_COMMIT>
+----
+
+`.gitignore` 至少加入：
+
+[source,text]
+----
+.env
+*.key
+*.pem
+*.p12
+cache/
+----
+
+=== 常用參數說明
+
+[cols="35%,65%", options="header"]
+|===
+|參數 |用途
+
+|`NIM_IMAGE`
+|指定 NIM Container Image。建議固定可驗證版本，不要在正式環境無條件追蹤浮動 Tag。
+
+|`NGC_API_KEY`
+|用於取得需要授權的 NGC 資源。不得寫入 Compose、文件或 Git。
+
+|`NIM_MODEL_NAME`
+|指定模型名稱。實際可用值依 Image 與版本而異。
+
+|`NIM_MAX_MODEL_LEN`
+|限制最大 Context Length。值越大通常需要更多記憶體。
+
+|`shm_size`
+|提供推論 Runtime 足夠的共享記憶體，實際值應依模型與 Runtime 調整。
+
+|GPU 記憶體使用率參數
+|部分 Runtime 可透過 Passthrough Args 設定。必須確認對應版本的參數名稱與支援範圍。
+|===
+
+== Nginx HTTPS 反向代理
+
+推論服務建議只監聽 `127.0.0.1` 或內部 Container Network，再由 Nginx 對外提供 TLS。
+
+[source,nginx]
+----
+limit_req_zone $binary_remote_addr zone=ai_api:10m rate=5r/s;
+
+server {
+    listen 443 ssl;
+    server_name ai.example.test;
+
+    ssl_certificate     /etc/nginx/certs/server.crt;
+    ssl_certificate_key /etc/nginx/certs/server.key;
+
+    location = /nginx-health {
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    location /v1/ {
+        if ($http_authorization != "Bearer ${AI_API_TOKEN}") {
+            return 401;
+        }
+
+        limit_req zone=ai_api burst=10 nodelay;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        proxy_read_timeout 300s;
+        proxy_pass http://inference:8000;
+    }
+}
+----
+
+[WARNING]
+====
+Nginx `if` 搭配固定 Bearer Token 只適合小型或過渡環境。正式平台應考慮 Token 雜湊、個別用戶或專案識別、到期日、撤銷、用量限制、稽核及密鑰輪替。
+====
+
+自簽憑證若由內部 CA 簽發，應將 CA 加入 Runner 或 Code Review Image 的信任鏈，不要以 `curl -k` 或關閉 TLS 驗證作為正式解法。
+
+== GitLab 權限設計
+
+AI Code Review 只應取得完成工作所需的最低權限。
+
+建議原則：
+
+* 優先使用 Project Access Token 或 Group Access Token，不使用管理者個人的 Personal Access Token。
+* Token 設定明確到期日。
+* Role 與 Scope 採最小權限。
+* 不允許 AI Token 取得 Repository 寫入、管理員或 Runner 管理權限。
+* 定期檢查使用紀錄與最後使用時間。
+* 在 Token 到期前完成輪替，不延後處理。
+
+=== CI/CD Variables
+
+通用變數可包含：
+
+[cols="32%,28%,40%", options="header"]
+|===
+|變數 |是否機密 |用途
+
+|`AI_API_URL`
+|否
+|OpenAI 相容 API Base URL，例如 `https://ai.example.test/v1`。
+
+|`AI_API_TOKEN`
+|是
+|通過 AI API 驗證。
+
+|`GITLAB_REVIEW_TOKEN`
+|是
+|讀取 MR 資訊並回寫 Note 或 Discussion。
+
+|`AI_MODEL`
+|否
+|選用模型 ID；若未設定，可由 `/v1/models` 取得。
+
+|`AI_MAX_DIFF_BYTES`
+|否
+|限制單次審查資料量。
+|===
+
+[WARNING]
+====
+若機密 Variable 必須提供給未受保護的 Feature Branch Pipeline，代表惡意變更 `.gitlab-ci.yml` 可能讀取該 Variable。必須同時限制 CI 設定檔修改權、Fork Pipeline、Runner 使用範圍與 Merge Request Approval。
+====
+
+更安全的做法包括：
+
+* 將審查 Job 放在受控的共用 CI Template。
+* 使用受保護且只執行已核准程式碼的 Runner。
+* 不對不受信任 Fork 提供機密 Variable。
+* 使用短效 Token 或由中介服務核發一次性憑證。
+* 將 AI 呼叫與 GitLab 寫回邏輯封裝於受控 Image。
+
+== GitLab CI 基本範例
+
+[source,yaml]
+----
+stages:
+  - ai-review
+
+ai_code_review:
+  stage: ai-review
+  image: registry.example.test/tools/ai-code-review:1.0.0
+
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+  variables:
+    GIT_STRATEGY: none
+
+  script:
+    - /app/review.sh
+
+  allow_failure: false
+----
+
+Image 版本不建議長期使用 `latest`。正式環境可固定：
+
+* 語意版本，例如 `1.2.3`。
+* 不可變 Tag。
+* Image Digest。
+
+更新 Image 後應重新驗證 GitLab API、模型輸出 Schema、Discussion 定位與失敗處理。
+
+== Diff 過濾與分批
+
+建議排除：
+
+[source,text]
+----
+node_modules/
+dist/
+build/
+target/
+*.min.js
+*.map
+*.lock
+*.png
+*.jpg
+*.zip
+*.jar
+*.war
+----
+
+排除規則應允許專案自行覆寫，例如：
+
+[source,text]
+----
+.ai-review/
+├── include
+├── exclude
+├── prompt.adoc
+└── config.yml
+----
+
+分批審查時，每批應保留：
+
+* 檔案路徑。
+* 舊行號與新行號。
+* Diff Hunk Header。
+* 必要上下文。
+* MR 標題與描述中與該檔案相關的資訊。
+
+不得把整個 Repository 無限制送入模型。
+
+== Prompt 與輸出格式
+
+為便於程式驗證，建議要求模型回傳固定 JSON：
+
+[source,json]
+----
+{
+  "summary": "整體摘要",
+  "findings": [
+    {
+      "severity": "high",
+      "path": "src/main/java/example/Service.java",
+      "line": 42,
+      "title": "問題標題",
+      "message": "問題說明",
+      "suggestion": "修正建議"
+    }
+  ]
+}
+----
+
+呼叫端必須驗證：
+
+* JSON 是否可解析。
+* 欄位是否符合 Schema。
+* `path` 是否屬於本次 Diff。
+* `line` 是否能定位到有效的新行。
+* Severity 是否在允許範圍。
+* Finding 數量是否超過上限。
+* 回應是否包含 Token、Prompt 或機密內容。
+
+模型輸出不能直接當成 Shell、SQL 或 Git 指令執行。
+
+== Note 與行內 Discussion
+
+MR Note 適合：
+
+* 整體摘要。
+* 無法精確定位行號的建議。
+* 模型服務失敗或審查範圍不足的說明。
+
+行內 Discussion 適合：
+
+* 能對應到本次 Diff 新行的問題。
+* 需要 Reviewer 明確處理或 Resolve 的缺陷。
+
+建立行內 Discussion 前，通常需要：
+
+* Base SHA。
+* Start SHA。
+* Head SHA。
+* 檔案舊路徑與新路徑。
+* 舊行號或新行號。
+
+定位失敗時，應降級成 MR Note，不應讓整個 Pipeline 因單一 Comment 失敗。
+
+== Merge 阻擋策略
+
+AI 結果可採三種模式：
+
+[cols="20%,32%,48%", options="header"]
+|===
+|模式 |行為 |適用情境
+
+|提示
+|AI Job 永遠不阻擋 Merge。
+|導入初期、觀察誤報率。
+
+|條件阻擋
+|只有高嚴重度問題或未解決 Discussion 阻擋。
+|已累積足夠準確度與團隊共識。
+
+|強制阻擋
+|AI 服務失敗或任何 Finding 都阻擋。
+|通常不建議，容易受模型與基礎設施波動影響。
+|===
+
+較穩健的策略是：
+
+* AI 服務不可用時明確標示「未完成 AI 審查」。
+* 不把服務逾時誤標為 PASS。
+* 對高風險 Repository 保留人工 Approval 與 Required Pipeline。
+* 不允許作者以 AI PASS 取代其他 Reviewer。
+
+== 驗證流程
+
+=== API 驗證
+
+[source,bash]
+----
+export AI_API_URL='https://ai.example.test/v1'
+export AI_API_TOKEN='<DO_NOT_COMMIT>'
+
+curl --fail --silent \
+  --header "Authorization: Bearer ${AI_API_TOKEN}" \
+  "${AI_API_URL}/models"
+----
+
+=== GitLab 驗證
+
+測試 MR 至少包含：
+
+* 一個可被審查的文字檔。
+* 一個應被排除的檔案。
+* 一個可精確定位行號的明顯問題。
+* 一個沒有 Finding 的正常修改。
+* 超過單批大小限制的 Diff。
+
+確認：
+
+* Job 只在 MR Pipeline 執行。
+* 變數可正確取得且不出現在 Job Log。
+* MR Note 不會每次執行都重複累積。
+* 已修正的行內 Discussion 能正確更新或 Resolve。
+* API 失敗、格式錯誤與逾時均有明確狀態。
+
+== 常見問題
+
+[cols="30%,30%,40%", options="header"]
+|===
+|問題 |可能原因 |處理方式
+
+|NIM 長時間未 Ready
+|模型仍在下載、GPU 記憶體不足、Context 過大或 Image 與硬體不相容。
+|檢查 Container Log、GPU、模型快取、Image 支援資訊與啟動參數。
+
+|API 回傳 404
+|Base URL 缺少 `/v1`，或 Nginx `proxy_pass` 路徑組合錯誤。
+|分別測試 Nginx 與 Backend 的 `/v1/models`。
+
+|TLS 驗證失敗
+|Runner 或 Image 不信任內部 CA。
+|將 CA 安裝至信任鏈並重建 Image，不使用 `-k`。
+
+|Pipeline 取不到 Token
+|Variable Scope、Protected、Environment Scope 或 Group 繼承不符。
+|檢查 Pipeline 類型與 Variable 設定；不要在 Log 輸出 Token。
+
+|行內 Discussion 建立失敗
+|SHA、Path 或行號不是本次 Diff 的有效位置。
+|重新取得 MR Versions，定位失敗則改寫 MR Note。
+
+|模型輸出不是 JSON
+|Prompt 不夠明確、輸出被截斷或模型不穩定。
+|降低輸入大小、增加 Schema 驗證並限制重試次數。
+
+|同一問題重複留言
+|缺少 Finding Fingerprint 或同步機制。
+|以 Repository、MR、Path、Line 與 Finding 內容建立穩定識別碼。
+|===
+
+== Token 輪替
+
+輪替順序建議如下：
+
+. 建立新 Token，保留舊 Token 暫時有效。
+. 在受控環境驗證新 Token。
+. 更新 CI/CD Variable 或 Secret Store。
+. 執行測試 MR。
+. 確認成功後撤銷舊 Token。
+. 檢查舊 Token 是否仍有使用紀錄。
+
+Token 不應透過 Chat、Issue、Wiki、README、Job Artifact 或截圖傳遞。
+
+== 監控與稽核
+
+至少記錄：
+
+* 請求時間與回應狀態。
+* 呼叫來源專案的匿名或受控識別碼。
+* 模型 ID 與服務版本。
+* Input／Output Token 數量。
+* 延遲、逾時與錯誤類型。
+* Finding 數量與嚴重度統計。
+
+不應記錄：
+
+* 完整 Authorization Header。
+* Access Token。
+* 未遮罩的 Prompt 與原始碼全文。
+* 私鑰與憑證密碼。
+* 個人 Email 或帳號，除非有明確稽核需求與保存政策。
+
+== 公開前安全檢查
+
+將內部文件轉為公開筆記前，至少搜尋：
+
+[source,bash]
+----
+git grep -nE '10\.[0-9]+\.[0-9]+\.[0-9]+'
+git grep -nE '172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+'
+git grep -nE '192\.168\.[0-9]+\.[0-9]+'
+git grep -niE '(password|token|secret|api[_ -]?key|authorization)'
+git grep -nE '[A-Za-z]:\\Users\\|/home/[A-Za-z0-9._-]+'
+----
+
+也要人工檢查：
+
+* 公司、客戶、部門與系統名稱。
+* 內部 DNS、IP、Port 與 Registry。
+* GitLab Group、Project、Runner 與帳號名稱。
+* Container Image 與私有 Base Image。
+* 真實憑證、CA、Fingerprint 與私鑰。
+* 截圖中的瀏覽器帳號、組織名稱、Avatar、URL 與 API Key。
+* Prompt、Diff 或 Log 中的業務資料。
+
+[NOTE]
+====
+公開版本應說明可重複使用的技術方法，而不是重建特定公司的實際拓樸、權限和維運入口。
+====

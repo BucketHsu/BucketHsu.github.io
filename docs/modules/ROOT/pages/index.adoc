@@ -183,6 +183,10 @@
 |MR/PR、Reviewer、Assignee、CI/CD、Ruleset、分支保護與新 repository 檢查清單。
 |從 GitLab 轉換到 GitHub，或建立新的 GitHub repository。
 
+|xref:tools/self-hosted-ai-code-review-platform-guide.adoc[自架 AI 推論平台與 GitLab Code Review 導入指南]
+|推論工具選型、NIM、Nginx、GitLab CI、Token、安全與 MR 審查流程。
+|規劃內部 AI 推論服務，或將 AI Code Review 導入 GitLab。
+
 |xref:tools/ide-shortcuts-comparison.adoc[Eclipse、IntelliJ IDEA 與 VS Code 快捷鍵對照]
 |搜尋、導航、重構、執行、除錯與視窗快捷鍵。
 |跨 IDE 開發與快捷鍵查找。
