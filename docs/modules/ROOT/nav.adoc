@@ -44,6 +44,7 @@
 ** xref:security/dependency-check-nvd-mirror-guide.adoc[OWASP Dependency-Check 與內網 NVD Mirror 指南]
 ** xref:tools/gitlab-github-operations-guide.adoc[GitLab 與 GitHub 操作差異及 Repository 初始設定]
 ** xref:tools/self-hosted-ai-code-review-platform-guide.adoc[自架 AI 推論平台與 GitLab Code Review 導入指南]
+** xref:tools/ai-inference-runtime-model-comparison.adoc[AI 推論工具、啟動方式與模型家族比較]
 ** xref:tools/notepadpp-delete-matching-lines.adoc[Notepad++ 刪除包含特定字串的整行]
 ** xref:tools/ide-shortcuts-comparison.adoc[Eclipse、IntelliJ IDEA 與 VS Code 快捷鍵對照]
 ** xref:tools/nssm-windows-service-guide.adoc[使用 NSSM 將 Java 程式註冊為 Windows Service]
