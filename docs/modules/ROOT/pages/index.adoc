@@ -148,6 +148,10 @@
 |CKAD 練習、kubectl 指令與 YAML 範本。
 |準備 CKAD。
 
+|xref:k8s/kubeadm-certificate-expiration.adoc[Kubernetes kubeadm 憑證過期處理]
+|kubeadm 憑證期限檢查、續期、Control Plane 重新載入、kubeconfig 與離線環境處理。
+|排查 `x509 certificate has expired` 或 kubeadm 憑證到期問題。
+
 |xref:k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除]
 |Ingress、Service、forwarded headers 與多層 Proxy。
 |排查 Kubernetes 導流。
