@@ -1,0 +1,375 @@
+= Kubernetes kubeadm 憑證過期處理筆記
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本頁整理使用 kubeadm 建立或管理的 Kubernetes 叢集，在憑證過期後造成 `kubectl` 無法連線 API Server 時的檢查與修復方式。
+
+範例以 Control Plane 執行於 Container 的環境說明；若是一般 VM 或實體主機，核心處理方式相同，只需省略 `docker exec`、`docker restart` 與 `docker cp` 等 Container 操作。
+
+== 問題現象
+
+執行 Kubernetes 指令時可能出現：
+
+[source,text]
+----
+Unable to connect to the server: tls: failed to verify certificate:
+x509: certificate has expired or is not yet valid
+----
+
+例如：
+
+[source,bash]
+----
+kubectl get nodes
+kubectl get pods -A
+kubectl rollout restart deploy/sample-app
+----
+
+若錯誤明確指出 `certificate has expired`，可先從 kubeadm 管理的憑證期限開始確認。
+
+== 檢查憑證期限
+
+若 Control Plane 執行於 Container，可先進入該 Container：
+
+[source,bash]
+----
+docker exec -it k8s-control-plane bash
+----
+
+檢查 kubeadm 管理的憑證：
+
+[source,bash]
+----
+kubeadm certs check-expiration
+----
+
+一般會看到類似：
+
+[source,text]
+----
+CERTIFICATE                EXPIRES                  RESIDUAL TIME
+admin.conf                 Aug 19, 2026 10:00 UTC   <invalid>
+apiserver                  Aug 19, 2026 10:00 UTC   <invalid>
+apiserver-etcd-client      Aug 19, 2026 10:00 UTC   <invalid>
+controller-manager.conf    Aug 19, 2026 10:00 UTC   <invalid>
+scheduler.conf             Aug 19, 2026 10:00 UTC   <invalid>
+----
+
+另外確認 CA 憑證仍在有效期限內，例如：
+
+[source,text]
+----
+CERTIFICATE AUTHORITY   EXPIRES                  RESIDUAL TIME
+ca                      Aug 19, 2035 10:00 UTC   8y
+etcd-ca                  Aug 19, 2035 10:00 UTC   8y
+front-proxy-ca           Aug 19, 2035 10:00 UTC   8y
+----
+
+若一般憑證已過期，但 CA 仍有效，通常可以直接使用 kubeadm 重新簽發一般憑證。
+
+[WARNING]
+====
+若 `ca`、`etcd-ca` 或 `front-proxy-ca` 本身也已過期，不能只套用本頁的簡單續期流程，需要另外規劃 CA 更新、重新簽發及憑證輪替。
+====
+
+== 備份 Kubernetes 設定
+
+更新前先備份 `/etc/kubernetes`：
+
+[source,bash]
+----
+cp -a /etc/kubernetes /etc/kubernetes.backup-$(date +%Y%m%d)
+----
+
+確認備份存在：
+
+[source,bash]
+----
+ls -ld /etc/kubernetes*
+----
+
+== 更新 kubeadm 憑證
+
+執行：
+
+[source,bash]
+----
+kubeadm certs renew all
+----
+
+完成後再次確認期限：
+
+[source,bash]
+----
+kubeadm certs check-expiration
+----
+
+若 `RESIDUAL TIME` 已恢復為接近一年，代表 kubeadm 管理的一般憑證已重新簽發。
+
+== 重新載入 Control Plane 憑證
+
+憑證更新後，API Server、Controller Manager、Scheduler、etcd 等元件仍需重新載入新的憑證。
+
+若 Control Plane 使用 kubeadm Static Pod，可先確認：
+
+[source,bash]
+----
+ls -l /etc/kubernetes/manifests/
+----
+
+常見檔案包括：
+
+[source,text]
+----
+etcd.yaml
+kube-apiserver.yaml
+kube-controller-manager.yaml
+kube-scheduler.yaml
+----
+
+若整個 Control Plane 執行於 Docker Container，可退出 Container 後重新啟動：
+
+[source,bash]
+----
+exit
+docker restart k8s-control-plane
+----
+
+若不是 Container 架構，應依實際 kubelet、Static Pod 或 Control Plane 部署方式重新載入相關元件，不要直接照抄 `docker restart`。
+
+== 驗證 Control Plane
+
+重新進入 Control Plane：
+
+[source,bash]
+----
+docker exec -it k8s-control-plane bash
+----
+
+如果直接執行 `kubectl get nodes` 出現：
+
+[source,text]
+----
+The connection to the server localhost:8080 was refused
+----
+
+通常表示目前 Shell 沒有指定 kubeconfig，而不是憑證續期失敗。
+
+指定 kubeadm 管理者 kubeconfig：
+
+[source,bash]
+----
+export KUBECONFIG=/etc/kubernetes/admin.conf
+----
+
+再次確認：
+
+[source,bash]
+----
+kubectl get nodes
+kubectl get pods -A
+----
+
+正常情況下，Control Plane 與 Worker Node 應恢復為 `Ready`，Control Plane 相關 Pod 也應正常執行。
+
+== 更新外部 Host 的 kubeconfig
+
+若 Control Plane 已恢復，但在 Docker Host 或其他管理主機執行 `kubectl` 仍出現：
+
+[source,text]
+----
+the server has asked for the client to provide credentials
+error: You must be logged in to the server
+----
+
+可能是管理主機上的 kubeconfig 仍保留舊的 Client Certificate。
+
+先確認目前使用的 kubeconfig：
+
+[source,bash]
+----
+echo $KUBECONFIG
+----
+
+若 `$KUBECONFIG` 為空，`kubectl` 通常會使用：
+
+[source,text]
+----
+~/.kube/config
+----
+
+先備份原 kubeconfig：
+
+[source,bash]
+----
+cp -a ~/.kube/config ~/.kube/config.backup-$(date +%Y%m%d)
+----
+
+如果 Control Plane 執行於 Docker Container，可重新取得續期後的 `admin.conf`：
+
+[source,bash]
+----
+docker cp k8s-control-plane:/etc/kubernetes/admin.conf ~/.kube/config
+chmod 600 ~/.kube/config
+----
+
+重新驗證：
+
+[source,bash]
+----
+kubectl get nodes
+kubectl get pods -A
+----
+
+[NOTE]
+====
+若管理主機不是直接使用 `admin.conf`，而是使用另外建立的使用者憑證或其他驗證機制，應依實際 kubeconfig 與身分驗證方式處理，不應直接覆蓋原設定。
+====
+
+== 離線環境
+
+單純處理 kubeadm 管理的一般憑證過期時，通常不需要連線 Internet。
+
+`kubeadm certs renew all` 會使用 Control Plane 本機既有的 CA 憑證與私鑰重新簽發憑證，因此只要本機的 kubeadm、PKI 資料與相關 Control Plane 元件仍完整，就可以在離線環境執行。
+
+[cols="30%,35%,35%", options="header"]
+|===
+|項目 |可連外環境 |離線環境
+
+|憑證檢查
+|執行 `kubeadm certs check-expiration`
+|相同，不需要 Internet。
+
+|憑證續期
+|執行 `kubeadm certs renew all`
+|相同，不需要 Internet。
+
+|Control Plane 重啟
+|依實際部署方式重新載入元件。
+|相同，但要避免操作過程需要重新下載 Image。
+
+|管理主機 kubeconfig
+|重新取得新的 `admin.conf` 或對應 kubeconfig。
+|相同，可透過本機檔案或 Container 複製。
+
+|Container Image
+|必要時可重新從 Registry 取得。
+|應事先確認所需 Image 已存在本機或已備份。
+
+|kubeadm / kubectl
+|缺少時可從套件來源安裝。
+|應事先確認工具已存在。
+|===
+
+離線環境可依下列順序處理：
+
+[source,bash]
+----
+# 進入 Control Plane
+docker exec -it k8s-control-plane bash
+
+# 檢查憑證期限
+kubeadm certs check-expiration
+
+# 備份 Kubernetes 設定
+cp -a /etc/kubernetes /etc/kubernetes.backup-$(date +%Y%m%d)
+
+# 更新 kubeadm 管理的憑證
+kubeadm certs renew all
+
+# 再次確認期限
+kubeadm certs check-expiration
+
+exit
+
+# 依實際部署方式重新載入 Control Plane
+docker restart k8s-control-plane
+----
+
+若是 Container 化 Control Plane，離線環境也建議事先保留所需 Image。例如：
+
+[source,bash]
+----
+docker save example/kubernetes-control-plane:<version> \
+  -o kubernetes-control-plane.tar
+----
+
+還原時：
+
+[source,bash]
+----
+docker load -i kubernetes-control-plane.tar
+----
+
+== 處理流程摘要
+
+[source,text]
+----
+kubectl 出現 x509 certificate expired
+        │
+        ▼
+kubeadm certs check-expiration
+        │
+        ▼
+確認一般憑證過期、CA 仍有效
+        │
+        ▼
+備份 /etc/kubernetes
+        │
+        ▼
+kubeadm certs renew all
+        │
+        ▼
+確認憑證期限已更新
+        │
+        ▼
+重新載入 Control Plane 元件
+        │
+        ▼
+使用 /etc/kubernetes/admin.conf 驗證
+        │
+        ▼
+確認 Node 與 Pod 狀態正常
+        │
+        ▼
+必要時更新外部管理主機 kubeconfig
+----
+
+== 常用指令
+
+[source,bash]
+----
+# 查看 kubeadm 憑證期限
+kubeadm certs check-expiration
+
+# 備份 Kubernetes 設定
+cp -a /etc/kubernetes /etc/kubernetes.backup-$(date +%Y%m%d)
+
+# 更新全部 kubeadm 管理的憑證
+kubeadm certs renew all
+
+# Container 內指定 kubeconfig
+export KUBECONFIG=/etc/kubernetes/admin.conf
+
+# 驗證叢集
+kubectl get nodes
+kubectl get pods -A
+----
+
+== 重點整理
+
+* 先用 `kubeadm certs check-expiration` 區分一般憑證與 CA 是否過期。
+* 一般 kubeadm 憑證過期、CA 仍有效時，可使用 `kubeadm certs renew all` 續期。
+* 續期完成後必須讓 Control Plane 元件重新載入新憑證。
+* Control Plane 恢復後，外部管理主機仍可能因舊 kubeconfig 而驗證失敗。
+* 離線環境可以續期，但要事先保留 kubeadm、PKI 資料及必要 Container Image。
+* 若 CA 本身已過期，應另外規劃 CA 與叢集憑證輪替，不要直接套用本頁流程。
