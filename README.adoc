@@ -4,11 +4,11 @@
 :toc-title: 目錄
 :toclevels: 2
 
-這個 repository 是 `https://novice-engineer.github.io/` 的技術筆記來源。
+這個 repository 是 `https://buckethsu.github.io/` 的技術筆記來源。
 
 == 文件網站入口
 
-* GitHub Pages：`https://novice-engineer.github.io/`
+* GitHub Pages：`https://buckethsu.github.io/`
 * Antora 首頁：`docs/modules/ROOT/pages/index.adoc`
 * Antora 導覽：`docs/modules/ROOT/nav.adoc`
 * 文件撰寫規範：`docs/modules/ROOT/pages/contributing/writing-style.adoc`
