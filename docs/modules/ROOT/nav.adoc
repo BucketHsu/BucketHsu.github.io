@@ -35,6 +35,7 @@
 ** xref:container/container-shell-backspace.adoc[使用 sh 進入 container 時 Backspace 無法使用]
 * Kubernetes
 ** xref:k8s/ckad-practice-notes.adoc[CKAD考古題與練習題]
+** xref:k8s/kubeadm-certificate-expiration.adoc[Kubernetes kubeadm 憑證過期處理筆記]
 ** xref:k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除筆記]
 ** xref:k8s/pv-local-to-cifs.adoc[Kubernetes PV 由 Local 改為 CIFS（SMB CSI）變更紀錄]
 * 安全與工具
