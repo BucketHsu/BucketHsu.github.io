@@ -1,4 +1,4 @@
-= OWASP Dependency-Check 內網 NVD Mirror 建置與弱點掃描指南
+= OWASP Dependency-Check 內網 NVD Mirror 建置、SBOM 與弱點掃描指南
 學藝不精工程師
 :experimental:
 :icons: font
@@ -11,7 +11,7 @@
 :last-update-label!:
 :nofooter:
 
-本篇整理 OWASP Dependency-Check、內網 NVD Mirror、Maven 與 CLI 掃描、CI/CD 整合、報表判讀、弱點修補與常見問題排除。
+本篇整理 OWASP Dependency-Check、內網 NVD Mirror、SBOM、Maven 與 CLI 掃描、CI/CD 整合、報表判讀、弱點修補與常見問題排除。
 
 所有主機、網域、路徑、帳號與專案名稱均使用通用範例，不代表任何實際環境。
 
@@ -25,6 +25,7 @@
 * 無法直接連線 NVD 的內網環境。
 * GitLab Runner 或其他 CI/CD Runner。
 * 組織內部統一維護 NVD 弱點資料來源。
+* Maven、Legacy Java、WAR / EAR 與 Container Image 的 SBOM 產製。
 
 本篇不涵蓋：
 
@@ -37,7 +38,7 @@
 
 一般開發人員不需要自行建立 NVD Mirror，也不需要將 NVD API Key 放進專案。
 
-最短使用流程如下：
+弱點掃描的最短流程如下：
 
 . 確認組織提供的 Mirror URL，例如 `https://mirror.example.internal/owasp/`。
 . 在 Maven Plugin 或 Dependency-Check CLI 指定 Mirror datafeed。
@@ -45,6 +46,8 @@
 . 優先確認 CVSS 9.0 以上弱點。
 . 升級直接或間接相依套件。
 . 確認誤判時，建立有原因與期限的 suppression。
+
+若同時需要軟體供應鏈盤點，建議在 Build / Release 流程中另外產製 SBOM，並與 Dependency-Check 報表一起保存。
 
 == 基本概念
 
@@ -120,7 +123,53 @@ CVSS 是弱點風險評分。常見處理方式如下：
 |原則上阻擋建置或部署，需完成修補或核准例外。
 |===
 
-同一 CVE 可能同時有 CVSS v2、v3.0、v3.1 或 v4.0 分數。正式判讀時應確認報表採用的版本與 vector string。
+同一 CVE 可能同時有不同 CVSS 版本的分數。正式判讀時應確認報表採用的版本與 vector string。
+
+=== SBOM
+
+SBOM（Software Bill of Materials）是軟體物料清單，用來記錄某個軟體版本實際包含的第三方元件、版本與相依關係。
+
+本篇使用 CycloneDX 作為 SBOM 格式，常見輸出包含：
+
+[source,text]
+----
+bom.json
+bom.xml
+sample-app-1.0.0-sbom.cdx.json
+----
+
+=== SBOM 與弱點掃描的差異
+
+SBOM 與 Dependency-Check 的目的不同，兩者應搭配使用，而不是互相取代。
+
+[cols="25%,45%,30%", options="header"]
+|===
+|項目 |主要回答的問題 |常見產物
+
+|SBOM
+|這個版本的系統實際包含哪些第三方元件？
+|`bom.json`、`bom.xml`、`*.cdx.json`
+
+|Dependency-Check
+|這些第三方元件是否存在已知 CVE 弱點？
+|`dependency-check-report.html`、`dependency-check-report.json`
+|===
+
+[source,text]
+----
+專案 / 發布檔
+   │
+   ├─ 產製 SBOM ────────────────> 元件、版本、相依關係
+   │   ├─ Maven：CycloneDX Maven Plugin
+   │   └─ Legacy / WAR / EAR / Image：Syft
+   │
+   └─ Dependency-Check ────────> CVE、CVSS、弱點報告
+----
+
+[NOTE]
+====
+SBOM 本身不是弱點掃描報告。SBOM 列出某個第三方套件，不代表該套件一定存在弱點；判斷已知弱點仍需搭配 Dependency-Check 或其他 SCA 流程。
+====
 
 === 建置阻擋門檻
 
@@ -222,7 +271,7 @@ Mirror 更新主機
 
 更新主機通常需要：
 
-* Java 17 或 Java 21。
+* Java。
 * `curl` 或 `wget`。
 * `gzip`、`unzip`、`sha256sum`。
 * 可連線 NVD API。
@@ -238,7 +287,7 @@ NVD API Key 應只存在於更新主機的安全設定中，不應：
 * 放入一般開發人員的設定檔。
 * 顯示在 CI log。
 
-可使用環境變數或僅 root 可讀的設定檔：
+可使用環境變數或僅管理帳號可讀的設定檔：
 
 [source,bash]
 ----
@@ -398,34 +447,6 @@ Mirror cache 與掃描端本機資料是不同概念：
 * 安裝目錄由管理者維護。
 * cache 與報表目錄授權給 Runner 帳號。
 
-通用 Linux 安裝流程：
-
-[source,bash]
-----
-sudo mkdir -p /opt/dependency-check
-sudo mkdir -p /var/cache/dependency-check
-sudo mkdir -p /var/log/dependency-check
-
-sudo unzip dependency-check-<version>-release.zip -d /opt/
-sudo chmod +x /opt/dependency-check/bin/dependency-check.sh
-
-/opt/dependency-check/bin/dependency-check.sh --version
-----
-
-=== Windows 掃描整個 WebRoot
-
-[source,powershell]
-----
-& 'C:\Tools\dependency-check\bin\dependency-check.bat' `
-  --project 'sample-webapp' `
-  --scan 'D:\Project\sample-webapp\WebRoot' `
-  --out 'D:\Reports\dependency-check' `
-  --format HTML `
-  --format JSON `
-  --failOnCVSS 9 `
-  --nvdDatafeed 'https://mirror.example.internal/owasp/nvdcve-{0}.json.gz'
-----
-
 === Windows 掃描 JAR 目錄
 
 [source,powershell]
@@ -538,9 +559,357 @@ target/dependency-check-report.html
 target/dependency-check-report.json
 ----
 
+== SBOM 產製方式
+
+本章依專案與交付型態選擇產製方式。原則上 Maven 專案優先使用 CycloneDX Maven Plugin；傳統 Java、實體交付檔或 Container Image 則可使用 Syft。
+
+[cols="28%,32%,40%", options="header"]
+|===
+|專案 / 交付型態 |建議工具 |使用原則
+
+|Maven / Spring Boot
+|CycloneDX Maven Plugin
+|由 Maven dependency 與 POM metadata 產製，適合納入 `package` 或 CI 流程。
+
+|Maven Multi-Module
+|CycloneDX Maven Plugin `makeAggregateBom`
+|由最上層 Reactor 彙整各 Module 相依套件。
+
+|傳統 Java / Ant / 手動管理 JAR
+|Syft
+|直接掃描專案目錄、`WEB-INF/lib` 或已封裝交付物。
+
+|WAR / EAR / JAR / ZIP
+|Syft
+|優先掃描實際交付檔，使 SBOM 更接近正式發布內容。
+
+|Docker / Podman Image
+|Syft
+|直接掃描 Container Image，盤點映像檔內實際存在的套件。
+|===
+
+建議統一輸出 CycloneDX JSON：
+
+[source,text]
+----
+<project>-<version>-sbom.cdx.json
+----
+
+若有 XML 需求，可另外產出：
+
+[source,text]
+----
+<project>-<version>-sbom.cdx.xml
+----
+
+=== Maven：CycloneDX Maven Plugin
+
+CycloneDX Maven Plugin 不需要額外安裝獨立執行檔；已有 JDK 與 Maven 的環境即可由 Maven Repository 取得 Plugin。
+
+先確認環境：
+
+[source,bash]
+----
+java -version
+mvn -version
+----
+
+若使用 Maven Wrapper：
+
+[source,powershell]
+----
+.\mvnw.cmd -version
+----
+
+[NOTE]
+====
+若環境已使用 Nexus 或其他 Maven Repository Manager，Plugin 會依既有 `settings.xml` Repository / Mirror 設定下載，不需要另外安裝 CycloneDX CLI。
+====
+
+=== 不修改 pom.xml 直接產製
+
+單一 Maven 專案：
+
+[source,bash]
+----
+mvn org.cyclonedx:cyclonedx-maven-plugin:2.9.2:makeBom
+----
+
+PowerShell：
+
+[source,powershell]
+----
+mvn "org.cyclonedx:cyclonedx-maven-plugin:2.9.2:makeBom"
+----
+
+多模組專案建議在最上層 Parent 執行：
+
+[source,bash]
+----
+mvn org.cyclonedx:cyclonedx-maven-plugin:2.9.2:makeAggregateBom
+----
+
+常見輸出：
+
+[source,text]
+----
+target/bom.json
+target/bom.xml
+----
+
+[NOTE]
+====
+Plugin 版本應以專案或組織核准版本為準。範例版本只用來示範指令寫法。
+====
+
+=== 寫入 pom.xml 自動產製
+
+正式專案可將 SBOM 納入 Maven Lifecycle：
+
+[source,xml]
+----
+<plugin>
+    <groupId>org.cyclonedx</groupId>
+    <artifactId>cyclonedx-maven-plugin</artifactId>
+    <version>2.9.2</version>
+    <executions>
+        <execution>
+            <id>make-cyclonedx-bom</id>
+            <phase>package</phase>
+            <goals>
+                <goal>makeBom</goal>
+            </goals>
+            <configuration>
+                <outputFormat>all</outputFormat>
+                <outputName>bom</outputName>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
+----
+
+執行：
+
+[source,bash]
+----
+mvn clean package
+----
+
+產物通常為：
+
+[source,text]
+----
+target/
+├── sample-app.jar / sample-app.war
+├── bom.json
+└── bom.xml
+----
+
+若 Parent POM 或上層建置流程已經產製並附掛 JSON SBOM，可只補 XML：
+
+[source,xml]
+----
+<configuration>
+    <outputFormat>xml</outputFormat>
+</configuration>
+----
+
+[IMPORTANT]
+====
+是否使用 `json`、`xml` 或 `all`，應先確認 Parent POM 是否已配置 CycloneDX。上層已產生 JSON 時，不建議在子專案重複附掛相同 JSON Artifact。
+====
+
+=== Maven Multi-Module
+
+多模組專案可在最上層 Parent 使用：
+
+[source,xml]
+----
+<goals>
+    <goal>makeAggregateBom</goal>
+</goals>
+----
+
+`makeBom` 主要產生各 Module 自身的 BOM；`makeAggregateBom` 則用來彙整整個 Reactor Build 的 dependency。
+
+=== 傳統專案與交付物：Syft
+
+Syft 可用於傳統 Java、手動管理 JAR、WAR / EAR、目錄與 Container Image 等情境，並輸出 CycloneDX 格式。
+
+==== Windows 安裝
+
+使用 `winget`：
+
+[source,powershell]
+----
+winget install Anchore.syft
+syft version
+----
+
+若使用 Scoop：
+
+[source,powershell]
+----
+scoop bucket add main
+scoop install main/syft
+syft version
+----
+
+完全無法連外的內網主機，可在可上網環境下載對應 Binary，完成來源與檔案檢核後，再將 `syft.exe` 放入內網主機的 PATH 目錄。
+
+==== Linux 安裝
+
+官方 Installer Script 的常見用法：
+
+[source,bash]
+----
+curl -sSfL https://get.anchore.io/syft | sudo sh -s -- -b /usr/local/bin
+syft version
+----
+
+若不允許直接執行網路 Script，可改為下載 Binary 後再安裝：
+
+[source,bash]
+----
+sudo cp syft /usr/local/bin/syft
+sudo chmod 755 /usr/local/bin/syft
+syft version
+----
+
+[WARNING]
+====
+正式或內網環境不建議未經檢核就直接以 `sudo` 執行網路下載 Script。應先確認來源、版本與 Checksum / Signature，再依既有軟體安裝流程部署。
+====
+
+==== 掃描 Legacy Java 專案
+
+Linux：
+
+[source,bash]
+----
+syft ./legacy-app \
+  -o cyclonedx-json=./legacy-app-sbom.cdx.json
+----
+
+Windows PowerShell：
+
+[source,powershell]
+----
+syft .\legacy-app `
+  -o "cyclonedx-json=.\legacy-app-sbom.cdx.json"
+----
+
+若只需要盤點 `WEB-INF/lib`：
+
+[source,bash]
+----
+syft ./legacy-app/WebContent/WEB-INF/lib \
+  -o cyclonedx-json=./legacy-app-sbom.cdx.json
+----
+
+==== 掃描 WAR / EAR / JAR
+
+已有正式交付檔時，建議優先掃描實際發布 Artifact：
+
+[source,bash]
+----
+syft ./target/legacy-app.war \
+  -o cyclonedx-json=./legacy-app-1.0.0-sbom.cdx.json
+----
+
+PowerShell：
+
+[source,powershell]
+----
+syft .\target\legacy-app.war `
+  -o "cyclonedx-json=.\legacy-app-1.0.0-sbom.cdx.json"
+----
+
+==== 同時產生 JSON 與 XML
+
+[source,bash]
+----
+syft ./target/legacy-app.war \
+  -o cyclonedx-json=./legacy-app-sbom.cdx.json \
+  -o cyclonedx-xml=./legacy-app-sbom.cdx.xml
+----
+
+==== 掃描 Container Image
+
+[source,bash]
+----
+syft example/myapp:1.0.0 \
+  -o cyclonedx-json=./myapp-1.0.0-sbom.cdx.json
+----
+
+=== SBOM 與 Dependency-Check 建議流程
+
+[source,text]
+----
+Build / Package
+      │
+      ├─ 產製正式 JAR / WAR / EAR / Image
+      │
+      ├─ 產製 CycloneDX SBOM
+      │      └─ <project>-<version>-sbom.cdx.json
+      │
+      └─ OWASP Dependency-Check
+             ├─ dependency-check-report.html
+             └─ dependency-check-report.json
+----
+
+建議 CI 或 Release Artifact 至少保存：
+
+[source,text]
+----
+artifacts/
+├── application/
+│   └── <project>-<version>.war
+├── sbom/
+│   └── <project>-<version>-sbom.cdx.json
+└── security/
+    ├── dependency-check-report.html
+    └── dependency-check-report.json
+----
+
+[IMPORTANT]
+====
+SBOM 應與實際發布版本綁定保存。重新 Build、Dependency 版本變更或 Container Image 重新產製時，應重新產生 SBOM，不應沿用上一版檔案。
+====
+
+=== SBOM 產物檢查
+
+產製後至少確認：
+
+. SBOM 檔案存在且可正常解析。
+. `metadata.component` 專案名稱與版本正確。
+. `components` 內有實際第三方套件資料。
+. Maven 專案主要 direct / transitive dependencies 有被列入。
+. Legacy 專案可抽查 `WEB-INF/lib` 內主要 JAR 是否出現在 SBOM。
+. SBOM 與此次正式 Build / Release 使用的 Artifact 一起保存。
+
+Linux 可使用 `jq`：
+
+[source,bash]
+----
+jq '.bomFormat, .specVersion, .metadata.component, (.components | length)' \
+  ./legacy-app-sbom.cdx.json
+----
+
+Windows PowerShell：
+
+[source,powershell]
+----
+$sbom = Get-Content .\legacy-app-sbom.cdx.json -Raw | ConvertFrom-Json
+$sbom.bomFormat
+$sbom.specVersion
+$sbom.metadata.component
+$sbom.components.Count
+----
+
 == npm 與 pnpm 專案
 
-Dependency-Check 可掃描部分 JavaScript 套件描述檔，但不應直接假設它能取代專門的 npm audit、pnpm audit、Snyk 或其他 Node.js SCA 工具。
+Dependency-Check 可掃描部分 JavaScript 套件描述檔，但不應直接假設它能取代 Node.js 生態系的其他弱點掃描工具。
 
 package.json script 範例：
 
@@ -736,7 +1105,7 @@ Maven 設定：
 </suppressionFiles>
 ----
 
-Suppression 必須包含原因、核准人或責任角色、建立日期與到期日，避免永久忽略弱點。
+Suppression 必須包含原因、責任角色、建立日期與到期日，避免永久忽略弱點。
 
 == 常見問題排除
 
@@ -812,14 +1181,16 @@ Mirror 維運：
 * 磁碟空間足夠。
 * Mirror URL 可由 Runner 連線。
 
-專案掃描：
+專案掃描與 SBOM：
 
 * Dependency-Check 版本固定。
 * Mirror URL 使用通用設定，不寫死秘密。
 * HTML 與 JSON 報表均保存。
-* Critical 弱點會阻擋 Pipeline。
+* Critical 弱點依既有規則阻擋 Pipeline。
 * Suppression 有原因與期限。
 * 修補後已重新掃描與回歸測試。
+* SBOM 與正式發布版本綁定保存。
+* Dependency 或 Artifact 改變時重新產生 SBOM。
 
 == 延伸閱讀
 
@@ -827,6 +1198,9 @@ Mirror 維運：
 * link:https://dependency-check.github.io/DependencyCheck/dependency-check-maven/[Dependency-Check Maven Plugin ^]
 * link:https://dependency-check.github.io/DependencyCheck/dependency-check-cli/index.html[Dependency-Check CLI ^]
 * link:https://github.com/jeremylong/open-vulnerability-cli/blob/main/README.md[open-vulnerability-cli README ^]
+* link:https://cyclonedx.org/[CycloneDX ^]
+* link:https://github.com/CycloneDX/cyclonedx-maven-plugin[CycloneDX Maven Plugin ^]
+* link:https://github.com/anchore/syft[Syft ^]
 * link:https://nvd.nist.gov/developers/start-here[NVD Developers ^]
 * link:https://www.first.org/cvss/v4.0/specification-document[CVSS v4.0 Specification ^]
 * xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]
