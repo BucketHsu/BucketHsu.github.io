@@ -19,7 +19,7 @@
 
 == 快速選擇
 
-[cols="18%,24%,24%,34%", options="header"]
+[cols="17%,22%,27%,34%", options="header"]
 |===
 |工具 |主要定位 |適合情境 |主要限制
 
@@ -33,10 +33,20 @@
 |量化模型、記憶體受限、跨平台部署
 |模型轉換、量化品質、Chat Template 與參數需自行管理
 
+|Transformers
+|模型架構的基礎實作與 Day-0 驗證
+|新模型剛發布、其他 Runtime 尚未完整支援時先確認模型能否載入與生成
+|正式高併發服務通常應改用 vLLM、SGLang 或其他專用推論 Runtime
+
 |vLLM
 |高吞吐 OpenAI 相容推論服務
 |多使用者 API、自行管理 Hugging Face 模型、Continuous Batching
 |CUDA、PyTorch、模型架構、量化與硬體相容性由維運者負責
+
+|SGLang
+|高效能 LLM/VLM Serving 與結構化生成
+|新模型快速導入、OpenAI 相容 API、Prefix Cache、Speculative Decoding、Agent/Coding 工作負載
+|新模型、量化與 ARM64/特殊 GPU 的實際支援仍需逐版確認
 
 |TensorRT-LLM
 |NVIDIA GPU 深度最佳化
@@ -48,6 +58,63 @@
 |NVIDIA GPU、希望降低 Runtime 組裝成本、需要標準化部署
 |模型與硬體必須存在支援 Profile，並受 NGC、授權與 Image 供應限制
 |===
+
+== 新模型第一時間導入策略
+
+若主要需求是「模型發布後盡快在自有硬體測試」，不應只依賴單一封裝式 Runtime。較實際的順序是：
+
+[source,text]
+----
+新模型發布
+    │
+    ├─ 1. Transformers：先確認權重、Tokenizer、Chat Template 可正常載入
+    │
+    ├─ 2. SGLang / vLLM：有原生支援後改成正式 API 服務
+    │
+    ├─ 3. llama.cpp：需要 GGUF、低記憶體或跨平台時評估
+    │
+    └─ 4. NIM / TensorRT-LLM：官方最佳化成熟後再比較效能與維運成本
+----
+
+[cols="20%,18%,27%,35%", options="header"]
+|===
+|Runtime |新模型跟進速度 |主要用途 |判斷原則
+
+|Transformers
+|通常最快
+|Day-0 功能驗證、Fallback
+|只要模型已整合 Transformers，或 Model Repository 提供可信任的自訂程式碼，就可能先行測試；不應直接視為正式高併發架構
+
+|SGLang
+|很快
+|新模型 Serving、Coding/Agent、Speculative Decoding
+|若新模型已被 SGLang 支援，適合直接提供 OpenAI 相容 API；對特定模型的最佳化可能比通用 Runtime 更早出現
+
+|vLLM
+|很快
+|正式 OpenAI API、高吞吐、多使用者
+|模型架構與量化格式已支援時通常是穩定的正式服務候選
+
+|llama.cpp
+|快，但依 GGUF 與架構支援
+|量化、省記憶體、CPU/GPU 混合
+|適合工作站與低資源環境；需確認 GGUF 轉換與量化品質
+
+|NVIDIA NIM
+|依 NVIDIA 發布時程
+|標準化 NVIDIA 部署
+|不必自行組合 Runtime，但新模型可能需要等待對應 Image、Model Profile 或 model-free NIM 支援
+
+|TensorRT-LLM
+|依模型整合與最佳化程度
+|固定模型後追求 NVIDIA GPU 效能
+|較適合模型已選定後再投入 Engine、量化與版本調校
+|===
+
+[IMPORTANT]
+====
+「第一時間可載入」不等於「第一時間適合上正式環境」。新模型仍要完成 License、模型來源、Prompt、結構化輸出、Context、記憶體、長時間穩定度與 Code Review 固定測試集驗證。
+====
 
 == 共通前置檢查
 
@@ -94,6 +161,37 @@ curl --fail --silent \
 ----
 
 `model` 應以 `/v1/models` 的實際回傳值為準，不應只由 Image 名稱推測。
+
+=== 上層服務避免綁死 Runtime
+
+Spring Boot、GitLab CI 或其他呼叫端應盡量依賴共同 API Contract，而不是直接寫死某個 Runtime 的專有行為。
+
+[source,text]
+----
+GitLab CI / Chat / 其他服務
+            │
+            ▼
+        ai-infra
+            │
+     OpenAI 相容 API
+            │
+     ┌──────┼────────┐
+     ▼      ▼        ▼
+   vLLM   SGLang    NIM
+            │
+            ▼
+      Hugging Face Model
+----
+
+例如應把 Base URL 與 Model ID 外部化：
+
+[source,properties]
+----
+ai.base-url=http://llm-runtime:8000/v1
+ai.model=<MODEL_ID>
+----
+
+這樣切換 vLLM、SGLang 或 NIM 時，上層 Code Review 邏輯通常只需調整設定或少量 Runtime Adapter，而不是重新改寫整個流程。
 
 == Ollama
 
@@ -208,6 +306,63 @@ curl --fail http://127.0.0.1:8080/health
 curl --fail http://127.0.0.1:8080/v1/models
 ----
 
+== Transformers
+
+Transformers 適合作為新模型剛發布時的第一層相容性驗證。若其他推論 Runtime 尚未支援新架構，可先確認權重、Tokenizer、Chat Template 與基本 Generation 是否正常。
+
+=== 直接載入模型
+
+[source,python]
+----
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_id = "<Hugging-Face-模型-ID>"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    device_map="auto",
+    torch_dtype="auto"
+)
+----
+
+只有 Model Repository 確實需要自訂程式碼且來源可信任時才考慮：
+
+[source,python]
+----
+AutoModelForCausalLM.from_pretrained(
+    model_id,
+    device_map="auto",
+    torch_dtype="auto",
+    trust_remote_code=True,
+    revision="<固定 Commit SHA>"
+)
+----
+
+[WARNING]
+====
+`trust_remote_code=True` 代表允許執行 Model Repository 提供的 Python 程式碼。正式環境應審查來源並固定 `revision`，不要對未知 Repository 無條件開啟。
+====
+
+=== Transformers Serve
+
+新版 Transformers 提供實驗性的 `transformers serve`，可提供 OpenAI SDK 相容介面，適合評估、實驗與中等負載自架；大規模正式 Serving 仍應優先比較 vLLM、SGLang 等專用 Runtime。
+
+[source,bash]
+----
+pip install 'transformers[serving]'
+transformers serve
+----
+
+可用端點依版本確認，常見包含：
+
+[source,text]
+----
+/v1/models
+/v1/chat/completions
+/v1/responses
+----
+
 == vLLM
 
 === 快取與權限
@@ -270,6 +425,84 @@ docker run -d \
 ====
 ARM64 或特殊整合式 GPU 平台不能直接沿用 x86_64 測試結論。必須確認 Image、PyTorch、CUDA、模型架構與硬體支援。
 ====
+
+== SGLang
+
+SGLang 是與 vLLM 同級的推論 Serving Runtime，重點包含高吞吐 Serving、Radix/Prefix Cache、結構化輸出、Tool/Agent 工作負載與 Speculative Decoding。對剛發布的新模型，若 SGLang 已完成架構整合，可直接從 Hugging Face Model ID 啟動，不需要等待 NIM 專用 Image。
+
+=== 啟動 Server
+
+以下使用 SGLang 官方常見的 `launch_server` 形式；實際 Container Image、版本與模型參數仍應依當版文件固定：
+
+[source,bash]
+----
+python3 -m sglang.launch_server \
+  --model-path <Hugging-Face-模型-ID> \
+  --host 0.0.0.0 \
+  --port 30000
+----
+
+若模型需要 Hugging Face Token，應由環境變數或 Secret 注入，不要提交到 Git。
+
+=== OpenAI 相容 API
+
+SGLang Server 可提供 OpenAI 相容端點。啟動後至少驗證：
+
+[source,bash]
+----
+curl --fail http://127.0.0.1:30000/v1/models
+
+curl --fail --silent \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "model": "<MODEL_ID>",
+    "messages": [
+      {"role": "user", "content": "請只回覆 READY"}
+    ],
+    "temperature": 0,
+    "max_tokens": 32
+  }' \
+  http://127.0.0.1:30000/v1/chat/completions
+----
+
+=== Speculative Decoding 與 MTP
+
+部分新模型提供 MTP（Multi-Token Prediction）或其他 Draft/Speculative Decoding 能力，可讓 Runtime 一次驗證多個候選 Token，進而提高 Decode 吞吐。
+
+但效能提升高度依賴：
+
+* 模型本身是否提供可用的 Draft/MTP Head。
+* SGLang 版本是否支援該模型的 Speculative 方法。
+* Acceptance Rate。
+* Prompt 與輸出型態。
+* Context 長度與 Batch。
+* 量化格式與 Kernel。
+
+因此不能把特定測試中出現的最高 tok/s 當成所有 Chat 或 Code Review 工作負載的固定速度。正式導入應使用自己的 Java、Spring Boot、SQL 與 Git Diff 測試集量測。
+
+=== 與 vLLM 的選擇
+
+[cols="22%,39%,39%", options="header"]
+|===
+|項目 |SGLang |vLLM
+
+|新模型支援
+|部分熱門新模型會快速加入，適合追蹤 Day-0/Day-1 支援
+|同樣更新快速，模型架構進入支援矩陣後適合正式服務
+
+|OpenAI API
+|支援
+|支援
+
+|主要優勢
+|Prefix/Radix Cache、Speculative Decoding、Agent/Coding 工作負載與快速模型整合
+|成熟 Serving、生態完整、Continuous Batching、廣泛 OpenAI API 應用整合
+
+|選擇方式
+|某模型在 SGLang 有明確最佳化或實測優勢時優先
+|一般正式 API、既有整合成熟或該模型支援較完整時優先
+|===
 
 == TensorRT-LLM
 
@@ -414,7 +647,7 @@ docker compose \
 
 == 啟動方式比較
 
-[cols="18%,16%,18%,18%,30%", options="header"]
+[cols="17%,17%,18%,20%,28%", options="header"]
 |===
 |工具 |模型格式／來源 |API |多 GPU／併發 |較適合的導入階段
 
@@ -430,11 +663,23 @@ docker compose \
 |支援方式依版本；強項是量化與 CPU/GPU 混合
 |低資源、Edge、量化模型比較
 
+|Transformers
+|Hugging Face 或本機權重
+|新版 `transformers serve` 可提供 OpenAI 相容介面
+|基礎 Serving；依版本與模型能力
+|新模型 Day-0 驗證與其他 Runtime 的 Fallback
+
 |vLLM
 |Hugging Face 或本機權重
 |OpenAI 相容
 |Continuous Batching、Tensor Parallel
 |一般自建正式 API、高吞吐服務
+
+|SGLang
+|Hugging Face 或本機權重
+|OpenAI 相容
+|高吞吐 Serving、Prefix/Radix Cache、TP/DP 與 Speculative 能力依版本
+|新模型快速導入、Coding/Agent、正式 Serving
 
 |TensorRT-LLM
 |支援模型或最佳化 Engine
@@ -448,6 +693,37 @@ docker compose \
 |依 Image、Profile 與後端能力
 |希望降低組裝成本、標準化 NVIDIA 部署
 |===
+
+== DGX Spark 建議策略
+
+DGX Spark 的重點是 128GB Unified Memory 帶來的模型容量與 Context 空間，不應只用桌機顯示卡的單人 tok/s 判斷價值。對單台 Spark 的內部 Code Review 平台，可採分階段策略：
+
+[source,text]
+----
+新模型剛發布
+    ↓
+Transformers / SGLang 先做相容性與能力測試
+    ↓
+SGLang / vLLM 提供穩定 OpenAI 相容 API
+    ↓
+固定 32K Context 起跑並量測實際 Git Diff
+    ↓
+再評估 64K / 128K、Speculative Decoding、MTP、量化
+    ↓
+NVIDIA NIM / TensorRT-LLM 有成熟最佳化後做 A/B Test
+----
+
+對 Code Review 應優先量測：
+
+* TTFT（Time To First Token）。
+* Decode tok/s。
+* 單批推論時間。
+* 整個 MR 的總處理時間。
+* 多人或多 Job 併發時的吞吐。
+* 32K、64K、128K Context 下的記憶體占用。
+* NVFP4、FP8、BF16 或其他量化對 Review 品質的影響。
+
+不要把網路上特定 Prompt 的 50～70 tok/s 直接當成自己的預期值。Speculative Decoding 對可預測、重複或 Edit-heavy 輸出可能特別有效，但實際 Java/Spring Boot Code Review 應以固定測試集量測。
 
 == 模型家族比較
 
