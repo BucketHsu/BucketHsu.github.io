@@ -1,0 +1,859 @@
+= GitLab 與 GitHub 初次使用差異指南
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本篇從 GitLab 使用者切換到 GitHub 的角度，整理第一次使用時最容易混淆的 Merge Request / Pull Request、分支保護、CI/CD、Runner、權限，以及新 Repository 建立後建議先完成的基本設定。
+
+如果需要更完整的 Repository 初始設定、CODEOWNERS、PR Template 與 Merge 策略，可再參考 xref:tools/gitlab-github-operations-guide.adoc[GitLab 與 GitHub 操作差異及 Repository 初始設定]。
+
+== 先記住一件事：底層仍然都是 Git
+
+GitLab 與 GitHub 在 Git 操作本身沒有本質差異。
+
+[source,text]
+----
+git clone
+git branch
+git switch
+git add
+git commit
+git push
+git pull
+git fetch
+git merge
+git rebase
+----
+
+這些都還是 Git 指令。
+
+真正容易混淆的是平台上層的名稱與流程：
+
+[source,text]
+----
+Git
+ ├─ Branch
+ ├─ Commit
+ └─ Merge
+
+平台功能
+ ├─ GitLab：Merge Request、Protected Branch、Pipeline、Runner
+ └─ GitHub：Pull Request、Ruleset / Branch Protection、Actions、Runner
+----
+
+[NOTE]
+====
+從 GitLab 換到 GitHub 時，不需要重新學 Git；主要是重新建立平台名詞與介面位置的對應關係。
+====
+
+== 最重要的名詞對照
+
+[cols="28%,28%,44%", options="header"]
+|===
+|GitLab |GitHub |實際概念
+
+|Merge Request（MR）
+|Pull Request（PR）
+|請求把來源 branch 的變更合併到目標 branch。
+
+|Target branch
+|Base branch
+|接收變更的目標 branch，例如 `main`。
+
+|Source branch
+|Head / Compare branch
+|提供變更的來源 branch，例如 `feature/login`。
+
+|Protected Branch
+|Ruleset / Branch protection rule
+|限制誰能直接 push、merge、force push、刪除 branch，以及是否必須通過 Review / CI。
+
+|Pipeline
+|Workflow run
+|一次 CI/CD 執行紀錄。
+
+|Job
+|Job
+|Pipeline / Workflow 裡的一個執行工作。
+
+|Stage
+|通常以 `needs` 表示相依順序
+|描述 test、build、deploy 等執行階段。
+
+|Runner
+|Runner
+|實際執行 CI/CD Job 的機器或執行環境。
+
+|`.gitlab-ci.yml`
+|`.github/workflows/*.yml`
+|CI/CD 設定檔。
+
+|CI/CD Variables
+|Actions Variables / Secrets
+|CI/CD 執行時需要的環境變數與敏感資訊。
+
+|Group
+|Organization
+|集中管理多個 Repository、成員與權限。
+
+|Project
+|Repository
+|GitLab 常以 Project 為主要單位；GitHub 通常直接稱 Repository。
+|===
+
+== MR 與 PR 為什麼名稱不一樣
+
+兩者本質上幾乎是相同流程。
+
+GitLab：
+
+[source,text]
+----
+feature/login
+     │
+     │ Merge Request
+     ▼
+    main
+----
+
+GitHub：
+
+[source,text]
+----
+feature/login
+     │
+     │ Pull Request
+     ▼
+    main
+----
+
+可以直接記成：
+
+[source,text]
+----
+MR ≒ PR
+----
+
+差異主要是命名角度：
+
+* GitLab：我要「Merge」這個 branch，所以叫 Merge Request。
+* GitHub：我要請維護者「Pull」我的變更，所以叫 Pull Request。
+
+但日常開發流程其實相同：
+
+[source,text]
+----
+建立 branch
+→ commit
+→ push
+→ 開 MR / PR
+→ Code Review
+→ CI
+→ Approve
+→ Merge
+----
+
+== GitHub 的 base / compare 最容易第一次看錯
+
+GitLab 常看到：
+
+[source,text]
+----
+Source branch: feature/login
+Target branch: main
+----
+
+GitHub PR 則常看到：
+
+[source,text]
+----
+base: main
+compare: feature/login
+----
+
+所以：
+
+[cols="30%,35%,35%", options="header"]
+|===
+|概念 |GitLab |GitHub
+
+|來源 branch
+|Source
+|Compare / Head
+
+|目標 branch
+|Target
+|Base
+|===
+
+可以記成：
+
+[source,text]
+----
+base: main ← compare: feature/login
+----
+
+也就是把 `feature/login` 的變更送進 `main`。
+
+== Reviewer 與 Assignee 邏輯相同
+
+GitLab 與 GitHub 都有 Reviewer 與 Assignee，但用途不同。
+
+Reviewer：
+
+* 負責 Code Review。
+* 查看 Diff。
+* 留 Comment。
+* Approve 或要求修改。
+
+Assignee：
+
+* 表示誰負責推進這個 MR / PR。
+* 不一定負責正式 Code Review。
+
+因此不要把：
+
+[source,text]
+----
+Assigned = 已完成審查
+----
+
+視為同一件事。
+
+比較適合的理解：
+
+[source,text]
+----
+Author   → 寫程式與修正
+Reviewer → 審查程式
+Assignee → 負責追蹤與推進
+----
+
+== Protected Branch 與 GitHub Ruleset
+
+這也是 GitLab 切換到 GitHub 時很容易找不到的功能。
+
+=== GitLab 的概念
+
+GitLab 通常在 Protected Branch 搭配 Approval Rule、Pipeline Status 設定：
+
+* 誰可以 push。
+* 誰可以 merge。
+* 是否允許 force push。
+* 是否允許刪除。
+* 是否一定要 MR。
+* 是否一定要核准。
+* Pipeline 是否必須成功。
+
+例如：
+
+[source,text]
+----
+main
+├─ Developer 不可直接 Push
+├─ 必須開 MR
+├─ 至少 1 人 Approve
+├─ Pipeline 必須成功
+└─ 才能 Merge
+----
+
+=== GitHub 的概念
+
+GitHub 常見兩種機制：
+
+* Repository Rulesets
+* Branch protection rules
+
+新的 Repository 通常可優先考慮 Ruleset。
+
+可以把它簡化理解成：
+
+[source,text]
+----
+GitLab Protected Branch
++ Approval Rule
++ Pipeline Merge Condition
+≈
+GitHub Ruleset
+----
+
+並不是每個選項完全一對一，但保護 branch 的核心概念相同。
+
+=== 建議的 main 保護規則
+
+一般多人開發可以考慮：
+
+* Require a pull request before merging。
+* Required approvals 至少 1 人。
+* Require status checks to pass。
+* Require conversation resolution。
+* Block force push。
+* Restrict deletion。
+* 視需求啟用 Dismiss stale approvals。
+* 視需求要求 Code Owner review。
+
+流程會變成：
+
+[source,text]
+----
+Developer
+   │
+   │ push feature branch
+   ▼
+Pull Request
+   │
+   ├─ Review / Approval
+   ├─ CI Status Check
+   └─ Conversation resolved
+         │
+         ▼
+        Merge
+         │
+         ▼
+        main
+----
+
+[IMPORTANT]
+====
+Branch Protection 的目的不是讓 branch「不能動」，而是把變更強制經過可追蹤的 Review、CI 與合併流程。
+====
+
+== 「只有我能核准」與「只有我能 Merge」是不同規則
+
+實務上容易把以下幾件事混在一起：
+
+[source,text]
+----
+誰可以 Push
+誰可以開 PR
+誰可以 Review
+誰可以 Approve
+誰可以 Merge
+誰可以 Bypass Ruleset
+----
+
+這些權限應分開思考。
+
+例如想做到：
+
+[source,text]
+----
+所有人都可以：
+- 建 feature branch
+- push feature branch
+- 開 PR
+- Review
+
+但 main：
+- 不可直接 push
+- 必須 PR
+- 必須由指定 Maintainer / Code Owner 核准
+- CI 必須成功
+- 才能 merge
+----
+
+這種設計在 GitLab 與 GitHub 都可以實現，只是設定位置不同。
+
+== GitLab CI 與 GitHub Actions 的共同邏輯
+
+兩邊看起來語法不同，但核心其實都是：
+
+[source,text]
+----
+Trigger
+   ↓
+Job
+   ↓
+Runner
+   ↓
+執行 Shell / Build / Test / Deploy
+   ↓
+成功或失敗
+----
+
+例如 Maven 專案：
+
+[source,text]
+----
+push / MR / PR
+      ↓
+取得原始碼
+      ↓
+mvn test
+      ↓
+mvn package
+      ↓
+產出 Artifact
+      ↓
+部署（如果有）
+----
+
+因此真正需要重新學的是 YAML 表達方式，而不是 CI/CD 的整體概念。
+
+== GitLab CI 與 GitHub Actions 設定檔差異
+
+=== GitLab
+
+通常集中在：
+
+[source,text]
+----
+.gitlab-ci.yml
+----
+
+例如：
+
+[source,yaml]
+----
+stages:
+  - test
+  - build
+
+unit-test:
+  stage: test
+  script:
+    - mvn test
+
+build:
+  stage: build
+  script:
+    - mvn package -DskipTests
+----
+
+=== GitHub
+
+放在：
+
+[source,text]
+----
+.github/workflows/*.yml
+----
+
+例如：
+
+[source,yaml]
+----
+name: Java CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: mvn test
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: mvn package -DskipTests
+----
+
+GitLab 常用 `stage` 排順序；GitHub Actions 常用 `needs` 表達 Job 相依。
+
+== Runner 的差異
+
+GitLab 與 GitHub 都把真正執行 CI 的環境稱為 Runner。
+
+共同概念：
+
+[source,text]
+----
+CI 設定檔
+   ↓
+平台排程 Job
+   ↓
+Runner 接 Job
+   ↓
+Runner 執行指令
+----
+
+=== GitLab Runner
+
+GitLab 常見兩種情況：
+
+* GitLab.com 使用平台提供的 Runner，是否可用與額度依方案而異。
+* 自架 GitLab 很常自行安裝 GitLab Runner。
+
+自架環境常見 Executor：
+
+* Shell
+* Docker
+* Kubernetes
+
+例如：
+
+[source,text]
+----
+GitLab Server
+    │
+    ▼
+GitLab Runner
+    │
+    ├─ mvn test
+    ├─ docker build
+    └─ deploy internal server
+----
+
+=== GitHub Runner
+
+GitHub Actions 常見：
+
+* GitHub-hosted runner
+* Self-hosted runner
+
+例如：
+
+[source,yaml]
+----
+runs-on: ubuntu-latest
+----
+
+表示使用 GitHub-hosted Ubuntu Runner。
+
+若使用：
+
+[source,yaml]
+----
+runs-on: self-hosted
+----
+
+代表使用自己註冊的 Runner。
+
+可簡化理解成：
+
+[source,text]
+----
+GitLab Hosted / Shared Runner ≒ GitHub-hosted Runner
+GitLab 自架 Runner          ≒ GitHub Self-hosted Runner
+----
+
+[NOTE]
+====
+如果 CI 需要存取公司內部 Maven Repository、Nexus、Registry、測試主機或部署環境，通常仍會需要 Self-hosted Runner，因為公有 Hosted Runner 不一定能存取內網。
+====
+
+== 預設 Runner 與自架 Runner 怎麼選
+
+[cols="25%,35%,40%", options="header"]
+|===
+|類型 |優點 |注意事項
+
+|平台提供 Runner
+|不用維護主機，適合 build、test、公開套件與一般 CI。
+|有使用額度、執行時間、網路與環境限制；通常無法直接存取內網。
+
+|Self-hosted Runner
+|可使用公司內網、私有 Registry、Nexus、特殊 SDK、GPU 或固定環境。
+|要自行處理更新、權限、隔離、磁碟清理與資安。
+|===
+
+一般可以採：
+
+[source,text]
+----
+單純 Test / Build
+→ Hosted Runner
+
+要連內網 / 部署內部主機 / 使用特殊環境
+→ Self-hosted Runner
+----
+
+== 新 Repository 建立後建議先做什麼
+
+新 Repository 建立完成後，不建議馬上只把程式 push 上去就開始開發。至少先完成以下基本設定。
+
+=== 建議設定總表
+
+[cols="30%,25%,45%", options="header"]
+|===
+|項目 |建議程度 |用途
+
+|Default branch 使用 `main`
+|必要
+|統一主要分支名稱，避免 master / main 混用。
+
+|建立 Ruleset / Branch protection
+|必要
+|避免直接修改 `main`，強制 PR / Review / CI 流程。
+
+|Require Pull Request
+|多人專案必要
+|禁止一般人直接 push 到 `main`。
+
+|Required Approval
+|多人專案必要
+|至少需要 1 位 Reviewer 核准。
+
+|Require Status Checks
+|有 CI 時必要
+|測試或建置失敗時不能 Merge。
+
+|Block Force Push
+|必要
+|避免破壞主要分支歷史。
+
+|Restrict Deletion
+|建議
+|避免誤刪重要 branch。
+
+|Require Conversation Resolution
+|建議
+|Review Comment 尚未處理完成前不能 Merge。
+
+|Dismiss stale approvals
+|建議
+|PR 核准後又追加 Commit 時，要求重新確認。
+
+|CODEOWNERS
+|視團隊需要
+|重要模組自動指定 Reviewer，並可搭配強制 Code Owner Approval。
+
+|Pull Request Template
+|建議
+|要求作者固定填變更原因、驗證方式、風險。
+
+|CI Workflow
+|建議
+|至少在 PR 執行 build / test。
+
+|Dependabot / Dependency Update
+|視專案需要
+|自動提醒依賴套件更新與安全性問題。
+
+|Secret scanning / Push protection
+|公開或敏感專案強烈建議
+|降低 Token、Password、Private Key 被誤提交的風險。
+|===
+
+=== 建議的最小 main Ruleset
+
+如果只想先做一套不複雜、但足夠實用的規則，可以從：
+
+[source,text]
+----
+Target branch: main
+
+Require a pull request before merging       ON
+Required approvals                          1
+Dismiss stale approvals                     ON
+Require status checks to pass               ON
+Require conversation resolution             ON
+Block force pushes                          ON
+Restrict deletions                          ON
+----
+
+開始。
+
+如果是只有自己一個人維護，也可以把 Approval 降低或不強制，但仍建議保留：
+
+[source,text]
+----
+PR
+CI
+No force push
+No delete main
+----
+
+這樣即使個人專案也會留下較完整的變更軌跡。
+
+== 新 Repository 建議的基本檔案
+
+[cols="35%,65%", options="header"]
+|===
+|檔案 |用途
+
+|`README.md` / `README.adoc`
+|專案用途、啟動、建置、部署與基本說明。
+
+|`.gitignore`
+|避免提交 `target/`、IDE、暫存檔、環境檔等不必要內容。
+
+|`LICENSE`
+|公開 Repository 明確定義使用授權；沒有 LICENSE 不代表自動開源。
+
+|`.github/pull_request_template.md`
+|統一 PR 說明格式。
+
+|`.github/CODEOWNERS`
+|重要路徑自動指定 Reviewer。
+
+|`.github/workflows/*.yml`
+|CI/CD Workflow。
+
+|`SECURITY.md`
+|公開專案或正式產品可說明安全漏洞回報方式。
+|===
+
+== Maven / Java 專案最小 GitHub Actions 建議
+
+對一般 Maven 專案，至少可以在 PR 時跑：
+
+[source,yaml]
+----
+name: Maven CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Test
+        run: mvn -B test
+----
+
+接著把這個 Workflow 的成功狀態加入 `Require status checks to pass`。
+
+流程就會是：
+
+[source,text]
+----
+PR
+ ↓
+GitHub Actions
+ ↓
+mvn test
+ ↓
+PASS ──→ 可以進入 Merge 條件判斷
+FAIL ──→ 禁止 Merge
+----
+
+== GitLab 與 GitHub 的共同邏輯
+
+雖然名稱很多，但實際上可以把兩邊都抽象成同一套流程：
+
+[source,text]
+----
+Repository
+   ↓
+Branch
+   ↓
+Commit
+   ↓
+Push
+   ↓
+MR / PR
+   ↓
+Code Review
+   ↓
+CI/CD
+   ↓
+Approval
+   ↓
+Merge
+   ↓
+Protected main
+----
+
+真正不同的是：
+
+* 功能名稱。
+* UI 位置。
+* YAML 語法。
+* 權限設定模型。
+* Runner 的管理方式。
+* 各方案可使用的功能與額度。
+
+但團隊治理的核心並沒有變。
+
+== 第一次從 GitLab 切換到 GitHub 的速記
+
+[source,text]
+----
+GitLab                         GitHub
+-------------------------------------------------
+Project                     → Repository
+Group                       → Organization
+MR                          → PR
+Target branch               → Base branch
+Source branch               → Compare / Head
+Protected Branch            → Ruleset / Branch Protection
+Pipeline                    → Workflow Run
+.gitlab-ci.yml              → .github/workflows/*.yml
+Stage                       → needs / Job dependency
+GitLab Runner               → GitHub Runner
+CI/CD Variables             → Actions Variables / Secrets
+----
+
+最重要的四個記法：
+
+[source,text]
+----
+MR ≒ PR
+
+Protected Branch ≒ Ruleset / Branch Protection
+
+Pipeline ≒ Workflow Run
+
+Runner 的工作本質相同，只是平台與設定方式不同
+----
+
+== 建議使用方式
+
+如果本來已經熟悉 GitLab，可以先沿用原本的開發治理邏輯，不需要因為換成 GitHub 就重新設計整套流程。
+
+例如原本 GitLab 是：
+
+[source,text]
+----
+feature/*
+  ↓
+MR
+  ↓
+Review
+  ↓
+Pipeline
+  ↓
+Approval
+  ↓
+main
+----
+
+換到 GitHub 仍然可以維持：
+
+[source,text]
+----
+feature/*
+  ↓
+PR
+  ↓
+Review
+  ↓
+Actions
+  ↓
+Approval
+  ↓
+main
+----
+
+先把原本已經驗證有效的治理方式對應過去，再針對 GitHub 特有能力逐步調整，通常會比一開始全部重做更容易維護。
