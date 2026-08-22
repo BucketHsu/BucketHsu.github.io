@@ -21,6 +21,8 @@
 
 首頁是本站的主要入口。可直接依下方主題選擇文件，也可以使用左側導覽快速切換分類。
 
+首頁文件分類原則上應與左側 `nav.adoc` 保持一致；新增正式文件時，若已加入左側導覽，也應同步加入首頁對應分類。
+
 == Reference
 
 [cols="30%,45%,25%", options="header"]
@@ -51,10 +53,6 @@
 |Docker、Dockerfile、Kubernetes 與 Minikube 指令。
 |操作容器與 Kubernetes 開發環境。
 
-|xref:reference/database-javascript-notes.adoc[資料庫與 JavaScript]
-|SQL 執行順序、JOIN 與 JavaScript 陣列。
-|查詢 SQL 或處理前端陣列。
-
 |xref:reference/java-frontend-concepts.adoc[Java 與前端觀念]
 |Java 分層、Spring Boot Profile 與前端架構名詞。
 |規劃專案結構或釐清名詞。
@@ -70,6 +68,25 @@
 |xref:reference/taiwan-county-id-codes.adoc[台灣縣市英文、代碼與身分證字號對照表]
 |縣市英文名稱、行政區代碼與身分證字號首碼。
 |查找公開代碼對照。
+|===
+
+== 資料庫與 SQL
+
+[cols="30%,45%,25%", options="header"]
+|===
+|文件 |重點 |適合情境
+
+|xref:database/sql-date-time-format-conversion.adoc[SQL 日期時間與台灣民國年月日格式轉換]
+|整理常用 SQL 日期時間格式，以及西元與民國年月日轉換方式。
+|處理報表、查詢條件或日期格式轉換。
+
+|xref:database/sqlserver-connectivity-docker-compose-guide.adoc[SQL Server 名稱可連但 IP 無法連線與 Docker Compose 部署]
+|SQL Server 網路連線、名稱解析與容器部署相關排查。
+|排查 SQL Server 連線或 Docker Compose 資料庫環境。
+
+|xref:reference/database-javascript-notes.adoc[資料庫與 JavaScript]
+|SQL 執行順序、JOIN 與 JavaScript 陣列。
+|查詢 SQL 或處理前端陣列。
 |===
 
 == Java 與前端
@@ -90,6 +107,10 @@
 |HTTP / HTTPS Connector、TLS 與憑證部署。
 |設定 Tomcat Connector。
 
+|xref:java/tomcat-pkcs12-objectidentifier-error.adoc[Tomcat 8 載入 PKCS#12 憑證發生 ObjectIdentifier 錯誤]
+|整理舊版 Tomcat / Java 載入 PKCS#12 憑證時的相容性問題與排查方式。
+|遇到 PKCS#12、ObjectIdentifier 或憑證載入錯誤時。
+
 |xref:frontend/html5-semantic-elements.adoc[HTML5 語意化 Element 使用規範]
 |HTML5 語意元素與可維護結構。
 |改善前端頁面結構。
@@ -106,7 +127,7 @@
 |第一次學習或建立完整設定。
 
 |xref:network/cloud-onprem-web-architecture.adoc[雲端前端與地端 Spring Boot / Database 架構]
-|Cloud Nginx、地端 API / DB、安全邊界、BFF 與微服務架構差異。
+|Cloud Nginx、地端 API / DB、安全邊界、BFF、前後端分離權限與微服務架構差異。
 |前端部署到雲端，但核心 Spring Boot 與資料庫仍保留在地端時。
 
 |xref:network/nginx-config-organization.adoc[Nginx 設定檔分層、Template 與 Include]
@@ -135,6 +156,10 @@
 [cols="30%,45%,25%", options="header"]
 |===
 |文件 |重點 |適合情境
+
+|xref:container/wsl-docker-engine-without-desktop.adoc[WSL 2 移除 Docker Desktop 並安裝 Docker Engine]
+|在 WSL 2 中直接使用 Docker Engine，降低對 Docker Desktop 的依賴。
+|Windows 開發環境希望改用 WSL 2 Docker Engine 時。
 
 |xref:container/docker-compose-notes.adoc[Docker Compose 整理]
 |環境變數、healthcheck、volume、network 與掛載範例。
@@ -191,13 +216,29 @@
 |MR/PR、Reviewer、Assignee、CI/CD、Ruleset、分支保護與新 repository 檢查清單。
 |從 GitLab 轉換到 GitHub，或建立新的 GitHub repository。
 
+|xref:tools/gitlab-github-first-use-guide.adoc[GitLab 與 GitHub 初次使用差異指南]
+|快速對照 MR / PR、Protected Branch / Ruleset、Runner、CI/CD 與新 Repository 建議設定。
+|第一次從 GitLab 切換到 GitHub 時快速建立對應觀念。
+
 |xref:tools/self-hosted-ai-code-review-platform-guide.adoc[自架 AI 推論平台與 GitLab Code Review 導入指南]
 |推論工具選型、NIM、Nginx、GitLab CI、Token、安全與 MR 審查流程。
 |規劃內部 AI 推論服務，或將 AI Code Review 導入 GitLab。
 
+|xref:tools/ai-inference-runtime-model-comparison.adoc[AI 推論工具、啟動方式與模型家族比較]
+|整理 AI Runtime、模型服務啟動方式與模型家族選擇差異。
+|比較地端 AI 推論工具或模型選型時。
+
+|xref:tools/notepadpp-delete-matching-lines.adoc[Notepad++ 刪除包含特定字串的整行]
+|使用 Notepad++ 搜尋與刪除符合條件的資料列。
+|快速清理文字檔內容時。
+
 |xref:tools/ide-shortcuts-comparison.adoc[Eclipse、IntelliJ IDEA 與 VS Code 快捷鍵對照]
 |搜尋、導航、重構、執行、除錯與視窗快捷鍵。
 |跨 IDE 開發與快捷鍵查找。
+
+|xref:tools/nssm-windows-service-guide.adoc[使用 NSSM 將 Java 程式註冊為 Windows Service]
+|使用 NSSM 管理 Java 程式的 Windows Service 啟停與自動啟動。
+|需要讓 Java JAR 在 Windows 背景服務化執行時。
 
 |xref:tools/ai-cli-notes.adoc[AI CLI 注意事項]
 |Codex、Claude Code、Gemini CLI 與工作流程。
@@ -221,6 +262,10 @@
 |xref:contributing/asciidoc-format-conversion-guide.adoc[AsciiDoc 文件轉換與輸出格式指南]
 |HTML、PDF、Reveal.js、DocBook、DOCX、批次轉換、Maven 與個資檢查。
 |將 AsciiDoc 發布成其他格式，或把 Word 文件移轉成 AsciiDoc。
+
+|xref:contributing/markdown-format-conversion-guide.adoc[Markdown 文件轉換與輸出格式指南]
+|Markdown 文件轉換、輸出與格式整理方式。
+|需要把 Markdown 發布成其他格式或整理既有文件時。
 |===
 
 建置指令與 GitHub Pages 發布流程請參考 repository 根目錄的 `README.adoc`。
