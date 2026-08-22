@@ -225,6 +225,385 @@ HTTP/1.1 403 Forbidden
 
 所以「知道 API URL」並不代表具有 API 權限。
 
+== Fat JAR 內建前端與前後端分離後的權限差異
+
+傳統 Spring Boot Fat JAR 常會把 HTML、JavaScript、CSS 與 API 一起打包，例如：
+
+[source,text]
+----
+Browser
+   ↓
+Spring Boot Fat JAR
+   ├─ HTML / JavaScript / CSS
+   ├─ Controller
+   ├─ Spring Security
+   └─ API
+----
+
+在這種架構中，Spring Security 同時位於頁面與 API 前方，因此可以直接限制：
+
+[source,text]
+----
+/admin/**
+/api/admin/**
+----
+
+例如只有 `ADMIN` 才能進入 `/admin/` 頁面，同時也只有 `ADMIN` 能呼叫 `/api/admin/**`。
+
+前後端分離後則變成：
+
+[source,text]
+----
+Browser
+   ↓
+Cloud Nginx
+   ├─ HTML / JavaScript / CSS
+   │
+   └─ /api/*
+          ↓
+     On-Prem Spring Boot
+          ↓
+     Spring Security
+----
+
+此時靜態 HTML 是由 Nginx 提供，不再經過 Spring Security。
+
+因此如果 Nginx 沒有額外限制，知道 `/admin.html` 位址的使用者可能仍然可以取得 HTML 檔案。
+
+這不代表使用者就能取得受保護的資料，因為真正的業務資料仍必須由 Spring Boot API 提供。
+
+=== 前後端分離後的核心安全原則
+
+應把「頁面顯示」與「資料 / 操作權限」拆開看：
+
+[source,text]
+----
+看得到頁面
+    ≠
+拿得到資料
+    ≠
+有權限操作
+----
+
+例如一般使用者直接輸入：
+
+[source,text]
+----
+https://service.example.com/admin.html
+----
+
+即使 Nginx 回傳 `admin.html`，頁面內呼叫：
+
+[source,javascript]
+----
+fetch('/api/admin/users', {
+    credentials: 'include'
+});
+----
+
+Spring Security 仍應依身份與權限判斷：
+
+[source,text]
+----
+未登入
+→ 401 Unauthorized
+
+已登入，但不是 ADMIN
+→ 403 Forbidden
+
+具備 ADMIN 權限
+→ 200 OK
+----
+
+[IMPORTANT]
+====
+前後端分離之後，不應把「使用者看不到某個 HTML 頁面」當成主要資安機制。真正的安全邊界仍是後端 API 的 Authentication、Authorization 與 Business Rule。
+====
+
+== 前端 JavaScript 負責使用體驗，不是最終授權
+
+前端通常會取得目前登入者資訊，例如：
+
+[source,text]
+----
+GET /api/auth/me
+----
+
+後端可能回傳：
+
+[source,json]
+----
+{
+  "username": "user001",
+  "roles": [
+    "USER",
+    "ADMIN"
+  ],
+  "permissions": [
+    "USER_READ",
+    "USER_EDIT"
+  ]
+}
+----
+
+前端可以依權限決定：
+
+* 是否顯示選單。
+* 是否顯示按鈕。
+* 是否允許進入特定畫面。
+* 沒有權限時導向 `403.html`。
+
+例如：
+
+[source,javascript]
+----
+async function checkPagePermission(requiredRole) {
+    const response = await fetch('/api/auth/me', {
+        credentials: 'include'
+    });
+
+    if (response.status === 401) {
+        location.href = '/login.html';
+        return false;
+    }
+
+    if (!response.ok) {
+        location.href = '/error.html';
+        return false;
+    }
+
+    const user = await response.json();
+
+    if (!user.roles.includes(requiredRole)) {
+        location.href = '/403.html';
+        return false;
+    }
+
+    return true;
+}
+----
+
+頁面載入時可以檢查：
+
+[source,javascript]
+----
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!await checkPagePermission('ADMIN')) {
+        return;
+    }
+
+    loadAdminData();
+});
+----
+
+但使用者可以修改 Browser DevTools 中的 JavaScript、直接呼叫 API，甚至自己組 HTTP Request。
+
+所以前端判斷只能當作 User Experience 與導覽控制，不能取代 Spring Security。
+
+=== 後端 API 仍必須再次驗證
+
+Spring Security 可以集中設定：
+
+[source,java]
+----
+http.authorizeHttpRequests(auth -> auth
+    .requestMatchers("/api/public/**").permitAll()
+    .requestMatchers("/api/admin/**").hasRole("ADMIN")
+    .requestMatchers("/api/**").authenticated()
+    .anyRequest().denyAll()
+);
+----
+
+也可以在 Method 層使用：
+
+[source,java]
+----
+@PreAuthorize("hasAuthority('USER_READ')")
+@GetMapping("/api/users")
+public List<UserDto> findUsers() {
+    return userService.findUsers();
+}
+----
+
+修改功能則可使用不同權限：
+
+[source,java]
+----
+@PreAuthorize("hasAuthority('USER_EDIT')")
+@PostMapping("/api/users")
+public void saveUser(@RequestBody UserDto user) {
+    userService.save(user);
+}
+----
+
+這樣即使使用者自行解除前端按鈕的 `disabled`、修改 JavaScript 或直接使用 `curl`，仍然無法繞過後端授權。
+
+== 如果連 HTML 都不希望未授權使用者取得
+
+某些系統可能仍希望保留接近 Fat JAR + Spring Security 的效果：
+
+[source,text]
+----
+沒有權限
+→ 連 /admin/ 頁面本身都不能取得
+----
+
+此時可以使用 Nginx `auth_request`，由 Nginx 在提供受保護頁面前先向 Spring Boot 詢問是否允許。
+
+[source,text]
+----
+Browser
+   ↓
+GET /admin/
+   ↓
+Cloud Nginx
+   ↓ auth_request
+On-Prem Spring Boot /api/auth/check
+   ↓
+Spring Security
+   ├─ 2xx → Nginx 回傳頁面
+   └─ 401 / 403 → Nginx 拒絕
+----
+
+Nginx 範例：
+
+[source,nginx]
+----
+location = /_auth {
+    internal;
+
+    proxy_pass http://172.16.10.30:8080/api/auth/check;
+
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+
+    proxy_set_header Cookie $http_cookie;
+    proxy_set_header Authorization $http_authorization;
+    proxy_set_header X-Original-URI $request_uri;
+}
+
+location /admin/ {
+    auth_request /_auth;
+
+    root /usr/share/nginx/html;
+    try_files $uri $uri/ /admin/index.html;
+}
+----
+
+這樣 `/admin/` 的請求會先經過：
+
+[source,text]
+----
+Nginx
+  ↓
+Spring Security
+  ↓
+允許 / 拒絕
+----
+
+這種方式可以把「頁面入口權限」重新交由 Spring Security 判斷，但靜態檔案本身仍由 Nginx 提供。
+
+[NOTE]
+====
+`auth_request` 不是把原本的頁面 Request 完整轉給 Spring Boot，而是另外送出一個授權子請求。Spring Boot 只需要回覆是否允許，不需要回傳原本 HTML。
+====
+
+=== 不要對每個靜態資源都做不必要的權限查詢
+
+如果直接對所有資源都使用 `auth_request`：
+
+[source,text]
+----
+index.html
+app.js
+style.css
+logo.png
+icon.svg
+----
+
+瀏覽器載入一個頁面時可能產生多次額外的授權 API Request。
+
+因此通常可以只保護特定頁面入口或目錄，例如：
+
+[source,nginx]
+----
+location /admin/ {
+    auth_request /_auth;
+}
+----
+
+而共用 JavaScript、CSS、圖片仍可由 Nginx 正常提供。
+
+實際是否需要保護靜態檔案，應依資料敏感度與系統需求判斷。
+
+== 建議的三層權限責任
+
+前後端分離時可以把責任整理成：
+
+[cols="24%,31%,45%", options="header"]
+|===
+|層級 |負責元件 |主要責任
+
+|頁面入口
+|Nginx `auth_request`，視需求使用
+|如果有必要，限制未登入或無權限者取得特定 HTML 頁面。
+
+|畫面與操作元件
+|JavaScript
+|依登入者權限隱藏 Menu、Button，控制導頁與使用體驗。
+
+|資料與真正操作權限
+|Spring Security
+|驗證 API Authentication / Authorization；這一層不可省略。
+|===
+
+對一般 Web 系統，優先順序應該是：
+
+[source,text]
+----
+第一優先：Spring Security 保護所有敏感 API
+
+第二層：JavaScript 根據使用者權限調整畫面
+
+有需求時：Nginx auth_request 保護特定 HTML 入口
+----
+
+這樣可以避免為了保護靜態 HTML 而把整套前端重新綁回 Spring Boot，同時又保留原本 Spring Security 的授權邏輯。
+
+=== Cookie / JWT 架構注意事項
+
+若使用 HttpOnly Cookie 保存 Session 或 JWT，瀏覽器呼叫同網域 API 時可以維持：
+
+[source,javascript]
+----
+fetch('/api/auth/me', {
+    credentials: 'include'
+});
+----
+
+部署架構可維持同一個公開 Origin：
+
+[source,text]
+----
+https://service.example.com/
+https://service.example.com/api/*
+----
+
+由 Nginx 依 Path 分流：
+
+[source,text]
+----
+/       → Cloud 靜態前端
+/api/*  → On-Prem Spring Boot
+----
+
+這樣 Browser 端看起來仍是同一個網域，通常也比把前端與 API 拆成不同公開網域更容易處理 Cookie、CORS 與 SameSite 規則。
+
+[IMPORTANT]
+====
+即使 JWT 放在 HttpOnly Cookie，前端 JavaScript 無法直接讀取 Cookie，也不代表可以省略 CSRF、SameSite、CORS 與後端授權設計。實際設定仍需依登入機制與跨站需求判斷。
+====
+
 == 外部是否能追出每一層轉送
 
 一般使用者使用 `curl`、Browser DevTools、`traceroute` 或 Windows `tracert`，通常只能觀察到自己與 Cloud 公開入口之間的連線。
@@ -639,6 +1018,9 @@ Database
 * Firewall 只允許指定 Cloud Subnet / Gateway 連入 On-Prem API Port。
 * Database 只接受必要的 On-Prem 應用程式來源。
 * Spring Boot 仍執行 Authentication 與 Authorization。
+* 前端 JavaScript 的 Menu / Button / 頁面導向只屬於 User Experience，不取代後端 API 權限。
+* 每個敏感 API 都必須由 Spring Security 或等效機制重新驗證權限。
+* 若有「連 HTML 都不能讓未授權者取得」的需求，可評估只對必要頁面使用 Nginx `auth_request`。
 * 不把真實 On-Prem IP、Database IP 或 JDBC URL 寫入前端 JavaScript。
 * 正式環境不回傳 Stack Trace、Database 連線資訊與實體路徑。
 * Proxy Header 只接受可信任 Proxy 所提供的內容。
@@ -652,6 +1034,10 @@ Database
 URL 公開 ≠ On-Prem API 公開
 
 知道 API 路徑 ≠ 有 API 權限
+
+看得到 HTML ≠ 拿得到資料 ≠ 有權限操作
+
+前端隱藏按鈕 ≠ 後端完成授權
 
 Nginx 可以連地端 ≠ Internet 可以連地端
 
