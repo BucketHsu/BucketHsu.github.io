@@ -24,6 +24,7 @@
 * 網路與容器
 ** Nginx
 *** xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]
+*** xref:network/cloud-onprem-web-architecture.adoc[雲端前端與地端 Spring Boot / Database 架構]
 *** xref:network/nginx-config-organization.adoc[Nginx 設定檔分層、Template 與 Include]
 *** xref:network/nginx-site-template-error-pages.adoc[Nginx site.conf.template 與自訂錯誤頁]
 *** xref:network/nginx-trailing-slash.adoc[Nginx 路徑尾端斜線規則]
