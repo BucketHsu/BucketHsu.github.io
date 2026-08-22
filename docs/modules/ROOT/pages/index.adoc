@@ -105,6 +105,10 @@
 |Nginx 基礎、反向代理、HTTPS、負載平衡與排錯。
 |第一次學習或建立完整設定。
 
+|xref:network/cloud-onprem-web-architecture.adoc[雲端前端與地端 Spring Boot / Database 架構]
+|Cloud Nginx、地端 API / DB、安全邊界、BFF 與微服務架構差異。
+|前端部署到雲端，但核心 Spring Boot 與資料庫仍保留在地端時。
+
 |xref:network/nginx-config-organization.adoc[Nginx 設定檔分層、Template 與 Include]
 |nginx.conf、80.conf、443.conf、template 與 include 分工。
 |規劃可維護的設定檔結構。
