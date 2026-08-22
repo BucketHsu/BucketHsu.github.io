@@ -1,0 +1,663 @@
+= 雲端前端與地端 Spring Boot / Database 架構
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本篇整理當前端 HTML / JavaScript 部署在雲端，但 Spring Boot API 與 Database 保留在地端時的常見架構、Nginx 反向代理方式、安全邊界，以及與 BFF、微服務架構的差異。
+
+== 情境
+
+假設系統條件如下：
+
+* HTML、CSS、JavaScript 對外提供給一般使用者。
+* 前端部署在雲端。
+* 核心 Spring Boot API 與 Database 保留在公司地端環境。
+* 雲端與地端之間可透過 Site-to-Site VPN、專線或其他私有網路互通。
+* 地端 API 不直接暴露給 Internet。
+
+此時需要處理的核心問題不是「前端能不能呼叫地端 API」，而是「公開入口放在哪一層，以及地端服務如何只接受可信任來源」。
+
+== 建議架構：Cloud Nginx 反向代理到地端 API
+
+如果雲端沒有額外的業務邏輯需求，較單純的做法是讓 Nginx 同時提供靜態網站與 `/api/` 反向代理。
+
+[source,text]
+----
+Internet
+   │
+   │ HTTPS :443
+   ▼
+Cloud Nginx
+   ├─ /        → HTML / CSS / JavaScript
+   └─ /api/*   → Reverse Proxy
+                    │
+                    │ VPN / 專線 / 私有網路
+                    ▼
+              On-Prem Spring Boot
+                    │
+                    │ JDBC
+                    ▼
+              On-Prem Database
+----
+
+例如使用者在瀏覽器呼叫：
+
+[source,javascript]
+----
+fetch('/api/user/list')
+  .then(response => response.json())
+  .then(data => console.log(data));
+----
+
+瀏覽器實際連線的仍然是公開網域：
+
+[source,text]
+----
+https://service.example.com/api/user/list
+----
+
+由 Nginx 在伺服器端轉送到地端 Spring Boot：
+
+[source,nginx]
+----
+server {
+    listen 443 ssl;
+    server_name service.example.com;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://172.16.10.30:8080/;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+----
+
+[NOTE]
+====
+`172.16.10.30` 僅為文件範例。實際環境應使用私有網路位址、內部 DNS 或服務探索名稱，不應把真實內部 IP、主機名稱或 Database 資訊放入公開文件與前端程式碼。
+====
+
+== 為什麼前端不需要知道地端 API 位址
+
+反向代理會把外部連線與內部連線切成兩段。
+
+[source,text]
+----
+TCP Connection #1
+Browser → Cloud Nginx
+
+TCP Connection #2
+Cloud Nginx → On-Prem Spring Boot
+----
+
+因此瀏覽器只需要知道：
+
+[source,text]
+----
+service.example.com:443
+----
+
+不需要知道：
+
+[source,text]
+----
+Spring Boot 私有 IP
+Spring Boot Port
+Database IP
+Database Port
+VPN 路由
+----
+
+這也是反向代理可隱藏後端拓樸的原因之一。
+
+== 地端只允許雲端來源
+
+地端 API 應避免直接對 Internet 開放，並透過 Firewall 或 Network ACL 限制來源。
+
+例如：
+
+[source,text]
+----
+Cloud Nginx Private IP : 10.100.10.20
+On-Prem Spring Boot    : 172.16.10.30:8080
+----
+
+Firewall 規則可設計成：
+
+[source,text]
+----
+ALLOW  10.100.10.20     → 172.16.10.30:8080
+DENY   ALL              → 172.16.10.30:8080
+----
+
+如果雲端有多台 Nginx，也可以限制整個固定子網：
+
+[source,text]
+----
+ALLOW  10.100.10.0/24   → 172.16.10.30:8080
+DENY   ALL              → 172.16.10.30:8080
+----
+
+較理想的設計是地端 Spring Boot 根本沒有 Public IP，而是只能透過 VPN、專線或其他私有路由到達。
+
+[source,text]
+----
+Internet
+   │
+   ▼
+Cloud Public Entry
+   │
+   │ Private Network
+   ▼
+On-Prem Private Network
+   │
+   ▼
+Spring Boot
+   │
+   ▼
+Database
+----
+
+[IMPORTANT]
+====
+「Nginx 可以連地端 API」不等於「Internet 可以連地端 API」。兩者應由 routing、Firewall 與 ACL 分別限制。
+====
+
+== 網路層與應用程式層是兩種不同安全機制
+
+即使只有 Cloud Nginx 能連地端 Spring Boot，Spring Boot 本身仍應保留認證與授權。
+
+[source,text]
+----
+Internet
+   ↓
+Cloud Nginx
+   ↓
+Firewall / Private Network
+   ↓
+Spring Security
+   ↓
+JWT / Session / OAuth2 / API Key
+   ↓
+Authorization
+   ↓
+Controller
+----
+
+因此：
+
+* Network Security 決定「誰可以建立連線」。
+* Authentication 決定「你是誰」。
+* Authorization 決定「你可以做什麼」。
+* Business Rule 決定「這筆資料是否允許被操作」。
+
+例如未登入時可以回應：
+
+[source,text]
+----
+HTTP/1.1 401 Unauthorized
+----
+
+有登入但沒有權限時可以回應：
+
+[source,text]
+----
+HTTP/1.1 403 Forbidden
+----
+
+所以「知道 API URL」並不代表具有 API 權限。
+
+== 外部是否能追出每一層轉送
+
+一般使用者使用 `curl`、Browser DevTools、`traceroute` 或 Windows `tracert`，通常只能觀察到自己與 Cloud 公開入口之間的連線。
+
+例如：
+
+[source,bash]
+----
+curl -v https://service.example.com/api/user/list
+----
+
+可能看到：
+
+[source,text]
+----
+DNS
+  ↓
+Cloud Public IP
+  ↓
+TLS
+  ↓
+HTTP Response
+----
+
+不會因為 Nginx 使用 `proxy_pass`，就自動顯示：
+
+[source,text]
+----
+Cloud Nginx
+  ↓
+VPN
+  ↓
+172.16.10.30:8080
+  ↓
+Spring Boot
+  ↓
+Database
+----
+
+`traceroute` / `tracert` 也只會追蹤使用者這一條網路路徑，不會接著追蹤 Nginx 自己建立的第二條 TCP 連線。
+
+=== 真正需要注意的是資訊洩漏
+
+雖然一般網路工具不會直接列出後端拓樸，但應避免應用程式自己把內部資訊回傳出去。
+
+正式環境不要回傳類似：
+
+[source,json]
+----
+{
+  "message": "Connection failed to 172.16.20.50:1521",
+  "trace": "java.sql.SQLException: ..."
+}
+----
+
+也不要在 Response Header 主動加入：
+
+[source,text]
+----
+X-Upstream-Addr: 172.16.10.30:8080
+----
+
+常見需要避免暴露的資訊包含：
+
+* 內部 IP 與 hostname。
+* JDBC URL。
+* Database SID / Service Name。
+* Java Stack Trace。
+* 實體檔案路徑。
+* 內部網路名稱與環境名稱。
+
+== X-Forwarded-For 與真實用戶端 IP
+
+Spring Boot 的 TCP 連線來源通常只會看到 Cloud Nginx，因此可由 Nginx 傳遞真實用戶端 IP。
+
+[source,nginx]
+----
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+----
+
+流程可能是：
+
+[source,text]
+----
+使用者 203.0.113.50
+    ↓
+Cloud Nginx 10.100.10.20
+    ↓
+Spring Boot 172.16.10.30
+----
+
+Spring Boot TCP 層看到的來源可能是：
+
+[source,text]
+----
+10.100.10.20
+----
+
+而 `X-Forwarded-For` 可保留：
+
+[source,text]
+----
+203.0.113.50
+----
+
+這對 Audit Log、Rate Limit 與異常追蹤很重要。
+
+[WARNING]
+====
+只有在 Spring Boot 前方確實存在可信任 Proxy，並且地端 API 無法被任意來源直接呼叫時，才應信任 `X-Forwarded-For`。否則外部用戶端可以自行偽造此 Header。
+====
+
+== 雲端再增加一個 Spring Boot AP 的架構
+
+另一種做法是：
+
+[source,text]
+----
+Browser
+   ↓
+Cloud Nginx / HTML
+   ↓
+Cloud Spring Boot
+   ↓
+On-Prem Spring Boot
+   ↓
+Database
+----
+
+如果 Cloud Spring Boot 只是單純：
+
+[source,text]
+----
+收到 HTTP Request
+    ↓
+再呼叫 On-Prem HTTP API
+    ↓
+把 Response 原樣回傳
+----
+
+那通常只是多增加一層 Proxy。
+
+額外成本包含：
+
+* 多一個服務需要部署與維護。
+* 多一層 Log、監控與告警。
+* 多一層 timeout 與錯誤處理。
+* 多一次 JSON 序列化與反序列化。
+* 多一個網路延遲與故障點。
+
+如果沒有實際業務責任，通常由 Nginx 直接 Reverse Proxy 到地端 API 較單純。
+
+== 什麼時候 Cloud AP 是合理的
+
+當 Cloud Spring Boot 不只是 Proxy，而是負責特定 Frontend 所需的後端邏輯時，可以視為 BFF（Backend for Frontend）或 Integration Layer。
+
+常見責任包含：
+
+* JWT、OAuth2、SSO 等身份驗證整合。
+* 多個後端 API 聚合。
+* 回傳格式轉換。
+* Rate Limit。
+* API Version 管理。
+* Audit Log。
+* 資料遮罩。
+* Cache。
+* 整合雲端服務與地端服務。
+
+例如：
+
+[source,text]
+----
+Browser
+   ↓
+Cloud BFF
+   ├─ On-Prem 人事 API
+   ├─ On-Prem 公文 API
+   ├─ On-Prem 財務 API
+   └─ Cloud Service
+----
+
+這時 Cloud AP 已經有獨立責任，而不是單純為了「多一層」而存在。
+
+== 不建議 Cloud Spring Boot 直接 JDBC 連地端 Database
+
+技術上只要 VPN 路由與 Firewall 開通，Cloud Spring Boot 可以直接使用 JDBC 連線地端 Database。
+
+[source,text]
+----
+Cloud Spring Boot
+      │
+      │ JDBC over VPN
+      ▼
+On-Prem Database
+----
+
+但一般 Web 系統不建議把這個架構當成優先方案。
+
+原因包括：
+
+* JDBC Connection Pool 是長連線，對網路穩定度較敏感。
+* 一個 HTTP Request 可能執行多次 SQL，跨區 RTT 會被累積。
+* VPN 短暫抖動可能同時影響多條 Connection。
+* Transaction 期間的網路問題比較難處理。
+* Database Port 必須跨網路區域開放，安全邊界較大。
+
+相較之下：
+
+[source,text]
+----
+Cloud
+   ↓ HTTP / HTTPS
+On-Prem Spring Boot
+   ↓ Local JDBC
+Database
+----
+
+可以把 Database Connection 留在地端，跨網路只傳遞 API Request / Response。
+
+== 與單體式系統的關係
+
+以下架構：
+
+[source,text]
+----
+Cloud HTML / Nginx
+        ↓
+On-Prem Spring Boot
+        ↓
+Database
+----
+
+並不代表它就是微服務。
+
+如果地端仍然只有一個 Spring Boot 應用程式，所有業務功能都由同一個部署單元提供，通常仍屬於 Monolith（單體式）或 Modular Monolith（模組化單體）。
+
+例如：
+
+[source,text]
+----
+Spring Boot
+├─ user
+├─ case
+├─ document
+├─ payment
+└─ common
+    ↓
+Database
+----
+
+即使 Java 專案內拆成多個 Maven Module，只要最後仍然：
+
+* 打包成同一個應用程式。
+* 一起啟動與停止。
+* 一起部署。
+* 不能獨立擴縮。
+
+就不能單純因為「有多個 Module」而稱為微服務。
+
+== 微服務架構
+
+微服務的核心不是「Spring Boot 開很多個」，而是把系統依業務能力拆成可以獨立部署、獨立演進的服務。
+
+例如：
+
+[source,text]
+----
+Browser
+   ↓
+Cloud Nginx / API Gateway
+   │
+   ├─ /api/users/*     → User Service
+   ├─ /api/cases/*     → Case Service
+   ├─ /api/documents/* → Document Service
+   └─ /api/payments/*  → Payment Service
+----
+
+各服務可能都是獨立的 Spring Boot：
+
+[source,text]
+----
+User Service
+  └─ user-db
+
+Case Service
+  └─ case-db
+
+Document Service
+  └─ document-db
+
+Payment Service
+  └─ payment-db
+----
+
+理想上的微服務通常具備：
+
+* 可獨立建置。
+* 可獨立部署。
+* 可獨立啟停。
+* 可獨立版本演進。
+* 可獨立擴縮。
+* 明確的業務責任與邊界。
+* 服務之間透過 API、Message Queue 或 Event 溝通。
+
+[NOTE]
+====
+「每個服務都有自己的 Database」是常見的微服務資料所有權原則，但實際遷移過程可能存在共用 Database。是否為微服務不能只看 Database 數量，而要綜合判斷部署單元、業務邊界與資料所有權。
+====
+
+== 雲端與地端混合的微服務
+
+微服務也可以跨 Cloud 與 On-Prem 部署。
+
+例如：
+
+[source,text]
+----
+Internet
+   ↓
+Cloud Nginx / API Gateway
+   │
+   ├─ Cloud User Service
+   ├─ Cloud Notification Service
+   │
+   └─ VPN / Private Network
+          │
+          ├─ On-Prem Case Service
+          ├─ On-Prem Document Service
+          └─ On-Prem Legacy Integration Service
+----
+
+這種設計稱為 Hybrid Cloud Architecture 的一種形式。
+
+但應特別注意：
+
+* Cloud 與 On-Prem 之間的 latency。
+* VPN 或專線中斷時的容錯。
+* API timeout。
+* Retry 是否會造成重複交易。
+* Circuit Breaker。
+* Distributed Tracing。
+* 中央 Log 與監控。
+* 身份驗證與服務對服務授權。
+
+所以微服務並不是「比單體式更進階就一定比較好」，而是用較高的維運複雜度換取更明確的服務邊界與獨立演進能力。
+
+== 三種架構比較
+
+[cols="27%,15%,28%,30%", options="header"]
+|===
+|架構 |複雜度 |優點 |適合情境
+
+|Cloud HTML + Nginx → On-Prem Spring Boot → DB
+|低
+|架構單純、後端隱藏於私網、維運元件少。
+|單一系統、主要業務仍留地端，只需要把 Web Entry 移到 Cloud。
+
+|Cloud HTML → Cloud BFF → On-Prem Spring Boot → DB
+|中
+|可聚合 API、集中驗證、資料轉換與整合多套系統。
+|雲端層已有明確業務責任，或前端需要整合多個 Backend。
+
+|Cloud API Gateway → 多個 Cloud / On-Prem Microservices
+|高
+|服務可獨立部署、擴縮與演進。
+|大型系統、不同業務領域需要獨立生命週期或團隊維護。
+|===
+
+== 建議判斷方式
+
+如果需求只是：
+
+[source,text]
+----
+HTML 搬到 Cloud
+Spring Boot 留 On-Prem
+Database 留 On-Prem
+----
+
+優先考慮：
+
+[source,text]
+----
+Browser
+   ↓
+Cloud Nginx
+   ↓
+VPN / Private Network
+   ↓
+On-Prem Spring Boot
+   ↓
+Database
+----
+
+如果之後出現下列需求，再評估增加 Cloud BFF 或微服務：
+
+* 同一前端要整合多套內部系統。
+* Cloud 與 On-Prem 都開始有獨立業務服務。
+* 不同功能需要不同發布週期。
+* 某些功能需要獨立擴充資源。
+* 不同團隊需要獨立維護與部署。
+* 單一 Spring Boot 已經形成難以拆解的高度耦合。
+
+不要因為「前端在 Cloud、Backend 在 On-Prem」就直接把系統改成微服務，也不要為了架構層數看起來完整而增加沒有責任的 Cloud AP。
+
+== 安全檢查清單
+
+* Cloud Nginx 對外只開必要的 HTTPS Port。
+* On-Prem Spring Boot 不提供 Public IP，或至少不直接對 Internet 開放。
+* Firewall 只允許指定 Cloud Subnet / Gateway 連入 On-Prem API Port。
+* Database 只接受必要的 On-Prem 應用程式來源。
+* Spring Boot 仍執行 Authentication 與 Authorization。
+* 不把真實 On-Prem IP、Database IP 或 JDBC URL 寫入前端 JavaScript。
+* 正式環境不回傳 Stack Trace、Database 連線資訊與實體路徑。
+* Proxy Header 只接受可信任 Proxy 所提供的內容。
+* Cloud ↔ On-Prem 連線應有 timeout、監控與中斷告警。
+* Access Log 應保留必要的 Client IP、Request ID 與 Trace ID，方便稽核與排錯。
+
+== 核心觀念
+
+[source,text]
+----
+URL 公開 ≠ On-Prem API 公開
+
+知道 API 路徑 ≠ 有 API 權限
+
+Nginx 可以連地端 ≠ Internet 可以連地端
+
+Maven 多 Module ≠ 微服務
+
+多個 Spring Boot ≠ 一定是微服務
+----
+
+架構的重點應放在服務責任、網路安全邊界、資料所有權與部署生命週期，而不是單純增加更多層或更多服務。
