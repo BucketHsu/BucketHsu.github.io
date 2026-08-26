@@ -30,6 +30,7 @@
 *** xref:network/nginx-trailing-slash.adoc[Nginx 路徑尾端斜線規則]
 *** xref:network/nginx-directive-reference.adoc[Nginx 常用設定指令參考]
 ** xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異]
+** xref:network/ssh-key-authentication-guide.adoc[SSH 金鑰登入、Server 設定與金鑰產生指南]
 ** xref:container/wsl-docker-engine-without-desktop.adoc[WSL 2 移除 Docker Desktop 並安裝 Docker Engine]
 ** xref:container/docker-compose-notes.adoc[Docker Compose 整理]
 ** xref:container/docker-cleanup-policy.adoc[Docker / Podman 清理策略說明]
