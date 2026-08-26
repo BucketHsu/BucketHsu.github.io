@@ -1,0 +1,779 @@
+= SSH 金鑰登入、Server 設定與金鑰產生指南
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:stylesheet: ../assets/files/stylesheets/colony.css
+:last-update-label!:
+:nofooter:
+
+本篇整理 SSH 公私鑰登入的基本觀念、Linux / Windows Server 端設定、Linux / Windows Client 產生金鑰，以及在不方便安裝 OpenSSH 時使用 Portable 執行檔或 Docker 產生金鑰的方式。
+
+所有帳號、主機名稱、IP 與路徑均使用通用範例，不代表任何實際環境。
+
+== SSH 金鑰登入基本觀念
+
+SSH 金鑰登入會使用一組彼此對應的公私鑰：
+
+[source,text]
+----
+Client
+├── 私鑰：id_ed25519
+└── 公鑰：id_ed25519.pub
+          │
+          └──── 複製到 Server
+                    ↓
+Server
+└── ~/.ssh/authorized_keys
+----
+
+最重要的原則：
+
+* 私鑰只留在 Client，不應複製到 Server。
+* Server 只需要保存公鑰內容。
+* 一台 Server 可以允許多把公鑰登入，同一個 `authorized_keys` 可放多行公鑰。
+* 每位使用者建議使用自己的金鑰，不要多人共用同一把私鑰。
+* 私鑰建議設定 Passphrase；自動化帳號若無法使用 Passphrase，應另外限制帳號權限與金鑰用途。
+
+== 金鑰檔案說明
+
+以 Ed25519 為例：
+
+[cols="30%,70%", options="header"]
+|===
+|檔案 |用途
+
+|`id_ed25519`
+|私鑰，只能放在 Client，不能公開或提交到 Git。
+
+|`id_ed25519.pub`
+|公鑰，可複製到 Server 的 `authorized_keys`。
+
+|`authorized_keys`
+|Server 用來記錄允許登入的公鑰，每把公鑰通常占一行。
+
+|`known_hosts`
+|Client 用來記錄曾連線 Server 的 Host Key，與登入用公私鑰是不同用途。
+
+|`config`
+|Client SSH 設定檔，可保存 Host、帳號、Port 與 IdentityFile 等設定。
+|===
+
+== 建議使用哪種金鑰
+
+一般新環境優先使用 Ed25519：
+
+[source,bash]
+----
+ssh-keygen -t ed25519
+----
+
+若舊設備或舊版 SSH 不支援 Ed25519，可改使用 RSA：
+
+[source,bash]
+----
+ssh-keygen -t rsa -b 4096
+----
+
+[NOTE]
+====
+RSA 金鑰本身不等同舊式 `ssh-rsa` 簽章演算法。是否能登入還會受到 Client / Server OpenSSH 版本與允許的 HostKeyAlgorithms、PubkeyAcceptedAlgorithms 等設定影響。
+====
+
+== Linux Client 產生公私鑰
+
+=== 確認 ssh-keygen
+
+[source,bash]
+----
+ssh-keygen -V
+----
+
+部分版本的 `ssh-keygen` 不接受單獨使用 `-V` 查版本，可改用：
+
+[source,bash]
+----
+ssh -V
+which ssh-keygen
+----
+
+Ubuntu / Debian 若尚未安裝：
+
+[source,bash]
+----
+sudo apt update
+sudo apt install openssh-client
+----
+
+RHEL / Rocky Linux / AlmaLinux：
+
+[source,bash]
+----
+sudo dnf install openssh-clients
+----
+
+=== 產生 Ed25519 金鑰
+
+[source,bash]
+----
+ssh-keygen \
+  -t ed25519 \
+  -a 100 \
+  -C "admin@example.com" \
+  -f ~/.ssh/id_ed25519
+----
+
+參數說明：
+
+[cols="25%,75%", options="header"]
+|===
+|參數 |說明
+
+|`-t ed25519`
+|使用 Ed25519 金鑰。
+
+|`-a 100`
+|增加私鑰 Passphrase 的 KDF rounds；只有使用新格式私鑰時才有意義。
+
+|`-C`
+|加入註解，方便辨識這把公鑰屬於誰或哪台設備。
+
+|`-f`
+|指定輸出檔案。
+|===
+
+完成後：
+
+[source,bash]
+----
+ls -l ~/.ssh/id_ed25519*
+----
+
+應看到：
+
+[source,text]
+----
+id_ed25519
+id_ed25519.pub
+----
+
+查看公鑰：
+
+[source,bash]
+----
+cat ~/.ssh/id_ed25519.pub
+----
+
+=== 檢查 Fingerprint
+
+[source,bash]
+----
+ssh-keygen -lf ~/.ssh/id_ed25519.pub
+----
+
+可用 Fingerprint 確認 Server 上安裝的是否為正確公鑰。
+
+== Windows Client 產生公私鑰
+
+Windows 10 / 11 與較新的 Windows Server 通常可使用內建 OpenSSH Client。
+
+=== PowerShell / CMD 直接使用 OpenSSH
+
+先確認：
+
+[source,powershell]
+----
+ssh -V
+Get-Command ssh-keygen
+----
+
+常見執行檔位置：
+
+[source,text]
+----
+C:\Windows\System32\OpenSSH\ssh.exe
+C:\Windows\System32\OpenSSH\ssh-keygen.exe
+----
+
+產生 Ed25519：
+
+[source,powershell]
+----
+ssh-keygen `
+  -t ed25519 `
+  -a 100 `
+  -C "admin@example.com" `
+  -f "$env:USERPROFILE\.ssh\id_ed25519"
+----
+
+若使用 CMD：
+
+[source,cmd]
+----
+ssh-keygen -t ed25519 -a 100 -C "admin@example.com" -f "%USERPROFILE%\.ssh\id_ed25519"
+----
+
+產生後通常位於：
+
+[source,text]
+----
+C:\Users\<User>\.ssh\id_ed25519
+C:\Users\<User>\.ssh\id_ed25519.pub
+----
+
+=== Windows 沒有內建 OpenSSH 時
+
+可先檢查 Windows Optional Feature，或安裝 Microsoft Win32-OpenSSH。
+
+若使用 Portable ZIP，可解壓縮後直接執行其中的 `ssh-keygen.exe`，例如：
+
+[source,powershell]
+----
+C:\Tools\OpenSSH\ssh-keygen.exe `
+  -t ed25519 `
+  -a 100 `
+  -C "admin@example.com" `
+  -f "C:\Keys\id_ed25519"
+----
+
+Portable 方式適合：
+
+* 沒有系統安裝權限。
+* 臨時維運主機。
+* 需要固定 OpenSSH 版本。
+* 無法使用 Windows Optional Feature 的封閉環境。
+
+正式使用前仍應確認執行檔來源與檔案完整性，不建議從不明網站下載 `ssh-keygen.exe`。
+
+== 使用 Docker 產生 SSH 金鑰
+
+若主機已經有 Docker，但不想安裝 OpenSSH Client，可利用暫時 Container 產生金鑰。
+
+=== Linux / macOS Shell
+
+先建立輸出目錄：
+
+[source,bash]
+----
+mkdir -p ./ssh-key
+----
+
+使用 Alpine Container：
+
+[source,bash]
+----
+docker run --rm \
+  -v "$(pwd)/ssh-key:/keys" \
+  alpine:3.22 \
+  sh -c 'apk add --no-cache openssh-client >/dev/null && \
+         ssh-keygen -t ed25519 -a 100 -C "admin@example.com" -f /keys/id_ed25519'
+----
+
+產物會保留在 Host：
+
+[source,text]
+----
+./ssh-key/id_ed25519
+./ssh-key/id_ed25519.pub
+----
+
+=== Windows PowerShell
+
+[source,powershell]
+----
+New-Item -ItemType Directory -Force -Path .\ssh-key | Out-Null
+
+$KeyDir = (Resolve-Path .\ssh-key).Path
+
+docker run --rm `
+  -v "${KeyDir}:/keys" `
+  alpine:3.22 `
+  sh -c 'apk add --no-cache openssh-client >/dev/null && ssh-keygen -t ed25519 -a 100 -C "admin@example.com" -f /keys/id_ed25519'
+----
+
+[WARNING]
+====
+Container 只是執行 `ssh-keygen` 的工具。私鑰最後仍會寫到掛載的 Host 目錄，因此 Host 端檔案權限與保存方式仍需要妥善管理。
+====
+
+=== 完全不掛載目錄的方式
+
+也可以先在 Container 內產生，再用 `docker cp` 複製出來：
+
+[source,bash]
+----
+docker run -d --name ssh-keygen-temp alpine:3.22 sleep infinity
+
+docker exec -it ssh-keygen-temp sh -c \
+  'apk add --no-cache openssh-client >/dev/null && \
+   mkdir -p /keys && \
+   ssh-keygen -t ed25519 -a 100 -C "admin@example.com" -f /keys/id_ed25519'
+
+docker cp ssh-keygen-temp:/keys/id_ed25519 ./id_ed25519
+docker cp ssh-keygen-temp:/keys/id_ed25519.pub ./id_ed25519.pub
+
+docker rm -f ssh-keygen-temp
+----
+
+若使用這種方式，務必確認 Container 已刪除，避免額外殘留私鑰副本。
+
+== Linux Server 放置公鑰
+
+Linux OpenSSH Server 一般會讀取登入帳號家目錄下的：
+
+[source,text]
+----
+~/.ssh/authorized_keys
+----
+
+例如登入帳號為 `deploy`：
+
+[source,text]
+----
+/home/deploy/.ssh/authorized_keys
+----
+
+root 帳號則通常為：
+
+[source,text]
+----
+/root/.ssh/authorized_keys
+----
+
+=== 手動安裝公鑰
+
+先切換到要登入的帳號，再執行：
+
+[source,bash]
+----
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+
+touch ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+----
+
+將 Client 的 `.pub` 內容加入：
+
+[source,bash]
+----
+echo 'ssh-ed25519 AAAA... admin@example.com' >> ~/.ssh/authorized_keys
+----
+
+再確認 Owner：
+
+[source,bash]
+----
+chown -R "$USER:$USER" ~/.ssh
+----
+
+若由 root 幫其他帳號設定：
+
+[source,bash]
+----
+chown -R deploy:deploy /home/deploy/.ssh
+chmod 700 /home/deploy/.ssh
+chmod 600 /home/deploy/.ssh/authorized_keys
+----
+
+=== 使用 ssh-copy-id
+
+若 Server 暫時仍允許密碼登入，可直接：
+
+[source,bash]
+----
+ssh-copy-id \
+  -i ~/.ssh/id_ed25519.pub \
+  deploy@192.0.2.10
+----
+
+指定 Port：
+
+[source,bash]
+----
+ssh-copy-id \
+  -i ~/.ssh/id_ed25519.pub \
+  -p 2222 \
+  deploy@192.0.2.10
+----
+
+== Windows OpenSSH Server 放置公鑰
+
+Windows Server 使用 Microsoft OpenSSH Server 時，需要先確認實際 `sshd_config`：
+
+[source,text]
+----
+C:\ProgramData\ssh\sshd_config
+----
+
+=== 一般使用者
+
+一般帳號通常使用：
+
+[source,text]
+----
+C:\Users\<User>\.ssh\authorized_keys
+----
+
+例如：
+
+[source,text]
+----
+C:\Users\deploy\.ssh\authorized_keys
+----
+
+=== Administrators 群組帳號
+
+Microsoft OpenSSH Server 的預設設定常包含：
+
+[source,text]
+----
+Match Group administrators
+    AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys
+----
+
+因此若登入帳號屬於本機 Administrators 群組，公鑰可能不是放在使用者自己的 `.ssh\authorized_keys`，而是：
+
+[source,text]
+----
+C:\ProgramData\ssh\administrators_authorized_keys
+----
+
+遇到「明明已放公鑰但仍顯示 Server refused our key」時，應優先確認這一點。
+
+=== 設定 administrators_authorized_keys 權限
+
+以系統管理員 PowerShell 執行：
+
+[source,powershell]
+----
+$File = 'C:\ProgramData\ssh\administrators_authorized_keys'
+
+icacls $File /inheritance:r
+icacls $File /grant '*S-1-5-32-544:F'
+icacls $File /grant 'SYSTEM:F'
+----
+
+`S-1-5-32-544` 是內建 Administrators 群組 SID，可降低不同 Windows 顯示語言造成群組名稱不同的問題。
+
+修改後可重新啟動 OpenSSH Server：
+
+[source,powershell]
+----
+Restart-Service sshd
+----
+
+== Server sshd_config 基本設定
+
+Linux 常見位置：
+
+[source,text]
+----
+/etc/ssh/sshd_config
+----
+
+Windows OpenSSH Server：
+
+[source,text]
+----
+C:\ProgramData\ssh\sshd_config
+----
+
+與金鑰登入相關的常見設定：
+
+[source,text]
+----
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+----
+
+正式確認金鑰登入成功後，若政策要求停用密碼登入，可考慮：
+
+[source,text]
+----
+PasswordAuthentication no
+----
+
+[WARNING]
+====
+不要在尚未驗證金鑰登入前就關閉密碼登入，否則設定錯誤時可能把自己鎖在 Server 外面。修改 SSH 設定前應保留另一個已登入的管理連線或主機 Console。
+====
+
+Linux 修改後先檢查語法：
+
+[source,bash]
+----
+sudo sshd -t
+----
+
+再重新載入服務，例如：
+
+[source,bash]
+----
+sudo systemctl reload ssh
+# 或
+sudo systemctl reload sshd
+----
+
+服務名稱依 Linux 發行版而異。
+
+== Client 使用私鑰登入
+
+Linux：
+
+[source,bash]
+----
+ssh -i ~/.ssh/id_ed25519 deploy@192.0.2.10
+----
+
+Windows PowerShell：
+
+[source,powershell]
+----
+ssh -i "$env:USERPROFILE\.ssh\id_ed25519" deploy@192.0.2.10
+----
+
+指定 Port：
+
+[source,bash]
+----
+ssh -i ~/.ssh/id_ed25519 -p 2222 deploy@192.0.2.10
+----
+
+== 使用 SSH config 簡化連線
+
+Linux：
+
+[source,text]
+----
+~/.ssh/config
+----
+
+Windows：
+
+[source,text]
+----
+C:\Users\<User>\.ssh\config
+----
+
+範例：
+
+[source,text]
+----
+Host sample-server
+    HostName 192.0.2.10
+    User deploy
+    Port 22
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+----
+
+之後只需要：
+
+[source,bash]
+----
+ssh sample-server
+----
+
+`IdentitiesOnly yes` 可避免 ssh-agent 載入太多金鑰時，Server 在試到正確私鑰前就因驗證次數過多而中斷。
+
+== 使用 PuTTY / PuTTYgen
+
+若 Windows 使用 PuTTY，可透過 PuTTYgen 產生或匯入金鑰。
+
+需要區分：
+
+* `.ppk`：PuTTY Client 使用的私鑰格式。
+* OpenSSH Private Key：OpenSSH Client 使用的私鑰格式。
+* `authorized_keys`：Server 需要的是 OpenSSH 公鑰文字，不是 `.ppk` 檔案。
+
+若使用 PuTTYgen，應將畫面中的 OpenSSH public key 或匯出的 OpenSSH 公鑰加入 Server `authorized_keys`。
+
+不要把 `.ppk` 直接複製到 Server 的 `authorized_keys`。
+
+== 私鑰權限
+
+=== Linux
+
+[source,bash]
+----
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_ed25519
+chmod 644 ~/.ssh/id_ed25519.pub
+----
+
+若私鑰權限過寬，OpenSSH 可能拒絕使用：
+
+[source,text]
+----
+WARNING: UNPROTECTED PRIVATE KEY FILE!
+Permissions ... are too open.
+----
+
+=== Windows
+
+Windows OpenSSH 會依 NTFS ACL 判斷私鑰是否可安全使用。
+
+若私鑰被其他一般帳號廣泛讀取，應移除不必要的繼承權限，而不是單純依賴檔案副檔名保護。
+
+可先查看：
+
+[source,powershell]
+----
+icacls "$env:USERPROFILE\.ssh\id_ed25519"
+----
+
+== 常見問題：Server refused our key
+
+若出現：
+
+[source,text]
+----
+Server refused our key
+Permission denied (publickey,password)
+----
+
+建議依序檢查。
+
+=== 確認登入帳號
+
+[source,bash]
+----
+ssh -i ~/.ssh/id_ed25519 deploy@192.0.2.10
+----
+
+Server 是依「登入帳號」找該帳號對應的 `authorized_keys`，不是依 Client 本機帳號名稱判斷。
+
+=== 確認公私鑰是否為同一組
+
+從私鑰重新取得公鑰：
+
+[source,bash]
+----
+ssh-keygen -y -f ~/.ssh/id_ed25519
+----
+
+再與 Server `authorized_keys` 內容比較。
+
+=== 確認 Fingerprint
+
+Client：
+
+[source,bash]
+----
+ssh-keygen -lf ~/.ssh/id_ed25519.pub
+----
+
+Server 可將該行公鑰另存後再確認 Fingerprint。
+
+=== Linux 檔案權限
+
+[source,bash]
+----
+ls -ld ~/.ssh
+ls -l ~/.ssh/authorized_keys
+----
+
+常見建議值：
+
+[source,text]
+----
+~/.ssh                  700
+authorized_keys         600
+private key             600
+----
+
+並確認檔案 Owner 是實際登入帳號。
+
+=== Windows Administrators 特例
+
+確認：
+
+[source,powershell]
+----
+Get-Content C:\ProgramData\ssh\sshd_config
+----
+
+若有：
+
+[source,text]
+----
+Match Group administrators
+----
+
+就要確認 `administrators_authorized_keys` 是否有正確公鑰及 ACL。
+
+=== 使用 verbose 模式
+
+[source,bash]
+----
+ssh -vvv -i ~/.ssh/id_ed25519 deploy@192.0.2.10
+----
+
+可觀察：
+
+* Client 是否真的讀到指定私鑰。
+* Client 是否有送出 public key。
+* Server 是否接受該 key。
+* 是否因演算法不相容遭拒絕。
+* 是否有其他 IdentityFile 干擾。
+
+=== Linux Server 查看 log
+
+依發行版可能使用：
+
+[source,bash]
+----
+sudo journalctl -u ssh -f
+# 或
+sudo journalctl -u sshd -f
+----
+
+傳統 log 也可能位於：
+
+[source,text]
+----
+/var/log/auth.log
+/var/log/secure
+----
+
+=== SELinux
+
+若 RHEL 系列系統有移動或重新建立 `.ssh` 內容，可檢查 SELinux Context：
+
+[source,bash]
+----
+restorecon -Rv ~/.ssh
+----
+
+== 金鑰撤銷與輪替
+
+SSH 公鑰沒有一般 X.509 憑證那種固定到期日，除非另外使用 SSH Certificate 或其他管理機制。
+
+因此一般靜態 `authorized_keys` 環境需要自行管理金鑰生命週期：
+
+* 人員離職時刪除對應公鑰。
+* Client 遺失或私鑰疑似外洩時立即撤銷。
+* 定期盤點 `authorized_keys`。
+* 公鑰註解應保留使用者、設備或用途資訊。
+* 自動化帳號應避免使用個人私鑰。
+* 同一把私鑰不要長期共用於大量 Server。
+
+若要撤銷，只需從 Server 的 `authorized_keys` 刪除對應公鑰行。
+
+== 安全檢查清單
+
+* 私鑰只存在 Client，不放 Server。
+* 私鑰未提交到 Git repository。
+* 個人與服務帳號使用不同金鑰。
+* 能使用 Passphrase 的私鑰應設定 Passphrase。
+* Server `.ssh` 與 `authorized_keys` 權限正確。
+* Windows Administrators 帳號已確認實際 AuthorizedKeysFile。
+* 停用密碼登入前已實際測試公鑰登入成功。
+* 已保留 Server Console 或其他管理途徑，避免 SSH 設定錯誤造成完全失聯。
+* 人員與設備異動時有金鑰撤銷流程。
+* 遇到登入問題時使用 `ssh -vvv` 與 Server log 交叉確認。

@@ -149,6 +149,10 @@
 |xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 基礎與差異]
 |網路分層、加密通道與檔案分享協定。
 |釐清連線與檔案分享問題。
+
+|xref:network/ssh-key-authentication-guide.adoc[SSH 金鑰登入、Server 設定與金鑰產生指南]
+|公私鑰角色、authorized_keys、Linux / Windows Server、OpenSSH、Portable 執行檔、Docker 與 PuTTY 金鑰操作。
+|建立 SSH 金鑰登入、部署公鑰或排查 `Server refused our key` 時。
 |===
 
 == Container 與 Kubernetes
