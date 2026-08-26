@@ -63,6 +63,64 @@ Server
 |Client SSH 設定檔，可保存 Host、帳號、Port 與 IdentityFile 等設定。
 |===
 
+=== `id_ed25519` 是固定名稱嗎
+
+不是。`id_ed25519` 只是 OpenSSH 在產生 Ed25519 金鑰時常用的預設檔名，不是 SSH 協定要求的固定名稱。
+
+例如直接執行：
+
+[source,bash]
+----
+ssh-keygen -t ed25519
+----
+
+若在詢問儲存位置時直接按 Enter，通常會建立：
+
+[source,text]
+----
+~/.ssh/id_ed25519
+~/.ssh/id_ed25519.pub
+----
+
+也可以使用 `-f` 自訂檔名，例如：
+
+[source,bash]
+----
+ssh-keygen -t ed25519 -f ~/.ssh/company_server
+----
+
+此時會產生：
+
+[source,text]
+----
+~/.ssh/company_server
+~/.ssh/company_server.pub
+----
+
+使用自訂名稱的私鑰登入時，需用 `-i` 指定：
+
+[source,bash]
+----
+ssh -i ~/.ssh/company_server deploy@192.0.2.10
+----
+
+若有多組金鑰，建議依用途命名，例如：
+
+[source,text]
+----
+id_ed25519_github
+id_ed25519_gitlab
+id_ed25519_company
+id_ed25519_prod
+----
+
+也可以在 `~/.ssh/config` 透過 `IdentityFile` 指定每台主機要使用哪一把私鑰。
+
+[NOTE]
+====
+Server 端的 `authorized_keys` 不在乎 Client 私鑰檔名叫 `id_ed25519`、`company_server` 或其他名稱。Server 驗證的是公鑰內容是否與 Client 使用的私鑰相符，而不是比對檔名。
+====
+
 == 建議使用哪種金鑰
 
 一般新環境優先使用 Ed25519：
