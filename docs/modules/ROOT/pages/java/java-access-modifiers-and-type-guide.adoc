@@ -1,0 +1,1871 @@
+= Java 存取修飾詞、類別型別與常用關鍵字指南
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:last-update-label!:
+:nofooter:
+
+本文件整理 Java 類別、Interface、欄位、方法與建構子的常見修飾詞及相關關鍵字。
+
+內容以 Java 21／25 的現代語法為主，並補充 Java 6 舊專案的限制。範例重點不是背誦語法，而是理解「誰可以存取、資料屬於類別還是物件、能否修改、能否繼承，以及什麼情境適合使用」。
+
+== 先區分四種概念
+
+`public`、`static`、`interface` 與 `class` 常被放在一起討論，但它們不是同一類概念。
+
+[cols="22%,30%,48%", options="header"]
+|===
+|類型 |常見關鍵字 |主要問題
+
+|存取修飾詞
+|`public`、`protected`、`private`
+|誰可以看到或使用這個宣告？
+
+|非存取修飾詞
+|`static`、`final`、`abstract`、`synchronized`、`volatile`
+|這個宣告如何運作？能否修改、繼承或共用？
+
+|型別宣告
+|`class`、`interface`、`enum`、`record`、`@interface`
+|要宣告哪一種 Java 型別？
+
+|繼承與物件相關關鍵字
+|`extends`、`implements`、`this`、`super`、`new`、`instanceof`
+|型別之間有什麼關係？目前操作哪個物件？
+|===
+
+[IMPORTANT]
+====
+Java 沒有 `package-private` 這個關鍵字。宣告成員時完全不寫 `public`、`protected` 或 `private`，才是 Package 存取範圍。
+
+也不建議將它稱為 `default` 存取修飾詞，因為 `default` 在 Interface 方法與 `switch` 中另有正式用途。
+====
+
+== 一個類別有哪些部分
+
+[source,java]
+----
+package example.user;
+
+public final class UserService {
+
+    private static final int MAX_RETRY_COUNT = 3;
+
+    private final UserRepository userRepository;
+
+    public UserService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+
+    public User findById(String userId) {
+        return userRepository.findById(userId);
+    }
+
+    private void validateUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalArgumentException("userId 不可為空");
+        }
+    }
+}
+----
+
+上例包含：
+
+* `public final class UserService`：公開類別，且不允許其他類別繼承。
+* `private static final`：類別內共用的常數。
+* `private final UserRepository`：每個 `UserService` 物件持有的依賴，建構後不能改指向另一個 Repository。
+* `public UserService(...)`：建構子，決定外部能否建立物件。
+* `public User findById(...)`：公開方法，屬於類別提供給呼叫端的 API。
+* `private void validateUserId(...)`：只供類別內部使用的實作細節。
+* `this.userRepository`：目前這個物件所持有的欄位。
+
+== 修飾詞可以放在哪裡
+
+[cols="22%,34%,44%", options="header"]
+|===
+|宣告位置 |常見可用修飾詞 |注意事項
+
+|頂層 Class／Interface
+|`public`，或完全不寫
+|頂層型別不能宣告成 `private` 或 `protected`；一般頂層類別也不能是 `static`。
+
+|巢狀 Class／Interface
+|`public`、`protected`、`private`、`static`
+|巢狀型別是外層型別的成員，因此能使用成員層級的存取修飾詞。
+
+|欄位
+|四種存取層級、`static`、`final`、`transient`、`volatile`
+|欄位代表類別或物件保存的狀態。
+
+|方法
+|四種存取層級、`static`、`final`、`abstract`、`synchronized`、`native`
+|部分修飾詞不能同時使用，例如 `abstract final`。
+
+|建構子
+|四種存取層級
+|建構子不是一般方法，沒有回傳型別，也不能是 `static`、`final` 或 `abstract`。
+
+|區域變數
+|`final`
+|區域變數不能使用 `public`、`private`、`static` 等成員修飾詞。
+|===
+
+== 存取修飾詞
+
+存取修飾詞用來控制封裝邊界。限制存取不是為了讓程式難以呼叫，而是避免其他程式依賴不必要的內部實作。
+
+=== 存取範圍對照
+
+[cols="25%,15%,20%,25%,15%", options="header"]
+|===
+|宣告方式 |同一類別 |同一 Package |不同 Package 的子類別 |其他類別
+
+|`private`
+|可以
+|不可以
+|不可以
+|不可以
+
+|不寫（package-private）
+|可以
+|可以
+|不可以
+|不可以
+
+|`protected`
+|可以
+|可以
+|可以，但有額外限制
+|不可以
+
+|`public`
+|可以
+|可以
+|可以
+|可以
+|===
+
+大致可理解為：
+
+[source,text]
+----
+private < package-private < protected < public
+限制最多                                  最公開
+----
+
+不過 `protected` 不是單純「比 package-private 多一級」，跨 Package 時還必須符合繼承與存取方式的規則。
+
+=== private
+
+`private` 成員只能由宣告它的類別本身使用，通常用於隱藏欄位與內部輔助方法。
+
+[source,java]
+----
+public class BankAccount {
+
+    private long balance;
+
+    public void deposit(long amount) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("存入金額必須大於 0");
+        }
+        balance += amount;
+    }
+
+    public long getBalance() {
+        return balance;
+    }
+}
+----
+
+如果把 `balance` 宣告成 `public`，外部就能繞過驗證直接寫入負數：
+
+[source,java]
+----
+account.balance = -1000;
+----
+
+將欄位設成 `private`，再透過方法控制修改流程，才有辦法維持物件規則。
+
+`private` 也不代表一定要替每個欄位同時產生 Getter 與 Setter。若資料只能在建立時指定，就不應提供 Setter；若外部完全不需要讀取，也不必提供 Getter。
+
+巢狀類別是另一個容易忽略的例外：同一個最外層型別所包住的巢狀類別，可以互相存取彼此的 `private` 成員。
+
+[source,java]
+----
+public class Outer {
+
+    private String value = "外層資料";
+
+    private class Inner {
+        private void print() {
+            System.out.println(value); // 可以存取 Outer 的 private 欄位
+        }
+    }
+}
+----
+
+這仍屬於同一個最外層型別的封裝範圍，不能解讀成其他一般類別也能存取 `private`。
+
+[NOTE]
+====
+`private` 不代表資料絕對安全，也不是加密。Reflection、序列化框架或 JVM 內部機制仍可能在特定條件下存取；它主要提供 Java 語言層級的封裝與編譯期檢查。
+====
+
+=== package-private
+
+不寫存取修飾詞時，同一個 Package 內的類別可以使用，不同 Package 則不可以。
+
+[source,java]
+----
+package example.order;
+
+class OrderCalculator {
+
+    long calculateTotal(Order order) {
+        return order.items()
+                .stream()
+                .mapToLong(OrderItem::amount)
+                .sum();
+    }
+}
+----
+
+`OrderCalculator` 與 `calculateTotal` 都是 package-private。這很適合只在模組或 Package 內協作、不想成為公開 API 的實作類別。
+
+常見使用情境：
+
+* Package 內部的輔助類別。
+* 不希望其他模組直接依賴的實作細節。
+* 測試程式與正式程式放在相同 Package，測試 Package 範圍的行為。
+
+=== protected
+
+`protected` 成員有兩條存取路徑：
+
+* 同一 Package：不論是否有繼承關係，都可以存取。
+* 不同 Package：只有子類別能依繼承規則存取。
+
+先看同一 Package：
+
+[source,java]
+----
+package example.animal;
+
+public class Animal {
+    protected void eat() {
+        System.out.println("吃東西");
+    }
+}
+----
+
+[source,java]
+----
+package example.animal;
+
+public class AnimalHelper {
+    public void feed(Animal animal) {
+        animal.eat(); // 同一 Package，可以存取
+    }
+}
+----
+
+即使 `AnimalHelper` 沒有繼承 `Animal`，因為位於同一個 Package，仍然可以呼叫 `eat()`。
+
+再看不同 Package 的子類別：
+
+[source,java]
+----
+package example.dog;
+
+import example.animal.Animal;
+
+public class Dog extends Animal {
+
+    public void eatDinner() {
+        eat();       // 可以：透過目前 Dog 物件使用繼承成員
+        this.eat();  // 可以
+    }
+}
+----
+
+跨 Package 最容易忽略的是「限定物件型別」：
+
+[source,java]
+----
+package example.dog;
+
+import example.animal.Animal;
+
+public class Dog extends Animal {
+
+    public void feed(Dog dog, Animal animal) {
+        dog.eat();    // 可以：dog 是 Dog 或其子型別
+        // animal.eat(); // 編譯失敗：不能透過一般 Animal 參照存取
+    }
+}
+----
+
+不同 Package 的子類別取得 `protected` 權限，是為了操作「自身繼承體系中的物件」，不是讓子類別變成所有 `Animal` 物件的管理者。
+
+[WARNING]
+====
+`protected` 會同時對「整個 Package」與「外部子類別」開放。如果只想讓少數協作者使用，Java 沒有 `friend` 類別機制；應重新評估 Package 邊界、組合設計或公開方法。
+====
+
+=== public
+
+`public` 表示其他可見範圍的程式都能存取，適合穩定且刻意提供給外部使用的 API。
+
+[source,java]
+----
+public class UserController {
+
+    public UserResponse findUser(String userId) {
+        // 對外提供的操作
+        return new UserResponse(userId);
+    }
+}
+----
+
+`public` 不代表「任何地方一定都能存取」。實際上仍可能受以下條件限制：
+
+* 宣告它的外層型別是否可見。
+* Package 是否由 Java Module 匯出。
+* Classpath／Module Path 是否包含該程式。
+* Spring Bean、HTTP Route 或資安規則是否另外限制呼叫。
+
+=== 頂層類別與檔名
+
+一般 `.java` 檔最多只能有一個 `public` 頂層型別，而且檔名必須與該型別名稱相同。
+
+[source,java]
+----
+// 檔名：UserService.java
+public class UserService {
+}
+
+class UserValidator {
+    // 同一個檔案可以有其他 package-private 頂層類別
+}
+----
+
+這裡的 `UserValidator` 是另一個 top-level class，不是 `UserService` 的內部類別。
+
+== static：屬於類別本身
+
+一般欄位與方法屬於某個物件；`static` 欄位與方法則屬於類別本身。
+
+=== Instance 與 static 成員
+
+[source,java]
+----
+public class UserSession {
+
+    private static int sessionCount;
+
+    private final String userId;
+
+    public UserSession(String userId) {
+        this.userId = userId;
+        sessionCount++;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public static int getSessionCount() {
+        return sessionCount;
+    }
+}
+----
+
+使用方式：
+
+[source,java]
+----
+UserSession first = new UserSession("A001");
+UserSession second = new UserSession("A002");
+
+first.getUserId();               // A001，屬於 first
+second.getUserId();              // A002，屬於 second
+UserSession.getSessionCount();   // 2，所有物件共用
+----
+
+建議透過類別名稱呼叫 `static` 方法，避免讓讀者誤以為它使用某個物件的狀態：
+
+[source,java]
+----
+UserSession.getSessionCount(); // 建議
+// first.getSessionCount();    // 可能可以編譯，但不建議
+----
+
+=== static 方法的限制
+
+`static` 方法沒有目前物件，因此不能直接使用 `this`、`super` 或 Instance 欄位。
+
+[source,java]
+----
+public class User {
+
+    private String name;
+
+    public static void printName() {
+        // System.out.println(name); // 編譯失敗，沒有指定哪個 User
+        // System.out.println(this.name); // 編譯失敗，static 中沒有 this
+    }
+}
+----
+
+如果方法需要物件資料，就不應為了方便呼叫而硬改成 `static`。
+
+=== static final 常數
+
+[source,java]
+----
+public final class SecurityConstants {
+
+    public static final int MAX_LOGIN_ATTEMPTS = 5;
+    public static final String TOKEN_HEADER = "Authorization";
+
+    private SecurityConstants() {
+        // 工具類別不允許建立物件
+    }
+}
+----
+
+Java 慣例將常數命名為大寫底線格式。`static final` 只代表同一個參照不能重新指定；物件本身不一定不可變：
+
+[source,java]
+----
+public static final List<String> ROLES = new ArrayList<>();
+
+ROLES.add("ADMIN"); // 仍然可以修改 List 內容
+----
+
+若要對外提供不可修改集合，可建立不可變內容：
+
+[source,java]
+----
+public static final List<String> ROLES = List.of("ADMIN", "USER");
+----
+
+=== static 初始化區塊
+
+[source,java]
+----
+public class MimeTypes {
+
+    private static final Map<String, String> TYPES;
+
+    static {
+        Map<String, String> types = new HashMap<>();
+        types.put("json", "application/json");
+        types.put("pdf", "application/pdf");
+        TYPES = Map.copyOf(types);
+    }
+}
+----
+
+`static` 初始化區塊在類別初始化時執行。若只是簡單指定值，優先直接在欄位宣告處初始化，不必多寫區塊。
+
+=== static 巢狀類別與 Inner Class
+
+[source,java]
+----
+public class ApiResponse {
+
+    private String requestId;
+
+    public static class Metadata {
+        // 不需要 ApiResponse 物件也能建立
+    }
+
+    public class DebugInfo {
+        public String requestId() {
+            return ApiResponse.this.requestId;
+        }
+    }
+}
+----
+
+* `static` 巢狀類別不持有外層物件。
+* 非 `static` 的成員類別屬於 Inner Class，會關聯某個外層物件。
+* 如果巢狀類別不需要外層物件狀態，通常優先宣告為 `static`。
+
+== final：限制重新指定、覆寫或繼承
+
+`final` 放在不同位置會有不同效果。
+
+[cols="25%,35%,40%", options="header"]
+|===
+|位置 |效果 |不代表什麼
+
+|變數／欄位
+|完成指定後不能再次指定
+|不保證物件內容不可修改
+
+|方法
+|子類別不能 Override
+|不影響同名方法的 Overload
+
+|類別
+|不能被其他類別繼承
+|仍然可以建立物件或實作 Interface
+|===
+
+=== final 變數
+
+[source,java]
+----
+final String userId = "A001";
+// userId = "A002"; // 編譯失敗
+----
+
+`final` 欄位可在宣告處或建構子中完成指定：
+
+[source,java]
+----
+public class UserService {
+
+    private final UserRepository userRepository;
+
+    public UserService(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+}
+----
+
+這是 Spring Boot Constructor Injection 常見寫法，能明確表示 `UserRepository` 是建立 `UserService` 時不可缺少的依賴。
+
+=== final 參照不等於 Immutable
+
+[source,java]
+----
+final List<String> names = new ArrayList<>();
+
+names.add("Amy");            // 可以，修改原本物件
+// names = new ArrayList<>(); // 不可以，重新指定參照
+----
+
+如果希望物件本身不可變，需要搭配不可變型別、私有欄位、防禦性複製等設計，不能只加 `final`。
+
+=== final 方法
+
+[source,java]
+----
+public class TokenService {
+
+    public final String normalize(String token) {
+        return token.trim();
+    }
+}
+----
+
+子類別不能 Override `normalize`，但仍可 Overload：
+
+[source,java]
+----
+public class CustomTokenService extends TokenService {
+
+    public String normalize(byte[] token) {
+        return new String(token).trim();
+    }
+}
+----
+
+=== final 類別
+
+[source,java]
+----
+public final class JwtClaims {
+    // 不能 extends JwtClaims
+}
+----
+
+適合使用 `final class` 的情境：
+
+* 類別設計上沒有提供安全的繼承擴充點。
+* 不希望子類別改變安全或資料一致性規則。
+* 不可變 Value Object。
+* 純工具類別。
+
+[WARNING]
+====
+Spring 使用 Class-based Proxy 時，`final` 類別或 `final` 方法可能無法被代理。是否受影響取決於使用 JDK Dynamic Proxy、Class-based Proxy、AOP 功能及 Spring 版本；不能因為是 Spring Bean 就一律移除 `final`，也不能未驗證就全部加上。
+====
+
+== abstract：保留未完成的實作
+
+`abstract` 類別不能直接建立物件，可以同時包含已完成的方法、抽象方法、欄位與建構子。
+
+[source,java]
+----
+public abstract class ReportExporter {
+
+    public final void export(Report report) {
+        validate(report);
+        write(report);
+    }
+
+    protected void validate(Report report) {
+        if (report == null) {
+            throw new IllegalArgumentException("report 不可為 null");
+        }
+    }
+
+    protected abstract void write(Report report);
+}
+----
+
+[source,java]
+----
+public class PdfReportExporter extends ReportExporter {
+
+    @Override
+    protected void write(Report report) {
+        System.out.println("輸出 PDF");
+    }
+}
+----
+
+這個設計中：
+
+* `export` 固定整體流程，並以 `final` 防止子類別破壞順序。
+* `validate` 提供可共用的預設實作。
+* `write` 交給不同格式的子類別實作。
+* 抽象類別可以有建構子，但只能在建立具體子類別時由 `super(...)` 呼叫。
+
+=== abstract 的限制
+
+以下組合彼此矛盾，因此不能使用：
+
+[source,java]
+----
+// abstract final class InvalidType {}
+
+abstract class InvalidExample {
+    // private abstract void execute();
+    // static abstract void execute();
+    // final abstract void execute();
+}
+----
+
+原因是：
+
+* `abstract` 要求子類別提供實作。
+* `final` 禁止繼承或 Override。
+* `private` 方法不會被子類別繼承，無法完成 Override。
+* `static` 方法屬於類別，不使用 Instance Override 機制。
+
+== interface：定義能力與契約
+
+Interface 適合描述「呼叫端能依賴什麼操作」，同一個類別可以實作多個 Interface。
+
+[source,java]
+----
+public interface NotificationSender {
+    void send(String recipient, String message);
+}
+----
+
+[source,java]
+----
+public class EmailNotificationSender implements NotificationSender {
+
+    @Override
+    public void send(String recipient, String message) {
+        System.out.printf("寄送 Email 給 %s%n", recipient);
+    }
+}
+----
+
+Interface 方法預設為 `public abstract`，因此實作時不能降低成 `protected` 或 package-private。
+
+=== Interface 中隱含的修飾詞
+
+[source,java]
+----
+public interface RetryPolicy {
+
+    int MAX_RETRY_COUNT = 3;
+
+    boolean shouldRetry(int attempt);
+}
+----
+
+上述宣告等同於：
+
+[source,java]
+----
+public interface RetryPolicy {
+
+    public static final int MAX_RETRY_COUNT = 3;
+
+    public abstract boolean shouldRetry(int attempt);
+}
+----
+
+Interface 欄位一定是 `public static final`。如果需要每個物件各自保存並修改狀態，應使用實作類別的 Instance 欄位，不要放進 Interface。
+
+=== default 方法
+
+`default` 方法讓 Interface 可以提供 Instance 方法的預設實作。
+
+[source,java]
+----
+public interface NotificationSender {
+
+    void send(String recipient, String message);
+
+    default void sendSystemMessage(String recipient) {
+        send(recipient, "系統通知");
+    }
+}
+----
+
+常見用途是替既有 Interface 增加行為，同時減少所有實作類別立即修改的需求。但如果預設行為不適用多數實作，就不應勉強放進 `default`。
+
+=== static 方法
+
+[source,java]
+----
+public interface UserIdValidator {
+
+    static boolean isValid(String userId) {
+        return userId != null && !userId.isBlank();
+    }
+}
+----
+
+使用時透過 Interface 名稱呼叫：
+
+[source,java]
+----
+boolean valid = UserIdValidator.isValid("A001");
+----
+
+Interface 的 `static` 方法不會成為實作物件的 Instance 方法。
+
+=== private 方法
+
+Java 9 起，Interface 可以用 `private` 方法共用內部實作：
+
+[source,java]
+----
+public interface AuditLogger {
+
+    default void logCreate(String id) {
+        log("CREATE", id);
+    }
+
+    default void logDelete(String id) {
+        log("DELETE", id);
+    }
+
+    private void log(String action, String id) {
+        System.out.printf("%s: %s%n", action, id);
+    }
+}
+----
+
+`private` Interface 方法只供 Interface 內其他方法呼叫，不會公開給實作類別。
+
+=== Functional Interface
+
+只有一個抽象方法的 Interface 稱為 Functional Interface，可搭配 Lambda。
+
+[source,java]
+----
+@FunctionalInterface
+public interface UserFilter {
+    boolean test(User user);
+}
+----
+
+[source,java]
+----
+UserFilter enabledUser = user -> user.enabled();
+----
+
+`@FunctionalInterface` 不是必要條件，但能讓 Compiler 檢查是否不小心增加第二個抽象方法。
+
+=== Interface 不一定都要有 Impl
+
+以下命名很常見：
+
+[source,text]
+----
+UserService
+UserServiceImpl
+----
+
+但如果系統只有一個實作、沒有替換需求，也沒有清楚的模組邊界，為每個 Service 建立一對 Interface／Impl 可能只會增加跳轉與命名成本。
+
+較適合建立 Interface 的情境：
+
+* 同一能力確實有兩種以上實作，例如 Email 與簡訊。
+* 需要隔離外部系統、儲存設備或第三方服務。
+* 模組對外只公開契約，不公開內部實作。
+* 需要由呼叫端定義其真正依賴的能力。
+
+不應只為了「方便 Mock」或套用固定分層模板，就替每個類別建立沒有實質作用的 Interface。
+
+== class、abstract class 與 interface 比較
+
+[cols="20%,26%,27%,27%", options="header"]
+|===
+|項目 |一般 Class |Abstract Class |Interface
+
+|可直接建立物件
+|可以
+|不可以
+|不可以
+
+|Instance 欄位
+|可以
+|可以
+|不可以；欄位隱含為 `public static final`
+
+|建構子
+|可以
+|可以
+|不可以
+
+|具體 Instance 方法
+|可以
+|可以
+|可用 `default` 或 `private` 方法
+
+|抽象方法
+|類別本身為 `abstract` 時可以
+|可以
+|可以
+
+|繼承數量
+|只能直接 `extends` 一個 Class
+|只能直接 `extends` 一個 Class
+|一個類別可以 `implements` 多個 Interface
+
+|主要用途
+|建立完整物件
+|共用狀態、流程與部分實作
+|定義能力、契約與替換邊界
+|===
+
+判斷方式：
+
+* 需要建立具有資料與完整行為的物件：使用 Class。
+* 多個子類別需要共用欄位、建構流程或部分程式：考慮 Abstract Class。
+* 只想規定呼叫方式，且不同類別都能提供該能力：考慮 Interface。
+* 兩者可以並用：Abstract Class 可以實作 Interface，再由子類別補完。
+
+== extends、implements、this 與 super
+
+=== extends
+
+Class 使用 `extends` 繼承另一個 Class：
+
+[source,java]
+----
+public class AdminUser extends User {
+}
+----
+
+Interface 使用 `extends` 繼承一個或多個 Interface：
+
+[source,java]
+----
+public interface AuditedRepository
+        extends ReadableRepository, WritableRepository {
+}
+----
+
+Java 類別不支援同時繼承兩個 Class，避免同一狀態與實作來源產生衝突。
+
+=== implements
+
+Class 使用 `implements` 實作 Interface：
+
+[source,java]
+----
+public class DatabaseUserRepository
+        implements UserRepository, HealthCheckable {
+}
+----
+
+同一個 Class 可以實作多個 Interface。
+
+=== this
+
+`this` 代表目前物件：
+
+[source,java]
+----
+public class User {
+
+    private final String name;
+
+    public User(String name) {
+        this.name = name;
+    }
+
+    public User rename(String name) {
+        return new User(name);
+    }
+}
+----
+
+`this.name` 是欄位，右側 `name` 是建構子參數。
+
+=== super
+
+`super` 用於呼叫父類別的建構子或被 Override 前的實作：
+
+[source,java]
+----
+public class AdminUser extends User {
+
+    private final String role;
+
+    public AdminUser(String name, String role) {
+        super(name);
+        this.role = role;
+    }
+}
+----
+
+父類別建構子的呼叫必須位於建構流程允許的位置，不能等其他一般陳述式執行完才呼叫。
+
+== Overload、Override 與 static Hiding
+
+這三個概念名稱相似，但行為不同。
+
+[cols="22%,26%,26%,26%", options="header"]
+|===
+|概念 |發生位置 |判斷時間 |重點
+
+|Overload
+|通常在同一類別，也可能跨繼承
+|編譯期
+|方法名稱相同，參數清單不同
+
+|Override
+|父子類別的 Instance 方法
+|執行期動態派送
+|子類別重新提供相同方法簽章的實作
+
+|Hiding
+|父子類別的 `static` 方法
+|依參照型別與類別名稱判斷
+|不是 Override
+|===
+
+=== Overload
+
+[source,java]
+----
+public void send(String message) {
+}
+
+public void send(String recipient, String message) {
+}
+----
+
+只有回傳型別不同，不足以構成 Overload：
+
+[source,java]
+----
+// public String find(String id) { ... }
+// public User find(String id) { ... } // 編譯失敗
+----
+
+=== Override
+
+[source,java]
+----
+public class Animal {
+    public String sound() {
+        return "未知";
+    }
+}
+
+public class Dog extends Animal {
+    @Override
+    public String sound() {
+        return "汪";
+    }
+}
+----
+
+[source,java]
+----
+Animal animal = new Dog();
+animal.sound(); // 汪
+----
+
+Override 後的存取範圍不能比父類別更嚴格。例如父類別是 `protected`，子類別可以擴大成 `public`，但不能縮小成 `private`。
+
+=== static Method Hiding
+
+[source,java]
+----
+public class Parent {
+    public static String type() {
+        return "Parent";
+    }
+}
+
+public class Child extends Parent {
+    public static String type() {
+        return "Child";
+    }
+}
+----
+
+[source,java]
+----
+Parent value = new Child();
+
+Parent.type(); // Parent
+Child.type();  // Child
+value.type();  // Parent，不建議透過物件呼叫 static
+----
+
+`static` 方法沒有 Instance Override。若需要依實際物件型別執行不同行為，應使用 Instance 方法。
+
+== enum：固定的一組值
+
+`enum` 適合表示有限且已知的選項，比散落的字串或數字常數更安全。
+
+[source,java]
+----
+public enum UserStatus {
+    ACTIVE("啟用"),
+    LOCKED("鎖定"),
+    DISABLED("停用");
+
+    private final String displayName;
+
+    UserStatus(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String displayName() {
+        return displayName;
+    }
+}
+----
+
+使用方式：
+
+[source,java]
+----
+if (user.status() == UserStatus.LOCKED) {
+    throw new IllegalStateException("帳號已鎖定");
+}
+----
+
+Enum 常數本身可安全使用 `==` 比較。Enum 也能有欄位、方法、建構子及實作 Interface，但不能像一般 Class 一樣被任意繼承。
+
+[NOTE]
+====
+資料庫若保存 Enum，需明確規劃保存穩定代碼、名稱或排序值。直接保存 `ordinal()` 會讓調整列舉順序造成既有資料語意改變，通常不建議。
+====
+
+== record：以資料為主的類別
+
+Record 在 Java 16 正式提供，適合表達一組固定資料。
+
+[source,java]
+----
+public record UserResponse(
+        String userId,
+        String userName,
+        UserStatus status
+) {
+}
+----
+
+Compiler 會提供：
+
+* 對應 Record Component 的 `private final` 欄位。
+* Canonical Constructor。
+* `userId()`、`userName()`、`status()` Accessor。
+* `equals()`、`hashCode()` 與 `toString()`。
+
+Record 可以加入驗證：
+
+[source,java]
+----
+public record PageRequest(int page, int size) {
+
+    public PageRequest {
+        if (page < 0) {
+            throw new IllegalArgumentException("page 不可小於 0");
+        }
+        if (size <= 0 || size > 100) {
+            throw new IllegalArgumentException("size 必須介於 1 到 100");
+        }
+    }
+}
+----
+
+[WARNING]
+====
+Record 是 Shallowly Immutable。Component 參照不能改指向另一個物件，但如果 Component 是可修改的 `List`、`Map` 或自訂物件，其內容仍可能被修改。需要真正不可變時，仍要建立防禦性複製。
+====
+
+Record 隱含為 `final`，不能繼承其他一般 Class，但可以實作 Interface。
+
+== sealed、permits 與 non-sealed
+
+Sealed Class／Interface 在 Java 17 正式提供，用來明確限制可直接繼承或實作的型別。
+
+[source,java]
+----
+public sealed interface PaymentResult
+        permits PaymentSuccess, PaymentFailure {
+}
+
+public record PaymentSuccess(String transactionId)
+        implements PaymentResult {
+}
+
+public record PaymentFailure(String errorCode, String message)
+        implements PaymentResult {
+}
+----
+
+搭配 Pattern Matching `switch` 時，Compiler 可以根據完整型別集合協助檢查：
+
+[source,java]
+----
+public String message(PaymentResult result) {
+    return switch (result) {
+        case PaymentSuccess success ->
+                "交易成功：" + success.transactionId();
+        case PaymentFailure failure ->
+                "交易失敗：" + failure.message();
+    };
+}
+----
+
+直接繼承 Sealed Type 的型別，必須選擇後續策略：
+
+[cols="25%,75%", options="header"]
+|===
+|宣告 |效果
+
+|`final`
+|到此為止，不允許再繼承。
+
+|`sealed`
+|繼續限制下一層允許的子型別。
+
+|`non-sealed`
+|從這一層恢復一般可自由繼承的狀態。
+|===
+
+[source,java]
+----
+public sealed class Account
+        permits PersonalAccount, BusinessAccount {
+}
+
+public final class PersonalAccount extends Account {
+}
+
+public non-sealed class BusinessAccount extends Account {
+}
+----
+
+`sealed` 適合「型別集合是領域規則的一部分」的情境，不適合拿來限制一般應用程式中所有可能擴充。
+
+== annotation：提供程式中繼資料
+
+Annotation Type 使用 `@interface` 宣告：
+
+[source,java]
+----
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface Audited {
+    String action();
+}
+----
+
+使用方式：
+
+[source,java]
+----
+@Audited(action = "DELETE_USER")
+public void deleteUser(String userId) {
+}
+----
+
+Annotation 本身不會自動執行商業邏輯。必須由 Compiler、Annotation Processor、Reflection、Spring AOP 或其他框架讀取後，才會產生效果。
+
+Spring Boot 常見的 `@Component`、`@Service`、`@Transactional`、`@RequestMapping` 都是 Annotation，但每個 Annotation 的實際行為由 Spring 定義，不是 Java 語言自動提供。
+
+== synchronized 與 volatile
+
+這兩個關鍵字都與多執行緒有關，但解決的問題不同。
+
+=== synchronized
+
+`synchronized` 使用 Monitor 控制同一時間進入臨界區的執行緒，並建立必要的記憶體可見性關係。
+
+[source,java]
+----
+public class SequenceGenerator {
+
+    private long value;
+
+    public synchronized long next() {
+        return ++value;
+    }
+}
+----
+
+也可以只鎖定部分區塊：
+
+[source,java]
+----
+public long next() {
+    synchronized (this) {
+        return ++value;
+    }
+}
+----
+
+注意事項：
+
+* Instance `synchronized` 方法鎖定目前物件。
+* `static synchronized` 方法鎖定對應的 `Class` 物件。
+* 鎖定範圍太大可能降低併發效能。
+* 多把鎖取得順序不一致可能造成 Deadlock。
+* 跨 JVM、跨 Pod 或跨主機時，`synchronized` 不能取代分散式鎖定。
+
+=== volatile
+
+`volatile` 用於讓多個執行緒對欄位的讀寫具有特定可見性與順序保證。
+
+[source,java]
+----
+public class Worker {
+
+    private volatile boolean running = true;
+
+    public void stop() {
+        running = false;
+    }
+
+    public void runLoop() {
+        while (running) {
+            doWork();
+        }
+    }
+}
+----
+
+但 `volatile` 不會讓複合操作變成 Atomic：
+
+[source,java]
+----
+private volatile int count;
+
+public void increment() {
+    count++; // 讀取、加一、寫回，不是不可分割的單一步驟
+}
+----
+
+需要 Atomic 計數時，可考慮：
+
+[source,java]
+----
+private final AtomicInteger count = new AtomicInteger();
+
+public void increment() {
+    count.incrementAndGet();
+}
+----
+
+[cols="25%,37%,38%", options="header"]
+|===
+|項目 |`synchronized` |`volatile`
+
+|主要目的
+|互斥與可見性
+|單一欄位讀寫的可見性與順序
+
+|能否保護複合操作
+|在同一鎖定範圍內可以
+|不可以
+
+|會不會阻塞
+|競爭鎖時可能阻塞
+|單純讀寫不使用 Monitor 阻塞
+
+|常見用途
+|保護共享可變狀態
+|停止旗標、狀態發布等簡單情境
+|===
+
+== transient、native 與 strictfp
+
+=== transient
+
+`transient` 表示欄位不納入 Java 內建物件序列化機制。
+
+[source,java]
+----
+public class UserSession implements Serializable {
+
+    private String userId;
+    private transient String accessToken;
+}
+----
+
+[WARNING]
+====
+`transient` 是 Java Object Serialization 的規則，不代表 Jackson JSON、JPA、MyBatis 或其他框架一定會忽略該欄位。各框架仍要使用自己的 Annotation 或設定。
+====
+
+敏感資料也不能只靠 `transient` 保護；仍需考慮 Log、記憶體、JSON、資料庫及傳輸流程。
+
+=== native
+
+`native` 表示方法實作由 Java 以外的原生程式提供，常透過 JNI 連接 C／C++ Library。
+
+[source,java]
+----
+public class NativeLibrary {
+    public native int calculate(int value);
+}
+----
+
+Native Method 沒有 Java Method Body，因此宣告以分號結束。一般 Spring Boot 商業系統很少需要自行撰寫，除非整合硬體、作業系統或既有原生 Library。
+
+=== strictfp
+
+`strictfp` 過去用來要求一致的浮點運算規則。Java 17 恢復 Always-Strict Floating-Point Semantics 後，JLS 已將 Class 與 Method 上的 `strictfp` 視為過時用法；新程式不應再加入。
+
+[source,java]
+----
+// 現代 Java 不需要這樣寫
+public strictfp class LegacyCalculator {
+}
+----
+
+維護舊版 Java 程式時可以先理解其歷史用途，不應看到後就直接移除；仍需依原本目標 JDK 與測試結果判斷。
+
+== 建構子的存取控制
+
+建構子的存取範圍決定誰能建立物件。
+
+=== public 建構子
+
+[source,java]
+----
+public class User {
+    public User(String userId) {
+    }
+}
+----
+
+所有能看見 `User` 的程式都可以使用 `new User(...)`。
+
+=== protected 建構子
+
+[source,java]
+----
+public abstract class BaseEntity {
+    protected BaseEntity() {
+    }
+}
+----
+
+常用於讓子類別完成建構，但不希望一般呼叫端直接建立父類別。
+
+=== package-private 建構子
+
+[source,java]
+----
+public class Order {
+    Order() {
+    }
+}
+----
+
+只有同一 Package 能建立物件，可搭配同 Package Factory 控制流程。
+
+=== private 建構子
+
+工具類別可使用 `private` 建構子禁止建立物件：
+
+[source,java]
+----
+public final class StringUtils {
+
+    private StringUtils() {
+    }
+
+    public static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+}
+----
+
+Factory Method 也可搭配 `private` 建構子：
+
+[source,java]
+----
+public final class UserId {
+
+    private final String value;
+
+    private UserId(String value) {
+        this.value = value;
+    }
+
+    public static UserId of(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("value 不可為空");
+        }
+        return new UserId(value);
+    }
+}
+----
+
+== Spring Boot 實務範例
+
+=== Constructor Injection 與 final
+
+[source,java]
+----
+@Service
+public class UserApplicationService {
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    public UserApplicationService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
+
+    public UserResponse create(UserCreateRequest request) {
+        String encodedPassword = passwordEncoder.encode(request.password());
+        User user = new User(request.userId(), encodedPassword);
+        return UserResponse.from(userRepository.save(user));
+    }
+}
+----
+
+這種寫法的好處：
+
+* 必要依賴在建構時就要提供。
+* 欄位可以是 `final`，避免建立後被換掉。
+* 單元測試可直接呼叫建構子，不必啟動 Spring Container。
+* 比 Field Injection 更容易看出類別真正依賴哪些元件。
+
+=== 對外 public、內部 private
+
+[source,java]
+----
+@Service
+public class PasswordChangeService {
+
+    public void changePassword(PasswordChangeCommand command) {
+        validate(command);
+        verifyOldPassword(command);
+        updatePassword(command);
+    }
+
+    private void validate(PasswordChangeCommand command) {
+        // 輸入驗證
+    }
+
+    private void verifyOldPassword(PasswordChangeCommand command) {
+        // 舊密碼驗證
+    }
+
+    private void updatePassword(PasswordChangeCommand command) {
+        // 更新資料庫
+    }
+}
+----
+
+公開方法表達 Service 提供的完整 Use Case，內部步驟則保持 `private`。不要因為方法較長，就把所有步驟都改成 `public`。
+
+=== Interface 的合理使用
+
+[source,java]
+----
+public interface FileStorage {
+    StoredFile save(String fileName, InputStream content);
+}
+----
+
+[source,java]
+----
+@Component
+public class LocalFileStorage implements FileStorage {
+    @Override
+    public StoredFile save(String fileName, InputStream content) {
+        // 寫入本機磁碟
+        return new StoredFile(fileName);
+    }
+}
+----
+
+[source,java]
+----
+@Component
+public class S3FileStorage implements FileStorage {
+    @Override
+    public StoredFile save(String fileName, InputStream content) {
+        // 寫入 Object Storage
+        return new StoredFile(fileName);
+    }
+}
+----
+
+這裡的 Interface 有清楚價值：呼叫端依賴「檔案儲存能力」，部署環境可選擇 Local 或 S3 實作。
+
+=== protected 不應成為拆方法的預設值
+
+若方法只在目前 Service 內使用，優先使用 `private`：
+
+[source,java]
+----
+private void validateRequest(UserRequest request) {
+}
+----
+
+只有類別確實被設計成可繼承框架，且該方法是刻意提供的擴充點時，才考慮 `protected`：
+
+[source,java]
+----
+public abstract class ImportTemplate {
+
+    public final void execute(Path file) {
+        validate(file);
+        importData(file);
+    }
+
+    protected void validate(Path file) {
+        // 共用驗證
+    }
+
+    protected abstract void importData(Path file);
+}
+----
+
+一般 Spring Service 更常使用組合與 Dependency Injection，而不是透過 Service 繼承共用程式。
+
+=== Java 存取範圍與 Spring Proxy
+
+Java 允許在 `private` 方法上放置 Annotation，但不代表 Spring 的 Proxy 一定能攔截該方法。
+
+[source,java]
+----
+@Service
+public class OrderService {
+
+    public void createOrder() {
+        saveOrder();
+    }
+
+    @Transactional
+    private void saveOrder() {
+        // 一般 Proxy 模式下，不應假設這裡會建立新交易邊界
+    }
+}
+----
+
+一般 Proxy-based AOP 要從 Proxy 外部呼叫可攔截的方法，`private` 方法與同一物件內的 Self-invocation 通常不會經過 Proxy。較清楚的方式是把交易邊界放在對外 Use Case 方法：
+
+[source,java]
+----
+@Service
+public class OrderService {
+
+    @Transactional
+    public void createOrder() {
+        validateOrder();
+        saveOrder();
+    }
+
+    private void validateOrder() {
+    }
+
+    private void saveOrder() {
+    }
+}
+----
+
+這是 Spring Proxy 的行為，不是 Java `private` 本身會讓交易失效。實際限制仍需依 Proxy 類型、Spring 設定與使用的 AOP 機制判斷。
+
+=== Record 作為 Request／Response DTO
+
+Record 很適合表示 Spring Web 的資料傳輸物件：
+
+[source,java]
+----
+public record UserCreateRequest(
+        @NotBlank String userId,
+        @NotBlank String userName
+) {
+}
+
+public record UserResponse(
+        String userId,
+        String userName
+) {
+}
+----
+
+Record 通常比 JPA Entity 更適合 DTO。JPA Entity 牽涉無參數建構子、代理、可變狀態與持久化生命週期，不能因為 Record 程式較短就直接全面替換 Entity。
+
+== 常見錯誤與誤解
+
+[cols="32%,34%,34%", options="header"]
+|===
+|誤解或寫法 |問題 |較合理的理解
+
+|所有欄位都加 `public`
+|外部可繞過物件規則直接修改
+|欄位通常保持 `private`，透過有意義的方法操作
+
+|不寫修飾詞就是 `private`
+|同 Package 仍能存取
+|不寫是 package-private
+
+|`protected` 只有子類別可用
+|同 Package 的非子類別也可以用
+|同 Package 開放，加上跨 Package 子類別權限
+
+|`final List` 完全不能改
+|只限制參照重新指定
+|物件內容是否能改由物件型別決定
+
+|`static` 比 Instance Method 方便
+|容易形成全域狀態與難以替換的相依
+|只有真正屬於類別且不依賴物件狀態時使用
+
+|Interface 不能有 Method Body
+|現代 Java 支援 `default`、`static`、`private` 方法
+|抽象方法沒有 Body，但 Interface 不只包含抽象方法
+
+|Interface 欄位可保存物件狀態
+|欄位隱含為 `public static final`
+|每個物件的狀態放在實作類別
+
+|`volatile int count` 可安全執行 `count++`
+|`count++` 是複合操作
+|使用鎖或 `AtomicInteger`
+
+|Annotation 寫上去就會執行
+|Annotation 只是中繼資料
+|需要框架或程式讀取並實作效果
+
+|每個 Service 都必須有 Interface
+|增加沒有實質邊界的檔案與命名
+|有多實作、替換或模組契約時再建立
+|===
+
+== Java 6 與現代 Java 差異
+
+[cols="30%,18%,18%,34%", options="header"]
+|===
+|功能 |Java 6 |Java 21／25 |說明
+
+|一般 Class／Abstract Class／Interface
+|支援
+|支援
+|核心概念一致。
+
+|Interface `default` 方法
+|不支援
+|支援
+|Java 8 起提供。
+
+|Interface `static` 方法
+|不支援
+|支援
+|Java 8 起提供。
+
+|Interface `private` 方法
+|不支援
+|支援
+|Java 9 起提供。
+
+|Lambda／Functional Interface 語法
+|不支援
+|支援
+|Lambda 自 Java 8 起提供；Java 6 使用匿名類別等寫法。
+
+|Record
+|不支援
+|支援
+|Java 16 正式提供。
+
+|Sealed Class／Interface
+|不支援
+|支援
+|Java 17 正式提供。
+
+|Pattern Matching `switch`
+|不支援
+|支援
+|現代 Java 可與 Sealed Type 搭配完整型別檢查。
+
+|`strictfp`
+|可能影響浮點語意
+|已過時
+|維護舊系統時不能直接套用現代結論。
+|===
+
+[WARNING]
+====
+如果專案仍以 Java 6 編譯，即使開發電腦安裝 Java 25，也不能在原始碼中使用 Record、Lambda、Interface Default Method 或 Sealed Class。實際可用語法由 Maven Compiler 設定、建置 JDK 與執行環境共同決定。
+====
+
+== 快速判斷原則
+
+=== 存取範圍
+
+. 先從限制最多的 `private` 開始。
+. 同 Package 協作且不想公開時，考慮 package-private。
+. 類別確實設計成可繼承，且要提供子類別擴充點時，才使用 `protected`。
+. 對外穩定 API 才使用 `public`。
+
+=== 類別與 Interface
+
+. 需要完整物件與狀態：Class。
+. 需要共用狀態、建構流程與部分實作：Abstract Class。
+. 需要能力契約或多種實作：Interface。
+. 固定選項：Enum。
+. 固定資料載體：Record。
+. 型別集合必須受控：Sealed Type。
+. 提供框架或工具讀取的中繼資料：Annotation。
+
+=== static 與 final
+
+. 不需要任何物件狀態，且概念上屬於類別本身：考慮 `static`。
+. 建構後不應換掉的依賴或值：使用 `final`。
+. 不允許繼承或 Override：使用 `final class` 或 `final method`，並確認框架代理需求。
+. `static final` 集合仍需確認內容是否可修改。
+
+=== 多執行緒
+
+. 需要互斥保護複合狀態：鎖定或適合的 Concurrent API。
+. 只需要簡單狀態的可見性：評估 `volatile`。
+. 計數累加：不要只靠 `volatile`，考慮 `AtomicInteger`／`AtomicLong`。
+. 跨 JVM 或 Kubernetes Pod：不要用 `synchronized` 當分散式鎖。
+
+== 修飾詞速查
+
+[cols="20%,25%,27%,28%", options="header"]
+|===
+|關鍵字 |主要用途 |常見位置 |一句話記憶
+
+|`public`
+|完全公開
+|型別、欄位、方法、建構子
+|公開 API
+
+|`protected`
+|Package 與子類別擴充
+|成員、建構子
+|同 Package，加上跨 Package 繼承權限
+
+|不寫
+|Package 內可見
+|型別、欄位、方法、建構子
+|Package 內部 API
+
+|`private`
+|類別內可見
+|成員、建構子
+|隱藏實作
+
+|`static`
+|屬於類別
+|欄位、方法、巢狀型別、初始化區塊
+|不需要目前物件
+
+|`final`
+|禁止重新指定、Override 或繼承
+|變數、欄位、方法、類別
+|到這裡固定
+
+|`abstract`
+|保留待完成實作
+|類別、方法
+|子類別負責完成
+
+|`default`
+|Interface 預設 Instance Method
+|Interface 方法
+|契約附帶預設實作
+
+|`sealed`
+|限制直接子型別
+|Class、Interface
+|只允許指定型別繼承
+
+|`non-sealed`
+|解除 Sealed 限制
+|Sealed Type 的直接子型別
+|從這層重新開放
+
+|`synchronized`
+|Monitor 互斥與可見性
+|方法、程式區塊
+|同一把鎖保護共享狀態
+
+|`volatile`
+|欄位可見性與順序
+|欄位
+|看見較新的單一狀態
+
+|`transient`
+|Java 序列化時忽略
+|欄位
+|不寫入 Object Serialization
+
+|`native`
+|呼叫原生實作
+|方法
+|Java 外部提供 Method Body
+
+|`strictfp`
+|舊版浮點語意控制
+|類別、方法
+|現代 Java 已過時
+|===
+
+== 官方參考
+
+* https://docs.oracle.com/javase/specs/jls/se25/html/jls-6.html#jls-6.6[Java Language Specification：Access Control]
+* https://docs.oracle.com/javase/specs/jls/se25/html/jls-8.html[Java Language Specification：Classes]
+* https://docs.oracle.com/javase/specs/jls/se25/html/jls-9.html[Java Language Specification：Interfaces]
+* https://openjdk.org/jeps/395[JEP 395：Records]
+* https://openjdk.org/jeps/409[JEP 409：Sealed Classes]
+* https://openjdk.org/jeps/306[JEP 306：Restore Always-Strict Floating-Point Semantics]
