@@ -14,6 +14,14 @@
         }
         var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         document.documentElement.dataset.theme = savedTheme || (prefersDark ? 'dark' : 'light');
+
+        try {
+          if (localStorage.getItem('docs-page-toc-collapsed') === 'true') {
+            document.documentElement.classList.add('page-toc-collapsed');
+          }
+        } catch (error) {
+          // 無法存取 localStorage 時，維持本頁目錄的預設展開狀態。
+        }
       }());
     </script>
     <link rel="stylesheet" href="{{uiRootPath}}/static/css/site.css">
@@ -24,12 +32,31 @@
   </head>
   <body>
     <header class="topbar">
-      <a class="topbar__brand" href="{{{relativize site.homeUrl}}}">
-        <img class="topbar__logo" src="{{uiRootPath}}/static/icon.png" alt="Logo" style="height: 2.25rem; width: 2.25rem; object-fit: contain;">
-        <span>{{site.title}}</span>
-      </a>
+      <div class="topbar__primary">
+        <button
+          class="topbar-nav-toggle"
+          type="button"
+          aria-controls="site-nav"
+          aria-expanded="false"
+        >
+          <span class="topbar-nav-toggle__icon" aria-hidden="true"></span>
+          <span class="topbar-nav-toggle__label">文件導覽</span>
+        </button>
+        <a class="topbar__brand" href="{{{relativize site.homeUrl}}}">
+          <img class="topbar__logo" src="{{uiRootPath}}/static/icon.png" alt="Logo" style="height: 2.25rem; width: 2.25rem; object-fit: contain;">
+          <span>{{site.title}}</span>
+        </a>
+      </div>
       <div class="topbar__actions">
         <span class="topbar__meta">Reference Documentation</span>
+        <button
+          class="mobile-page-toc-toggle"
+          type="button"
+          aria-controls="page-toc-panel"
+          aria-expanded="false"
+        >
+          本頁目錄
+        </button>
         <button class="theme-toggle" type="button" aria-label="切換深淺色模式" aria-pressed="false">
           <span class="theme-toggle__icon" aria-hidden="true"></span>
           <span class="theme-toggle__label">深色模式</span>
@@ -37,9 +64,10 @@
       </div>
     </header>
     <div class="site-shell">
-      <aside class="site-nav">
+      <aside id="site-nav" class="site-nav" aria-label="文件導覽" aria-hidden="true">
         <div class="site-nav__heading">
           <span>文件導覽</span>
+          <button class="site-nav__close" type="button" aria-label="關閉文件導覽">×</button>
         </div>
         <nav class="site-nav__menu" aria-label="文件導覽">
           <ul class="nav-list">
@@ -47,15 +75,24 @@
           </ul>
         </nav>
       </aside>
+      <button class="site-overlay" type="button" aria-label="關閉導覽"></button>
+      <aside id="page-toc-panel" class="page-toc-panel" aria-label="本頁目錄">
+        <div class="page-toc__heading">
+          <span class="page-toc__title">本頁目錄</span>
+          <button
+            class="page-toc__collapse"
+            type="button"
+            aria-controls="page-toc-content"
+            aria-expanded="true"
+            aria-label="收合本頁目錄"
+            title="收合本頁目錄"
+          >
+            <span class="page-toc__collapse-icon" aria-hidden="true">‹</span>
+          </button>
+        </div>
+        <nav id="page-toc-content" class="page-toc__content" aria-label="本頁章節"></nav>
+      </aside>
       <main class="site-main">
-        <details class="mobile-nav">
-          <summary>文件導覽</summary>
-          <nav aria-label="行動版文件導覽">
-            <ul class="nav-list">
-              {{> nav-tree items=page.navigation}}
-            </ul>
-          </nav>
-        </details>
         <div class="site-header__crumbs" aria-label="頁面路徑">
             {{#if page.breadcrumbs}}
               {{#each page.breadcrumbs}}
@@ -75,5 +112,6 @@
     </div>
     <script src="{{uiRootPath}}/static/js/theme.js"></script>
     <script src="{{uiRootPath}}/static/js/navigation.js"></script>
+    <script src="{{uiRootPath}}/static/js/page-toc.js"></script>
   </body>
 </html>
