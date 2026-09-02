@@ -19,10 +19,6 @@
 
 這裡整理可公開的工程筆記，內容以日後查閱、問題排查與實務判斷為主。
 
-首頁是本站的主要入口。可直接依下方主題選擇文件，也可以使用左側導覽快速切換分類。
-
-首頁文件分類原則上應與左側 `nav.adoc` 保持一致；新增正式文件時，若已加入左側導覽，也應同步加入首頁對應分類。
-
 == Reference
 
 [cols="30%,45%,25%", options="header"]
@@ -32,6 +28,14 @@
 |xref:reference/technical-links.adoc[技術相關參考網頁]
 |常用官方文件、工具文件與技術參考連結。
 |快速查找外部資料來源。
+
+|===
+
+=== 綜合技術筆記
+
+[cols="30%,45%,25%", options="header"]
+|===
+|文件 |重點 |適合情境
 
 |xref:reference/http-network-notes.adoc[HTTP 與網路基礎]
 |HTTP 狀態碼、Request Method、網路指令與 OSI 協定。
