@@ -99,6 +99,10 @@
 |MVC、MVVM 與 Java 常見分層物件的責任差異。
 |討論專案分層與命名。
 
+|xref:java/java-access-modifiers-and-type-guide.adoc[Java 存取修飾詞、類別型別與常用關鍵字指南]
+|public、protected、private、static、final、abstract、Interface、Record、Sealed Type 與多執行緒修飾詞。
+|理解 Java 存取範圍、繼承設計、型別選擇或快速查找關鍵字用途。
+
 |xref:java/character-encoding-guide.adoc[字元、字集與編碼整理]
 |ASCII、Big5、MS950、UTF-8、Java、資料庫與網頁編碼。
 |排查亂碼與資料交換問題。
