@@ -224,13 +224,9 @@
 |快速對照 MR / PR、Protected Branch / Ruleset、Runner、CI/CD 與新 Repository 建議設定。
 |第一次從 GitLab 切換到 GitHub 時快速建立對應觀念。
 
-|xref:tools/self-hosted-ai-code-review-platform-guide.adoc[自架 AI 推論平台與 GitLab Code Review 導入指南]
-|推論工具選型、NIM、Nginx、GitLab CI、Token、安全與 MR 審查流程。
-|規劃內部 AI 推論服務，或將 AI Code Review 導入 GitLab。
-
-|xref:tools/ai-inference-runtime-model-comparison.adoc[AI 推論工具、啟動方式與模型家族比較]
-|整理 AI Runtime、模型服務啟動方式與模型家族選擇差異。
-|比較地端 AI 推論工具或模型選型時。
+|xref:tools/self-hosted-ai-code-review-platform-guide.adoc[自架 AI 推論平台、模型選型與 GitLab Code Review 導入指南]
+|Runtime 與模型選型、SGLang、vLLM、NIM、Nginx、GitLab CI、Token、安全與 MR 審查流程。
+|規劃地端 AI 推論服務、比較模型與 Runtime，或將 AI Code Review 導入 GitLab。
 
 |xref:tools/notepadpp-delete-matching-lines.adoc[Notepad++ 刪除包含特定字串的整行]
 |使用 Notepad++ 搜尋與刪除符合條件的資料列。
