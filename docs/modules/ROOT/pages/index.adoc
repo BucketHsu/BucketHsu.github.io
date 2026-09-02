@@ -29,6 +29,14 @@
 |常用官方文件、工具文件與技術參考連結。
 |快速查找外部資料來源。
 
+|===
+
+=== 綜合技術筆記
+
+[cols="30%,45%,25%", options="header"]
+|===
+|文件 |重點 |適合情境
+
 |xref:reference/http-network-notes.adoc[HTTP 與網路基礎]
 |HTTP 狀態碼、Request Method、網路指令與 OSI 協定。
 |查找 Web 請求與網路基礎。
