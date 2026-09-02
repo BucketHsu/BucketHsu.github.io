@@ -17,6 +17,7 @@
 ** xref:reference/database-javascript-notes.adoc[資料庫與 JavaScript]
 * Java 與前端
 ** xref:java/java-layering-dto-dao-entity.adoc[Java MVC MVVM 分層與 DTO DAO Entity Repository 名詞說明]
+** xref:java/java-access-modifiers-and-type-guide.adoc[Java 存取修飾詞、類別型別與常用關鍵字指南]
 ** xref:java/character-encoding-guide.adoc[字元、字集與編碼整理]
 ** xref:java/tomcat-server-xml.adoc[TomcatServerXML設定]
 ** xref:java/tomcat-pkcs12-objectidentifier-error.adoc[Tomcat 8 載入 PKCS#12 憑證發生 ObjectIdentifier 錯誤]
