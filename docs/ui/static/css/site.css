@@ -1,6 +1,8 @@
 :root {
   --topbar-height: 4.25rem;
-  --nav-width: 18.5rem;
+  --site-nav-drawer-width: 20rem;
+  --page-toc-width: 17.5rem;
+  --page-toc-collapsed-width: 3.25rem;
   --bg: #ffffff;
   --panel: #ffffff;
   --panel-soft: #eef3f8;
@@ -51,6 +53,11 @@ body {
   line-height: 1.7;
 }
 
+html.site-nav-open body,
+html.page-toc-mobile-open body {
+  overflow: hidden;
+}
+
 .topbar {
   position: sticky;
   z-index: 20;
@@ -64,6 +71,70 @@ body {
   background: #111616;
 }
 
+.topbar__primary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 1rem;
+}
+
+.topbar-nav-toggle,
+.mobile-page-toc-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 2.35rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #465050;
+  border-radius: 0.2rem;
+  color: #e8eded;
+  background: transparent;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.topbar-nav-toggle:hover,
+.mobile-page-toc-toggle:hover {
+  border-color: var(--spring-green);
+  background: #202727;
+}
+
+.topbar-nav-toggle:focus-visible,
+.mobile-page-toc-toggle:focus-visible {
+  outline: 2px solid var(--spring-green);
+  outline-offset: 2px;
+}
+
+.topbar-nav-toggle__icon,
+.topbar-nav-toggle__icon::before,
+.topbar-nav-toggle__icon::after {
+  display: block;
+  width: 1rem;
+  height: 0.12rem;
+  background: currentColor;
+  content: "";
+}
+
+.topbar-nav-toggle__icon {
+  position: relative;
+}
+
+.topbar-nav-toggle__icon::before {
+  position: absolute;
+  top: -0.34rem;
+}
+
+.topbar-nav-toggle__icon::after {
+  position: absolute;
+  top: 0.34rem;
+}
+
+.mobile-page-toc-toggle {
+  display: none;
+}
+
 .topbar__brand {
   display: inline-flex;
   align-items: center;
@@ -71,6 +142,7 @@ body {
   color: #fff;
   font-size: 1.15rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .topbar__brand:hover { color: #fff; text-decoration: none; }
@@ -152,18 +224,32 @@ a:hover {
 
 .site-shell {
   display: grid;
-  grid-template-columns: minmax(16rem, var(--nav-width)) minmax(0, 1fr);
+  grid-template-columns: var(--page-toc-width) minmax(0, 1fr);
   min-height: calc(100vh - var(--topbar-height));
+  transition: grid-template-columns 0.18s ease;
 }
 
 .site-nav {
-  position: sticky;
+  position: fixed;
+  z-index: 40;
   top: var(--topbar-height);
-  height: calc(100vh - var(--topbar-height));
+  bottom: 0;
+  left: 0;
+  width: min(var(--site-nav-drawer-width), calc(100vw - 2.5rem));
   overflow-y: auto;
   padding: 0 1rem 2rem;
   border-right: 1px solid var(--line);
   background: var(--nav-bg);
+  box-shadow: 0.75rem 0 2rem rgba(0, 0, 0, 0.18);
+  transform: translateX(-105%);
+  visibility: hidden;
+  transition: transform 0.2s ease, visibility 0s linear 0.2s;
+}
+
+html.site-nav-open .site-nav {
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform 0.2s ease;
 }
 
 .site-nav__heading {
@@ -175,6 +261,196 @@ a:hover {
   border-bottom: 1px solid var(--line);
   font-size: 1.05rem;
   font-weight: 700;
+}
+
+.site-nav__close {
+  display: inline-grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 0.2rem;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.site-nav__close:hover {
+  color: var(--link-hover);
+  background: var(--hover-bg);
+}
+
+.site-nav__close:focus-visible {
+  outline: 2px solid var(--spring-green);
+  outline-offset: 2px;
+}
+
+.site-overlay {
+  position: fixed;
+  z-index: 30;
+  inset: var(--topbar-height) 0 0;
+  display: none;
+  width: 100%;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: rgba(8, 12, 12, 0.52);
+  cursor: default;
+}
+
+html.site-nav-open .site-overlay,
+html.page-toc-mobile-open .site-overlay {
+  display: block;
+}
+
+.page-toc-panel {
+  position: sticky;
+  top: var(--topbar-height);
+  height: calc(100vh - var(--topbar-height));
+  min-width: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+  background: var(--nav-bg);
+}
+
+.page-toc__heading {
+  display: flex;
+  min-height: 4rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 1rem;
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+}
+
+.page-toc__collapse {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 0.2rem;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.page-toc__collapse:hover {
+  color: var(--link-hover);
+  background: var(--hover-bg);
+}
+
+.page-toc__collapse:focus-visible {
+  outline: 2px solid var(--spring-green);
+  outline-offset: 2px;
+}
+
+.page-toc__collapse-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.page-toc__content {
+  height: calc(100vh - var(--topbar-height) - 4rem);
+  overflow-y: auto;
+  padding: 1rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  scrollbar-gutter: stable;
+}
+
+.page-toc__content #toc {
+  margin: 0;
+  padding: 0;
+}
+
+.page-toc__content #toc > .title {
+  display: none;
+}
+
+.page-toc__content #toc ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.page-toc__content #toc li {
+  margin: 0.18rem 0;
+}
+
+.page-toc__content #toc a {
+  display: block;
+  padding: 0.28rem 0.5rem;
+  border-left: 0.18rem solid transparent;
+  border-radius: 0.15rem;
+  color: var(--muted);
+}
+
+.page-toc__content #toc a:hover {
+  color: var(--link-hover);
+  background: var(--hover-bg);
+  text-decoration: none;
+}
+
+.page-toc__content #toc > ul > li > ul {
+  display: none;
+  margin: 0.2rem 0 0.45rem 0.8rem;
+  padding-left: 0.55rem;
+  border-left: 1px solid var(--line);
+}
+
+.page-toc__content #toc > ul > li.is-active-section > ul {
+  display: block;
+}
+
+.page-toc__content #toc a.is-active,
+.page-toc__content #toc a[aria-current="location"] {
+  border-left-color: var(--spring-green);
+  color: var(--link-hover);
+  background: var(--hover-bg);
+  font-weight: 700;
+}
+
+html.page-toc-collapsed .site-shell {
+  grid-template-columns: var(--page-toc-collapsed-width) minmax(0, 1fr);
+}
+
+html.page-toc-collapsed .page-toc__heading {
+  min-height: 100%;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 1rem 0;
+  border-bottom: 0;
+}
+
+html.page-toc-collapsed .page-toc__title {
+  margin-top: 0.4rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.18em;
+  writing-mode: vertical-rl;
+}
+
+html.page-toc-collapsed .page-toc__content {
+  display: none;
+}
+
+html.no-page-toc .site-shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html.no-page-toc .page-toc-panel,
+html.no-page-toc .mobile-page-toc-toggle {
+  display: none;
 }
 
 .site-nav__version {
@@ -218,8 +494,8 @@ a:hover {
 
 .site-main {
   width: 100%;
-  max-width: 86rem;
-  padding: 2rem clamp(2rem, 6vw, 7rem) 5rem;
+  min-width: 0;
+  padding: 2rem clamp(1.5rem, 4vw, 4rem) 5rem;
 }
 
 .site-main--standalone {
@@ -249,6 +525,7 @@ a:hover {
 
 .doc {
   max-width: 66rem;
+  margin: 0 auto;
 }
 
 .doc__header {
@@ -261,6 +538,12 @@ a:hover {
 .doc h2,
 .doc h3,
 .doc h4 { color: var(--text); line-height: 1.25; }
+
+.doc h2,
+.doc h3,
+.doc h4 {
+  scroll-margin-top: calc(var(--topbar-height) + 1rem);
+}
 
 .doc h1 { margin: 0; font-size: clamp(2.25rem, 5vw, 3.5rem); }
 .doc h2 { margin: 3.25rem 0 1rem; padding-bottom: 0.55rem; border-bottom: 1px solid var(--line); font-size: clamp(1.55rem, 3vw, 2rem); }
@@ -300,8 +583,6 @@ a:hover {
   background: var(--admonition-bg);
 }
 
-.mobile-nav { display: none; }
-
 .doc table {
   width: 100%;
   border-collapse: collapse;
@@ -322,15 +603,92 @@ a:hover {
 @media (max-width: 960px) {
   .topbar__meta,
   .theme-toggle__label,
+  .topbar-nav-toggle__label {
+    display: none;
+  }
+
+  .topbar {
+    padding: 0 1rem;
+  }
+
+  .topbar__primary,
+  .topbar__actions {
+    gap: 0.55rem;
+  }
+
+  .topbar__brand {
+    max-width: min(52vw, 18rem);
+    overflow: hidden;
+    font-size: 0.95rem;
+    text-overflow: ellipsis;
+  }
+
+  .topbar__logo {
+    flex: 0 0 auto;
+  }
+
+  .topbar-nav-toggle,
+  .theme-toggle {
+    width: 2.35rem;
+    padding: 0;
+  }
+
+  .mobile-page-toc-toggle {
+    display: inline-flex;
+    padding: 0.35rem 0.6rem;
+  }
+
   .site-shell {
-    display: none;
+    display: block;
   }
 
-  .site-nav {
-    display: none;
+  .page-toc-panel {
+    position: fixed;
+    z-index: 40;
+    top: var(--topbar-height);
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: min(20rem, calc(100vw - 2.5rem));
+    height: auto;
+    border-right: 0;
+    border-left: 1px solid var(--line);
+    box-shadow: -0.75rem 0 2rem rgba(0, 0, 0, 0.18);
+    transform: translateX(105%);
+    visibility: hidden;
+    transition: transform 0.2s ease, visibility 0s linear 0.2s;
   }
 
-  .site-shell { display: block; }
+  html.page-toc-mobile-open .page-toc-panel {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 0.2s ease;
+  }
+
+  .page-toc__content {
+    height: calc(100vh - var(--topbar-height) - 4rem);
+  }
+
+  html.page-toc-collapsed .page-toc__heading {
+    min-height: 4rem;
+    flex-direction: row;
+    justify-content: space-between;
+    margin: 0 1rem;
+    padding: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  html.page-toc-collapsed .page-toc__title {
+    margin: 0;
+    color: var(--text);
+    font-size: inherit;
+    letter-spacing: normal;
+    writing-mode: horizontal-tb;
+  }
+
+  html.page-toc-collapsed .page-toc__content {
+    display: block;
+  }
 
   .theme-toggle {
     width: 2.25rem;
@@ -341,12 +699,32 @@ a:hover {
   .site-main {
     padding: 1.25rem clamp(1rem, 5vw, 2rem) 3.5rem;
   }
+}
 
-  .mobile-nav {
-    display: block;
-    margin-bottom: 1.4rem;
-    padding: 0.75rem 1rem;
-    border: 1px solid var(--line);
-    background: var(--panel-soft);
+@media (max-width: 560px) {
+  .topbar {
+    padding: 0 0.65rem;
+  }
+
+  .topbar__brand span {
+    display: none;
+  }
+
+  .topbar__brand {
+    max-width: none;
+  }
+
+  .mobile-page-toc-toggle {
+    min-width: 4.4rem;
+    padding: 0.35rem 0.45rem;
+    font-size: 0.76rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-shell,
+  .site-nav,
+  .page-toc-panel {
+    transition: none;
   }
 }
