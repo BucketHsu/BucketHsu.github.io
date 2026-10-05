@@ -676,22 +676,22 @@ location = /500.html {
 [plantuml,nginx-error-flow,svg]
 ----
 @startuml
-top to bottom direction
+left to right direction
 
-start
-:Nginx 將 Request 送到 upstream;
-:upstream 回傳 HTTP status;
-if (符合 error_page?) then (是)
-  if (proxy_intercept_errors on?) then (是)
-    :使用 Nginx 自訂錯誤頁;
-  else (否)
-    :保留 upstream 原始內容;
-  endif
-else (否)
-  :保留 upstream 原始內容;
-endif
-:回傳瀏覽器;
-stop
+actor Browser as "瀏覽器"
+participant Nginx
+participant Upstream as "upstream"
+
+Browser -> Nginx : Request
+Nginx -> Upstream : Proxy Request
+Upstream --> Nginx : HTTP status / Response
+
+alt 符合 error_page 且 proxy_intercept_errors on
+    Nginx -> Nginx : 套用自訂錯誤頁
+    Nginx --> Browser : 自訂錯誤頁
+else 其他情況
+    Nginx --> Browser : upstream 原始回應
+end
 @enduml
 ----
 
