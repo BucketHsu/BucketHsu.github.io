@@ -676,11 +676,9 @@ location = /500.html {
 [plantuml,nginx-error-flow,svg]
 ----
 @startuml
-left to right direction
-
-actor Browser as "瀏覽器"
-participant Nginx
-participant Upstream as "upstream"
+actor "瀏覽器" as Browser
+participant "Nginx" as Nginx
+participant "Upstream" as Upstream
 
 Browser -> Nginx : Request
 Nginx -> Upstream : Proxy Request
