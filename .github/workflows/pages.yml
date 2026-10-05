@@ -29,21 +29,11 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - name: Install Graphviz
-        run: sudo apt-get update && sudo apt-get install -y graphviz
-
-      - name: Setup Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-
       - name: Install Antora dependencies
         run: npm ci
 
-      - name: Build AsciiDoc HTML
-        run: mvn -B -DskipTests generate-resources
+      - name: Install diagram extension
+        run: npm install --no-save --no-package-lock asciidoctor-kroki@0.18.1
 
       - name: Build Antora site
         run: npm run docs:site

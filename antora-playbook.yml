@@ -13,7 +13,10 @@ ui:
     url: ./docs/ui
 
 asciidoc:
+  extensions:
+    - asciidoctor-kroki
   attributes:
     page-pagination: ''
     source-highlighter: highlightjs
     icons: font
+    kroki-fetch-diagram: true
