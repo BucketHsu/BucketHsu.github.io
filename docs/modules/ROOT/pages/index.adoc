@@ -130,25 +130,13 @@
 |===
 |文件 |重點 |適合情境
 
-|xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]
-|Nginx 基礎、反向代理、HTTPS、負載平衡與排錯。
-|第一次學習或建立完整設定。
+|xref:network/nginx-guide.adoc[Nginx 實務指南]
+|反向代理、路徑改寫、Template / Include、HTTPS、負載平衡、錯誤頁、安全設定與排錯。
+|學習 Nginx、建立設定，或查實務案例。
 
 |xref:network/cloud-onprem-web-architecture.adoc[雲端前端與地端 Spring Boot / Database 架構]
 |Cloud Nginx、地端 API / DB、安全邊界、BFF、前後端分離權限與微服務架構差異。
 |前端部署到雲端，但核心 Spring Boot 與資料庫仍保留在地端時。
-
-|xref:network/nginx-config-organization.adoc[Nginx 設定檔分層、Template 與 Include]
-|nginx.conf、80.conf、443.conf、template 與 include 分工。
-|規劃可維護的設定檔結構。
-
-|xref:network/nginx-site-template-error-pages.adoc[Nginx site.conf.template 與自訂錯誤頁]
-|Container template、共用 Proxy 設定與 404 / 500 錯誤頁。
-|容器化部署與自訂錯誤頁。
-
-|xref:network/nginx-trailing-slash.adoc[Nginx 路徑尾端斜線規則]
-|location、proxy_pass、root 與 alias 尾端斜線差異。
-|排查 URI 被保留或替換問題。
 
 |xref:network/nginx-directive-reference.adoc[Nginx 常用設定指令參考]
 |常用 directive 的 Context、用途與注意事項。

@@ -23,11 +23,8 @@
 ** xref:java/tomcat-pkcs12-objectidentifier-error.adoc[Tomcat 8 載入 PKCS#12 憑證發生 ObjectIdentifier 錯誤]
 ** xref:frontend/html5-semantic-elements.adoc[HTML5 語意化 Element 使用規範]
 * Nginx 與網路
-** xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]
+** xref:network/nginx-guide.adoc[Nginx 實務指南]
 ** xref:network/cloud-onprem-web-architecture.adoc[雲端前端與地端 Spring Boot / Database 架構]
-** xref:network/nginx-config-organization.adoc[Nginx 設定檔分層、Template 與 Include]
-** xref:network/nginx-site-template-error-pages.adoc[Nginx site.conf.template 與自訂錯誤頁]
-** xref:network/nginx-trailing-slash.adoc[Nginx 路徑尾端斜線規則]
 ** xref:network/nginx-directive-reference.adoc[Nginx 常用設定指令參考]
 ** xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 基礎與差異]
 ** xref:network/ssh-key-authentication-guide.adoc[SSH 金鑰登入、Server 設定與金鑰產生指南]

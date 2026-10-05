@@ -1,4 +1,4 @@
-= Nginx 基礎觀念與設定指南
+= Nginx 實務指南
 學藝不精工程師
 :experimental:
 :icons: font
@@ -11,98 +11,121 @@
 :last-update-label!:
 :nofooter:
 
-本篇由淺入深整理 Nginx 的用途、設定檔結構、靜態網站、反向代理、負載平衡、HTTPS、安全 Header、效能調整與常見問題排查。
+本篇整合 Nginx 常用觀念與實務設定，包含反向代理、路徑轉換、Template / Include、HTTPS、負載平衡、錯誤頁、安全設定與排查方式。
+
+範例皆使用通用網域、loopback 或示意私有網段，不包含實際專案名稱、內網 IP、主機名稱或其他環境識別資訊。
 
 == Nginx 是什麼
 
-Nginx（通常讀作 Engine-X）是一套常用的 Web Server、反向代理伺服器與負載平衡器。
+Nginx 常被放在系統最前面，負責接收使用者請求，再決定要直接回傳靜態檔案，或把請求轉送到 Spring Boot、Tomcat、Node.js 等後端服務。
 
 常見用途：
 
 * 提供 HTML、CSS、JavaScript、圖片等靜態檔案。
-* 將請求轉送到 Tomcat、Spring Boot、Node.js 等後端服務。
-* 將流量分散到多台應用程式伺服器。
-* 統一處理 HTTPS、壓縮、快取、安全 Header 與 Log。
+* 作為 Reverse Proxy（反向代理）。
+* 集中管理 HTTPS 憑證。
+* 依網域或 URL 路徑分流。
+* 將流量分散到多台後端。
+* 統一處理 Header、壓縮、快取、錯誤頁與 Log。
 
-== 正向代理與反向代理
-
-=== 正向代理
-
-[source,text]
-----
-使用者 → 正向代理 → 外部網站
-----
-
-正向代理代表用戶端知道自己透過代理連線，常見於公司對外網路控管。
-
-=== 反向代理
-
-[source,text]
-----
-使用者 → Nginx → Spring Boot / Tomcat / Node.js
-----
-
-反向代理的優點：
-
-* 隱藏後端 IP 與 port。
-* 集中管理 HTTPS。
-* 依網域或路徑分流。
-* 統一加入 Header、壓縮、快取與存取控制。
-
-=== 反向代理請求怎麼走
-
-以最常見的 Spring Boot / Tomcat 架構來看，瀏覽器通常只會看到 Nginx，真正的應用程式服務放在後面：
+=== 反向代理請求流程
 
 [plantuml,nginx-reverse-proxy-flow,svg]
 ----
 @startuml
 left to right direction
 
-actor User as "瀏覽器"
+actor Browser as "瀏覽器"
 rectangle Nginx
 rectangle App as "Spring Boot / Tomcat\n127.0.0.1:8080"
 
-User -> Nginx : https://example.com/api/users
+Browser -> Nginx : https://example.com/api/users
 Nginx -> App : http://127.0.0.1:8080/api/users
-App --> Nginx : HTTP Response
-Nginx --> User : HTTP Response
+App --> Nginx : Response
+Nginx --> Browser : Response
 @enduml
 ----
 
-因此可以把 Nginx 想成「對外入口」。它先接住請求，再依 `server`、`location` 與 `proxy_pass` 決定要把請求交給誰。
+可以把 Nginx 想成系統的「入口櫃台」：使用者只知道 Nginx，不需要知道真正後端在哪裡。
 
-== Nginx 程序架構
+== 設定檔結構與 Request 判斷流程
 
-[cols="30%,70%", options="header"]
+典型設定由 `http`、`server`、`location` 等層級組成：
+
+[source,nginx]
+----
+http {
+    server {
+        listen 443 ssl;
+        server_name example.com;
+
+        location /api/ {
+            proxy_pass http://127.0.0.1:8080;
+        }
+    }
+}
+----
+
+[cols="25%,75%",options="header"]
 |===
-|程序 |用途
+|Context |用途
 
-|Master Process
-|讀取設定、管理 Worker、重新載入與處理啟停訊號。
+|Main
+|程序、Worker、PID、全域 Log。
 
-|Worker Process
-|實際接收連線並處理 HTTP 請求。
+|`events`
+|連線處理。
+
+|`http`
+|HTTP / HTTPS 共用設定、Log、gzip、upstream。
+
+|`server`
+|依監聽 port 與網域定義虛擬主機。
+
+|`location`
+|依 URL 路徑決定如何處理請求。
+
+|`upstream`
+|定義一組後端伺服器。
 |===
 
-== 安裝與管理
+=== Request 進來後怎麼判斷
 
-=== Ubuntu / Debian
+[source,text]
+----
+Request
+  ↓
+listen / server_name
+找到對應 server
+  ↓
+location
+找到最適合的路徑規則
+  ↓
+├─ root / alias      → 直接讀靜態檔案
+├─ proxy_pass        → 轉送後端
+└─ return / rewrite  → 直接回應或重新導向
+----
+
+排查時依這個順序往下看，通常比直接從整份 `nginx.conf` 找問題快很多。
+
+== 安裝與常用管理指令
+
+=== Linux
 
 [source,bash]
 ----
-sudo apt update
 sudo apt install nginx
 sudo systemctl enable --now nginx
 sudo systemctl status nginx
-----
 
-=== RHEL / AlmaLinux / Rocky Linux
+# 驗證設定
+sudo nginx -t
 
-[source,bash]
-----
-sudo dnf install nginx
-sudo systemctl enable --now nginx
-sudo systemctl status nginx
+# 顯示 include 展開後的完整設定
+sudo nginx -T
+
+# 套用設定
+sudo systemctl reload nginx
 ----
 
 === Windows
@@ -118,137 +141,12 @@ cd C:\nginx
 
 [NOTE]
 ====
-Windows 版適合測試或簡單部署；正式 Linux 環境通常由 systemd 管理。
+正式環境通常使用 Linux + systemd；Windows 版較適合測試、內部工具或既有 Windows 部署環境。
 ====
 
-== 常見目錄
+== 靜態網站、`root`、`alias` 與 SPA
 
-[cols="40%,60%", options="header"]
-|===
-|路徑 |用途
-
-|`/etc/nginx/nginx.conf`
-|主要設定檔。
-
-|`/etc/nginx/conf.d/*.conf`
-|額外站台或服務設定。
-
-|`/etc/nginx/sites-available/`
-|Debian / Ubuntu 常見站台設定存放位置。
-
-|`/etc/nginx/sites-enabled/`
-|已啟用站台的符號連結。
-
-|`/var/log/nginx/access.log`
-|存取紀錄。
-
-|`/var/log/nginx/error.log`
-|錯誤紀錄。
-|===
-
-== 設定檔基本結構
-
-[source,nginx]
-----
-user nginx;
-worker_processes auto;
-
-error_log /var/log/nginx/error.log;
-pid /run/nginx.pid;
-
-events {
-    worker_connections 1024;
-}
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-
-    server {
-        listen 80;
-        server_name example.com;
-
-        location / {
-            root /usr/share/nginx/html;
-            index index.html;
-        }
-    }
-}
-----
-
-[cols="25%,75%", options="header"]
-|===
-|Context |用途
-
-|Main
-|程序、使用者、Worker、PID 與全域 Log。
-
-|`events`
-|連線處理與 Worker 連線數。
-
-|`http`
-|HTTP、HTTPS、Log、壓縮、快取與虛擬主機共用設定。
-
-|`server`
-|定義虛擬主機、監聽 port 與網域。
-
-|`location`
-|依 URL 路徑決定靜態檔案、代理或限制方式。
-
-|`upstream`
-|定義後端伺服器群組。
-|===
-
-=== 一次看懂 Request 進入 Nginx 後會發生什麼
-
-[source,text]
-----
-Request
-  ↓
-listen / server_name 找到 server
-  ↓
-location 找到最適合的路徑規則
-  ↓
-├─ root / alias      → 直接讀靜態檔案
-├─ proxy_pass        → 轉送後端
-└─ return / rewrite  → 直接回應或重新導向
-----
-
-排查時可以依這個順序往下找，不需要一開始就把整份設定檔全部看完。
-
-== 修改設定的基本流程
-
-[source,bash]
-----
-nginx -t
-nginx -T
-systemctl reload nginx
-----
-
-* `nginx -t`：檢查設定語法。
-* `nginx -T`：顯示 include 展開後的完整設定。
-* reload 前應先確定 `nginx -t` 成功。
-
-== 提供靜態網站
-
-[source,nginx]
-----
-server {
-    listen 80;
-    server_name example.com;
-
-    root /var/www/example;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ =404;
-    }
-}
-----
-
-=== `root`、`alias` 與 `try_files`
-
-`root` 會把 URI 接在指定目錄後面：
+=== `root`
 
 [source,nginx]
 ----
@@ -257,61 +155,70 @@ location /files/ {
 }
 ----
 
-請求 `/files/a.pdf` 對應 `/data/files/a.pdf`。
+請求：
 
-`alias` 會以指定目錄取代 location 路徑：
+[source,text]
+----
+/files/manual.pdf
+----
+
+實際檔案：
+
+[source,text]
+----
+/data/files/manual.pdf
+----
+
+=== `alias`
 
 [source,nginx]
 ----
-location /files/ {
-    alias /data/downloads/;
+location /downloads/ {
+    alias /data/files/;
 }
 ----
 
-請求 `/files/a.pdf` 對應 `/data/downloads/a.pdf`。
+請求 `/downloads/manual.pdf` 會讀取 `/data/files/manual.pdf`。
 
-[WARNING]
-====
-`location` 與 `alias` 的尾端斜線應保持一致。
-====
+`root` 是「把 URI 接在 root 後面」，`alias` 則是「用指定目錄取代 location 前綴」。
 
-== SPA 前端網站
+=== SPA
 
-React、Vue、Angular 等 SPA 通常需要將不存在的前端路由回到 `index.html`：
+React、Vue、Angular 等 SPA 常見：
 
 [source,nginx]
 ----
 location / {
+    root /var/www/frontend;
     try_files $uri $uri/ /index.html;
 }
 ----
 
-若網站不是 SPA，不應一律回傳 `index.html`，否則真正不存在的檔案也可能回傳 200。
+如果不是 SPA，不建議所有 404 都回 `index.html`。
 
-== 反向代理
+== 反向代理基本設定
 
 [source,nginx]
 ----
-server {
-    listen 80;
-    server_name api.example.com;
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
 
-    location / {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
 }
 ----
 
-[cols="35%,65%", options="header"]
+[cols="35%,65%",options="header"]
 |===
-|Header |用途
+|設定 |用途
+
+|`proxy_pass`
+|指定後端服務。
 
 |`Host`
-|保留原始請求網域。
+|保留原始網域。
 
 |`X-Real-IP`
 |傳遞直接連到 Nginx 的來源 IP。
@@ -323,9 +230,48 @@ server {
 |告知後端原始請求是 HTTP 或 HTTPS。
 |===
 
-== `proxy_pass` 路徑規則
+== `location` 與 `proxy_pass` 路徑規則
 
-不包含結尾斜線：
+這是 Nginx 最容易混淆的地方之一。
+
+=== 先記一個核心規則
+
+[source,text]
+----
+Request: /api/users
+
+location /api/ {
+    proxy_pass http://backend;
+}
+        ↓
+Backend: /api/users
+
+--------------------------------
+
+location /api/ {
+    proxy_pass http://backend/;
+}
+        ↓
+Backend: /users
+
+--------------------------------
+
+location /api/ {
+    proxy_pass http://backend/internal/;
+}
+        ↓
+Backend: /internal/users
+----
+
+簡單記法：
+
+* `proxy_pass http://backend;`：沒有 URI 部分，通常保留完整原始 URI。
+* `proxy_pass http://backend/;`：以 `/` 取代匹配到的 `/api/`。
+* `proxy_pass http://backend/internal/;`：以 `/internal/` 取代 `/api/`。
+
+=== `location /api` 與 `/api/`
+
+`location /api` 可能連 `/apitest` 都一起匹配；如果代表一個 URL 目錄，通常建議：
 
 [source,nginx]
 ----
@@ -334,101 +280,185 @@ location /api/ {
 }
 ----
 
-`/api/users` 會轉送為 `/api/users`。
-
-包含結尾斜線：
+若需要把 `/api` 明確導到 `/api/`：
 
 [source,nginx]
 ----
-location /api/ {
-    proxy_pass http://127.0.0.1:8080/;
-}
-----
-
-`/api/users` 會轉送為 `/users`。
-
-== WebSocket
-
-[source,nginx]
-----
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    '' close;
-}
-
-location /socket/ {
-    proxy_pass http://127.0.0.1:8080;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $connection_upgrade;
-    proxy_set_header Host $host;
-}
-----
-
-== Timeout 與上傳限制
-
-[source,nginx]
-----
-location /api/ {
-    proxy_pass http://127.0.0.1:8080;
-    proxy_connect_timeout 10s;
-    proxy_send_timeout 60s;
-    proxy_read_timeout 60s;
-}
-
-client_max_body_size 100m;
-----
-
-若出現 `413 Request Entity Too Large`，需同時檢查 Nginx 與後端應用程式的上傳限制。
-
-== 負載平衡
-
-[source,nginx]
-----
-upstream backend_servers {
-    least_conn;
-    server 10.0.0.11:8080;
-    server 10.0.0.12:8080;
-    keepalive 32;
+location = /api {
+    return 301 /api/;
 }
 
 location /api/ {
-    proxy_pass http://backend_servers;
-    proxy_http_version 1.1;
-    proxy_set_header Connection "";
-    proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_pass http://127.0.0.1:8080;
 }
 ----
 
-`proxy_set_header Connection "";` 可避免舊版 Nginx 預設傳送 `Connection: close`，讓 upstream keepalive 能實際重用連線。
+== 對外路徑與後端 Context Path 不同
 
-=== 負載平衡實際流程
+有時候 Nginx 對外使用一個路徑，但後端應用程式仍維持另一個 Context Path。
 
-若後端有多台應用程式伺服器，使用者仍然只需要連到同一個 Nginx：
+例如：
 
-[plantuml,nginx-load-balancing-flow,svg]
+[source,text]
+----
+瀏覽器： /application-test/
+後端：   /application/
+----
+
+=== 只改 `proxy_pass` 為什麼可能不夠
+
+[source,nginx]
+----
+location /application-test/ {
+    proxy_pass http://127.0.0.1:8080/application/;
+}
+----
+
+Request 確實可以正確轉成：
+
+[source,text]
+----
+/application-test/user
+        ↓
+/application/user
+----
+
+但後端仍可能回：
+
+[source,http]
+----
+Set-Cookie: JSESSIONID=...; Path=/application
+Location: /application/login
+----
+
+瀏覽器只知道 `/application-test/`，因此 Cookie 或 Redirect 可能跑回錯的路徑。
+
+=== 完整改寫
+
+[source,nginx]
+----
+location /application-test/ {
+    # Request 路徑
+    proxy_pass http://127.0.0.1:8080/application/;
+
+    # Cookie Path
+    proxy_cookie_path /application /application-test;
+
+    # 相對 Redirect
+    proxy_redirect /application/ /application-test/;
+
+    # 完整 URL Redirect
+    proxy_redirect ~^https?://[^/]+/application/(.*)$ /application-test/$1;
+}
+----
+
+[plantuml,nginx-context-path-rewrite,svg]
 ----
 @startuml
 left to right direction
 
-actor User as "使用者"
+actor Browser
 rectangle Nginx
-rectangle A as "Backend A\n10.0.0.11:8080"
-rectangle B as "Backend B\n10.0.0.12:8080"
+rectangle App as "Application Server\nContext Path: /application/"
 
-User -> Nginx : Request
-Nginx --> A : Request 1
-Nginx --> B : Request 2
-A --> Nginx : Response
-B --> Nginx : Response
-Nginx --> User : Response
+Browser -> Nginx : GET /application-test/page
+Nginx -> App : GET /application/page
+App --> Nginx : Location: /application/login\nSet-Cookie: Path=/application
+Nginx --> Browser : Location: /application-test/login\nSet-Cookie: Path=/application-test
 @enduml
 ----
 
-`upstream` 負責定義後端群組；`proxy_pass http://backend_servers;` 則把請求交給這個群組。使用者不需要知道後面到底有幾台伺服器。
+=== 最簡單的方式
 
-== HTTPS
+如果後端 Context Path 可以調整，最好讓前後端一致：
+
+[source,text]
+----
+外部： /application-test/
+後端： /application-test/
+----
+
+如此通常不需要 `proxy_cookie_path` 與 `proxy_redirect`，設定較單純。
+
+== Template、Include 與設定檔拆分
+
+設定不要全部塞在一個檔案，但也不需要拆得過度零碎。常見做法是：
+
+[source,text]
+----
+/etc/nginx/
+├── nginx.conf
+├── conf.d/
+│   └── site.conf
+└── snippets/
+    └── proxy-common.conf
+----
+
+`nginx.conf` 負責全域與 include；`site.conf` 負責站台；`proxy-common.conf` 放多個 location 共用的 Proxy 設定。
+
+=== Include
+
+[source,nginx]
+----
+http {
+    include /etc/nginx/conf.d/*.conf;
+}
+----
+
+`include` 是 Nginx 啟動或 reload 時，把其他設定檔載入目前 context。
+
+=== Template
+
+Template 適合容器環境依環境變數產生正式 `.conf`：
+
+[source,nginx]
+----
+server {
+    listen 443 ssl;
+    server_name ${SERVER_NAME};
+
+    location /api/ {
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT};
+    }
+}
+----
+
+官方 Nginx Container 常見：
+
+[source,text]
+----
+/etc/nginx/templates/site.conf.template
+        ↓ entrypoint / envsubst
+/etc/nginx/conf.d/site.conf
+        ↓ include
+Nginx
+----
+
+[plantuml,nginx-template-flow,svg]
+----
+@startuml
+left to right direction
+
+rectangle Env as "Environment Variables"
+rectangle Template as "site.conf.template"
+rectangle Entry as "Entrypoint / envsubst"
+rectangle Conf as "site.conf"
+rectangle Nginx
+
+Env --> Entry
+Template --> Entry
+Entry --> Conf : 產生
+Conf --> Nginx : include / 載入
+@enduml
+----
+
+重點：
+
+* Template：先「產生」設定檔。
+* Include：Nginx 再「載入」設定檔。
+* `.template` 通常不是 Nginx 最終直接解析的檔案。
+
+== HTTPS 與 TLS Termination
 
 [source,nginx]
 ----
@@ -448,14 +478,6 @@ server {
 }
 ----
 
-`ssl_certificate` 通常應指定包含站台憑證與中繼憑證的完整憑證鏈。
-
-更多憑證內容可參考 xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]。
-
-=== HTTPS 常見架構：TLS 在 Nginx 終止
-
-常見做法是由 Nginx 對外處理 HTTPS，後端應用程式只專心處理 HTTP Request：
-
 [plantuml,nginx-tls-termination-flow,svg]
 ----
 @startuml
@@ -472,14 +494,101 @@ Nginx --> User : HTTPS Response
 @enduml
 ----
 
-這種方式稱為 TLS Termination。憑證集中放在 Nginx，後端則透過 `X-Forwarded-Proto` 等 Header 得知原始請求是否為 HTTPS。
+由 Nginx 統一處理 TLS 的作法稱為 TLS Termination。後端通常靠 `X-Forwarded-Proto` 得知原始連線是否為 HTTPS。
 
 [NOTE]
 ====
-Nginx 到後端是否可使用 HTTP，要依實際網路邊界與資安要求決定；跨主機、跨網段或零信任環境仍可能需要內部 HTTPS。
+Nginx 到後端是否能使用 HTTP，要依網路邊界與資安要求決定；跨主機、跨網段或零信任環境可能仍需內部 HTTPS。
 ====
 
-== 安全 Header
+== 負載平衡
+
+[source,nginx]
+----
+upstream backend_servers {
+    least_conn;
+    server 10.0.0.11:8080;
+    server 10.0.0.12:8080;
+    keepalive 32;
+}
+
+location /api/ {
+    proxy_pass http://backend_servers;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+}
+----
+
+[plantuml,nginx-load-balancing-flow,svg]
+----
+@startuml
+left to right direction
+
+actor User
+rectangle Nginx
+rectangle A as "Backend A\n10.0.0.11:8080"
+rectangle B as "Backend B\n10.0.0.12:8080"
+
+User -> Nginx : Request
+Nginx --> A : Request 1
+Nginx --> B : Request 2
+A --> Nginx : Response
+B --> Nginx : Response
+Nginx --> User : Response
+@enduml
+----
+
+`upstream` 定義後端群組，`proxy_pass http://backend_servers;` 則把請求交給這組服務。
+
+== WebSocket、SSE、Timeout 與上傳限制
+
+=== WebSocket
+
+[source,nginx]
+----
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
+location /socket/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+}
+----
+
+=== SSE / 串流
+
+[source,nginx]
+----
+location /events/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_buffering off;
+    proxy_cache off;
+}
+----
+
+=== Timeout 與上傳
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 60s;
+    proxy_read_timeout 60s;
+}
+
+client_max_body_size 100m;
+----
+
+`413 Request Entity Too Large` 時需同時檢查 Nginx 與後端應用程式的上傳限制。
+
+== 安全 Header、CORS 與存取控制
+
+=== 常見安全 Header
 
 [source,nginx]
 ----
@@ -489,7 +598,7 @@ add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
 ----
 
-HSTS：
+若要啟用 HSTS：
 
 [source,nginx]
 ----
@@ -501,73 +610,19 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" alway
 啟用 `includeSubDomains` 前，必須確認所有子網域皆支援 HTTPS。
 ====
 
-== CORS
+=== CORS
 
 CORS 建議由單一層負責，避免後端與 Nginx 重複加入 Header。
 
 [source,nginx]
 ----
 location /api/ {
-    if ($request_method = OPTIONS) {
-        add_header Access-Control-Allow-Origin "https://frontend.example.com" always;
-        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
-        add_header Access-Control-Max-Age 86400 always;
-        return 204;
-    }
-
     add_header Access-Control-Allow-Origin "https://frontend.example.com" always;
-
-    # location 內出現 add_header 時，舊版 Nginx 不會繼承父層 add_header。
-    # 因此需重複必要安全 Header，或在支援版本評估 add_header_inherit merge。
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-
-    proxy_pass http://127.0.0.1:8080/;
-}
-----
-
-使用 Cookie 或認證資訊時，`Access-Control-Allow-Origin` 不可設為 `*`。
-
-== Gzip 與快取
-
-[source,nginx]
-----
-gzip on;
-gzip_vary on;
-gzip_min_length 1024;
-gzip_comp_level 5;
-gzip_types text/plain text/css application/json application/javascript application/xml image/svg+xml;
-
-location ~* \.(?:css|js|png|jpg|jpeg|gif|svg|woff2?)$ {
-    expires 7d;
-    add_header Cache-Control "public";
-}
-----
-
-不建議壓縮 JPEG、PNG、ZIP 等已高度壓縮格式。
-
-== Proxy Buffering
-
-[source,nginx]
-----
-proxy_buffering on;
-proxy_buffer_size 16k;
-proxy_buffers 8 16k;
-----
-
-SSE、串流或需要即時輸出的服務，可考慮：
-
-[source,nginx]
-----
-location /events/ {
     proxy_pass http://127.0.0.1:8080;
-    proxy_buffering off;
-    proxy_cache off;
 }
 ----
 
-== 存取控制
+若使用 Cookie 或認證資訊，`Access-Control-Allow-Origin` 不可設為 `*`。
 
 === IP 白名單
 
@@ -575,18 +630,11 @@ location /events/ {
 ----
 location /admin/ {
     allow 192.168.1.0/24;
-    allow 10.0.0.10;
     deny all;
 }
 ----
 
 === Basic Authentication
-
-[source,bash]
-----
-sudo apt install apache2-utils
-sudo htpasswd -c /etc/nginx/.htpasswd admin
-----
 
 [source,nginx]
 ----
@@ -598,7 +646,60 @@ location /private/ {
 
 Basic Auth 應搭配 HTTPS。
 
-== Log
+== 自訂錯誤頁與 `proxy_intercept_errors`
+
+最常見的做法是由 Nginx 統一顯示 404、502、503、504 等錯誤頁。
+
+[source,nginx]
+----
+error_page 404 /404.html;
+error_page 502 503 504 /500.html;
+
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_intercept_errors on;
+}
+
+location = /404.html {
+    root /usr/share/nginx/html;
+    internal;
+}
+
+location = /500.html {
+    root /usr/share/nginx/html;
+    internal;
+}
+----
+
+`error_page` 定義「哪些狀態要怎麼處理」，`proxy_intercept_errors on` 則決定是否攔截 upstream 的錯誤回應套用這些規則。
+
+[plantuml,nginx-error-flow,svg]
+----
+@startuml
+top to bottom direction
+
+start
+:Nginx 將 Request 送到 upstream;
+:upstream 回傳 HTTP status;
+if (符合 error_page?) then (是)
+  if (proxy_intercept_errors on?) then (是)
+    :使用 Nginx 自訂錯誤頁;
+  else (否)
+    :保留 upstream 原始內容;
+  endif
+else (否)
+  :保留 upstream 原始內容;
+endif
+:回傳瀏覽器;
+stop
+@enduml
+----
+
+公開錯誤頁不要顯示 Stack Trace、SQL、內部 IP、Framework 版本、實體路徑或內部專案名稱。
+
+== Log 與問題排查
+
+=== 建議 Log 格式
 
 [source,nginx]
 ----
@@ -613,82 +714,95 @@ error_log /var/log/nginx/error.log warn;
 
 重要欄位：
 
-* `$status`：HTTP 回應狀態碼。
+* `$status`：HTTP 狀態碼。
 * `$request_time`：Nginx 處理整個請求的時間。
-* `$upstream_response_time`：後端回應時間。
+* `$upstream_response_time`：等待後端回應的時間。
 
-== 常見狀態碼排查
+=== 常見狀態碼
 
-[cols="20%,35%,45%", options="header"]
+[cols="18%,32%,50%",options="header"]
 |===
 |狀態碼 |常見原因 |排查方向
 
 |403
-|檔案權限、SELinux、deny 規則
-|檢查執行帳號、權限與 SELinux Label。
+|權限、deny、SELinux
+|檢查檔案權限與存取規則。
 
 |404
-|`root`、`alias`、`location` 或 URI 錯誤
-|確認實體路徑與 `try_files`。
+|location、root、alias、URI 錯誤
+|確認 Request 路徑與實體路徑。
 
 |413
 |Request Body 過大
-|調整 `client_max_body_size` 與後端限制。
+|檢查 `client_max_body_size` 與後端限制。
 
 |499
 |用戶端提前中斷
 |檢查前端 timeout、網路與後端處理時間。
 
 |502
-|無法連到後端
-|檢查程序、IP、port、DNS、防火牆與 SELinux。
+|無法連後端或 upstream 異常
+|檢查程序、IP、port、防火牆與 Log。
 
 |504
-|等待後端逾時
+|後端回應逾時
 |檢查後端效能與 `proxy_read_timeout`。
 |===
 
-== Docker Compose
+=== 用 `curl` 驗證
 
-[source,yaml]
+[source,bash]
 ----
-services:
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
-    depends_on:
-      - app
+# 看 Header 與 Redirect
+curl -I https://example.com/application-test/
 
-  app:
-    image: my-app:latest
-    expose:
-      - "8080"
+# 看完整 Response
+curl -i https://example.com/api/users
+
+# 確認重新導向
+curl -IL https://example.com/application-test/
 ----
 
-同一個 Compose network 內可使用 service 名稱 `app` 連線，不應把另一個容器寫成 `127.0.0.1`。
+若是 Context Path、Cookie 或 Redirect 問題，應同時檢查：
+
+* Request URL。
+* Response `Location`。
+* Response `Set-Cookie` 的 `Path`。
+* 後端實際收到的 URI。
+
+== 公開 Repository 的安全檢查
+
+公開 Nginx 文件或設定範例應移除：
+
+* 真實公網或私網 IP。
+* 實際網域與內部 DNS。
+* 專案代碼與系統名稱。
+* Container / VM / Pod 真實名稱。
+* Cookie 真實名稱。
+* 憑證組織資訊。
+* 帳號、密碼、Token、Basic Auth 內容。
+* Log 中的使用者識別資料。
+
+推薦以 `example.com`、`127.0.0.1`、`10.0.0.x`、`application`、`backend-a` 等通用名稱取代。
 
 == 正式環境檢查清單
 
 * `nginx -t` 驗證成功。
-* DNS 與防火牆設定正確。
-* 憑證、私鑰與完整憑證鏈正確。
-* 後端只開放必要網路範圍。
-* Proxy Header 正確傳遞。
-* 上傳大小與 timeout 符合需求。
+* `nginx -T` 確認 include 展開結果。
+* DNS、防火牆、後端 port 正確。
+* HTTPS 憑證與完整憑證鏈正確。
+* Proxy Header 正確。
+* Context Path、Cookie Path、Redirect 已實際測試。
+* Timeout 與上傳限制符合需求。
 * Log 有輪替與容量管理。
-* HSTS、CSP、CORS 經過測試。
-* 有備份與 rollback 方法。
+* CORS、HSTS、安全 Header 經過測試。
+* 錯誤頁不洩漏內部資訊。
+* 設定有備份與 rollback 方法。
 
 == 延伸閱讀
 
 * xref:network/nginx-directive-reference.adoc[Nginx 常用設定指令參考]
-* xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 的基礎觀念與實務差異]
-* xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]
-* xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header 說明]
-* xref:container/docker-compose-notes.adoc[Docker Compose 整理]
-* xref:k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除筆記]
+* xref:network/tls-tcp-smb-cifs-nfs.adoc[TLS、TCP、SMB/CIFS、NFS 基礎與差異]
+* xref:security/digital-certificates-guide.adoc[數位憑證與 Web Server 部署]
+* xref:security/web-security-headers.adoc[Web 安全 Header 說明]
+* xref:k8s/ingress-nginx-troubleshooting.adoc[Kubernetes Ingress-nginx 導入與問題排除]
