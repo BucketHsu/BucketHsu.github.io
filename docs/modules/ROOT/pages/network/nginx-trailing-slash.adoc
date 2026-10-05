@@ -315,6 +315,124 @@ location /public-api/ {
 /public-api/users → /internal-api/users
 ----
 
+== 對外路徑與後端 Context Path 不同
+
+有時候同一套應用程式會因為環境或入口不同，對外網址與後端實際 Context Path 不一致。
+
+例如：
+
+[source,text]
+----
+瀏覽器看到： /application-test/
+後端實際是： /application/
+----
+
+這時 `proxy_pass` 可以處理「送進後端的請求路徑」，但後端回傳的 Cookie Path 與 Redirect 不一定會自動跟著改。
+
+=== 為什麼只改 `proxy_pass` 可能還是不夠
+
+[source,nginx]
+----
+location /application-test/ {
+    proxy_pass http://127.0.0.1:8080/application/;
+}
+----
+
+請求路徑可以正常轉換：
+
+[source,text]
+----
+/application-test/user
+        ↓
+/application/user
+----
+
+但後端可能回傳：
+
+[source,http]
+----
+Set-Cookie: JSESSIONID=...; Path=/application
+Location: /application/login
+----
+
+瀏覽器並不知道 `/application/` 是 Nginx 後面的內部路徑，因此可能發生：
+
+* Cookie 沒有送回 `/application-test/`，造成登入狀態遺失。
+* Redirect 跳到 `/application/login`，跑離原本對外的 `/application-test/`。
+* 看起來首頁正常，但登入、登出或特定導頁才出問題。
+
+簡單理解：
+
+[source,text]
+----
+proxy_pass        → 改「送進去」的 Request 路徑
+proxy_cookie_path → 改「回來」的 Cookie Path
+proxy_redirect    → 改「回來」的 Redirect Location
+----
+
+=== 完整範例
+
+[source,nginx]
+----
+location /application-test/ {
+    # 對外 /application-test/，後端實際使用 /application/
+    proxy_pass http://127.0.0.1:8080/application/;
+
+    # 後端若回傳 Cookie Path=/application，
+    # 對外改成 Path=/application-test
+    proxy_cookie_path /application /application-test;
+
+    # 後端回傳相對 Redirect 時進行改寫
+    proxy_redirect /application/ /application-test/;
+
+    # 後端若回傳完整 URL，也一併改寫
+    proxy_redirect ~^https?://[^/]+/application/(.*)$ /application-test/$1;
+}
+----
+
+[plantuml,nginx-context-path-rewrite,svg]
+----
+@startuml
+left to right direction
+
+actor Browser
+rectangle Nginx
+rectangle "Application Server\nContext Path: /application/" as App
+
+Browser -> Nginx : GET /application-test/page
+Nginx -> App : GET /application/page
+
+App --> Nginx : Location: /application/login\nSet-Cookie: Path=/application
+Nginx --> Browser : Location: /application-test/login\nSet-Cookie: Path=/application-test
+@enduml
+----
+
+=== 最簡單的方式：前後端路徑一致
+
+如果後端 Context Path 可以調整，最單純的作法仍然是讓外部與後端使用相同路徑：
+
+[source,text]
+----
+外部： /application-test/
+後端： /application-test/
+----
+
+如此通常只需要：
+
+[source,nginx]
+----
+location /application-test/ {
+    proxy_pass http://127.0.0.1:8080;
+}
+----
+
+不需要另外處理 Cookie Path 與 Redirect，設定比較少，也比較不容易漏掉特殊情況。
+
+[NOTE]
+====
+若無法修改後端 Context Path，再使用 `proxy_cookie_path` 與 `proxy_redirect` 做回應改寫。修改後應實際測試登入、登出、Session Cookie 與重新導向，不要只測首頁能不能開。
+====
+
 == `root` 尾端斜線
 
 `root` 通常不需要依靠尾端 `/` 決定 URI 替換，因為 Nginx 會將完整 URI 接到 root 後方。
