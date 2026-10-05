@@ -445,7 +445,16 @@ server:
 
 === Nginx 部署
 
-Nginx 的 `ssl_certificate` 與 `ssl_certificate_key` 主要使用 PEM 格式。私鑰可以是未加密或加密 PEM；若 Private Key 有 passphrase，可搭配 `ssl_password_file`。`.p12` / `.pfx` 通常要先用 OpenSSL 拆成憑證鏈與私鑰後再給 Nginx 使用。
+Nginx 的 `ssl_certificate` 與 `ssl_certificate_key` 主要使用 PEM 格式。私鑰可以是未加密或加密 PEM；若 Private Key 有 passphrase，可搭配 `ssl_password_file`。
+
+[WARNING]
+====
+Nginx **不能像 Tomcat / Spring Boot 一樣，直接指定 `.p12 / .pfx` 再於設定檔填入 PKCS#12 密碼**。
+
+`ssl_password_file` 只負責提供「加密 PEM Private Key」的 passphrase，**不是** `.p12 / .pfx` 的匯入密碼。
+
+因此 `.p12 / .pfx` 通常要先用 OpenSSL 拆成憑證鏈與 Private Key，再交給 Nginx 使用。
+====
 
 ==== 1) 憑證鏈準備
 在部署前，必須將**伺服器憑證檔**與**中繼憑證檔**合併為同一個檔案（伺服器憑證內容在前，中繼憑證在後）：
