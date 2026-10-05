@@ -452,6 +452,33 @@ server {
 
 更多憑證內容可參考 xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]。
 
+=== HTTPS 常見架構：TLS 在 Nginx 終止
+
+常見做法是由 Nginx 對外處理 HTTPS，後端應用程式只專心處理 HTTP Request：
+
+[plantuml,nginx-tls-termination-flow,svg]
+----
+@startuml
+left to right direction
+
+actor User as "瀏覽器"
+rectangle Nginx as "Nginx\nTLS / Certificate"
+rectangle App as "Application\nSpring Boot / Tomcat"
+
+User -> Nginx : HTTPS :443
+Nginx -> App : HTTP :8080\n或內部 HTTPS
+App --> Nginx : Response
+Nginx --> User : HTTPS Response
+@enduml
+----
+
+這種方式稱為 TLS Termination。憑證集中放在 Nginx，後端則透過 `X-Forwarded-Proto` 等 Header 得知原始請求是否為 HTTPS。
+
+[NOTE]
+====
+Nginx 到後端是否可使用 HTTP，要依實際網路邊界與資安要求決定；跨主機、跨網段或零信任環境仍可能需要內部 HTTPS。
+====
+
 == 安全 Header
 
 [source,nginx]
