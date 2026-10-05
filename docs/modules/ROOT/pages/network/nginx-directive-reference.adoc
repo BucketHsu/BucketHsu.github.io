@@ -462,6 +462,59 @@ real_ip_recursive on;
 |必須先正確設定可信任 Proxy 範圍。
 |===
 
+== 常用指令組合範例
+
+單獨查指令時可看前面的表格；實際設定時，通常會把多個指令組合在同一個 `location`。
+
+=== 一般 REST API 反向代理
+
+[source,nginx]
+----
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    proxy_connect_timeout 10s;
+    proxy_read_timeout 60s;
+}
+----
+
+可以依功能分成三組理解：
+
+* `proxy_pass`：決定送到哪個後端。
+* `proxy_set_header`：把原始請求資訊交給後端。
+* `proxy_*_timeout`：控制等待後端的時間。
+
+=== 對外路徑與後端路徑不同
+
+[source,nginx]
+----
+location /public-app/ {
+    proxy_pass http://127.0.0.1:8080/internal-app/;
+
+    proxy_cookie_path /internal-app /public-app;
+    proxy_redirect /internal-app/ /public-app/;
+}
+----
+
+這種情況要同時考慮 Request、Cookie 與 Redirect，不是只改 `proxy_pass` 就一定完整。
+
+=== 靜態檔案
+
+[source,nginx]
+----
+location /downloads/ {
+    alias /data/files/;
+    autoindex off;
+}
+----
+
+請求 `/downloads/manual.pdf` 時，實際讀取 `/data/files/manual.pdf`。
+
 == 常見錯誤訊息
 
 [cols="40%,60%", options="header"]
