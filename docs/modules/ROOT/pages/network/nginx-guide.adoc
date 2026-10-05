@@ -713,16 +713,52 @@ server.p12
 └── Intermediate Certificate(s)
 ----
 
-這種格式很適合 Tomcat、Spring Boot 或 IIS，但一般 Nginx 不會直接這樣設定：
+這種格式很適合 Tomcat、Spring Boot 或 IIS，但一般 Nginx **不能像 Tomcat / Spring Boot 一樣，直接指定 +.p12 / .pfx+ 再在設定檔填一組文字密碼**。
+
+[WARNING]
+====
+這裡最容易混淆：
+
+* Nginx 沒有一般用途的 +ssl_certificate_password 123456;+ 這類指令。
+* +ssl_password_file+ **不是拿來解鎖 +.p12 / .pfx+ 的密碼**。
+* +ssl_password_file+ 是提供「已經拆成 PEM 後，加密 Private Key 的 passphrase」。
+* 所以 +.p12 / .pfx+ 通常要先用 OpenSSL 拆成 PEM Certificate / Chain / Private Key，再交給 Nginx。
+
+也就是：
+
+[source,text]
+----
+Tomcat / Spring Boot
+.p12 / .pfx + password
+        ↓
+   可直接載入
+
+Nginx
+.p12 / .pfx + password
+        ↓ OpenSSL
+fullchain.pem + private.key
+        ↓
+      Nginx
+
+只有 private.key 本身有密碼時
+        ↓
+ssl_password_file
+----
+====
+
+下面這種寫法不是一般 Nginx 的 PKCS#12 使用方式：
 
 [source,nginx]
 ----
-# 不建議這樣理解
+# 錯誤觀念：把 .p12 同時當成憑證與私鑰
 ssl_certificate     /etc/nginx/ssl/server.p12;
 ssl_certificate_key /etc/nginx/ssl/server.p12;
+
+# Nginx 也沒有這種標準指令
+# ssl_certificate_password 123456;
 ----
 
-通常先使用 OpenSSL 拆成 PEM。
+正確做法通常是先使用 OpenSSL 拆成 PEM。
 
 ==== 取出伺服器憑證
 
