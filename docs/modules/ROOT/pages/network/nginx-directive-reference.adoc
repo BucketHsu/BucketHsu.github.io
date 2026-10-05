@@ -338,8 +338,8 @@
 
 |`ssl_password_file /run/secrets/nginx_ssl_password;`
 |`http`、`server`
-|提供加密私鑰的 passphrase。
-|密碼檔屬敏感資料，不可提交 Git；Container 可用 Secret 掛載。
+|提供「加密 PEM Private Key」的 passphrase。
+|**不是 PKCS#12（+.p12 / .pfx+）的匯入密碼設定**；密碼檔屬敏感資料，不可提交 Git，Container 可用 Secret 掛載。
 
 |`ssl_protocols TLSv1.2 TLSv1.3;`
 |`http`、`server`
