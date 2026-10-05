@@ -225,6 +225,37 @@ location /api/ {
 
 已匹配的 `/api/` 被替換成 `/backend/`。
 
+=== 一張圖快速記住 `proxy_pass`
+
+[source,text]
+----
+Request: /api/users
+
+location /api/ {
+    proxy_pass http://backend;
+}
+        ↓
+Backend: /api/users
+
+--------------------------------
+
+location /api/ {
+    proxy_pass http://backend/;
+}
+        ↓
+Backend: /users
+
+--------------------------------
+
+location /api/ {
+    proxy_pass http://backend/internal/;
+}
+        ↓
+Backend: /internal/users
+----
+
+記法只有一個重點：`proxy_pass` 後面如果帶 URI，就會拿那個 URI 去取代匹配到的 `location` 前綴。
+
 == 四種常見組合
 
 [cols="25%,30%,45%", options="header"]
