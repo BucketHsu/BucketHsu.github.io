@@ -11,7 +11,7 @@
 :last-update-label!:
 :nofooter:
 
-本頁整理 Nginx 常用設定指令的作用範圍、用途與注意事項，適合搭配 xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南] 查閱。
+本頁整理 Nginx 常用設定指令的作用範圍、用途與注意事項，適合搭配 xref:network/nginx-guide.adoc[Nginx 實務指南] 查閱。
 
 == Context 說明
 
