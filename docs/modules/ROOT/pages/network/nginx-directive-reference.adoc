@@ -328,13 +328,18 @@
 
 |`ssl_certificate /path/fullchain.pem;`
 |`http`、`server`
-|指定站台憑證與中繼憑證鏈。
-|通常使用完整鏈檔案。
+|指定 PEM 格式的站台憑證與中繼憑證鏈。
+|主憑證放前面，中繼憑證依序接在後面。
 
 |`ssl_certificate_key /path/private.key;`
 |`http`、`server`
-|指定私鑰。
-|需限制檔案權限。
+|指定 PEM 格式私鑰。
+|可使用未加密或加密私鑰；需限制檔案權限。
+
+|`ssl_password_file /run/secrets/nginx_ssl_password;`
+|`http`、`server`
+|提供加密私鑰的 passphrase。
+|密碼檔屬敏感資料，不可提交 Git；Container 可用 Secret 掛載。
 
 |`ssl_protocols TLSv1.2 TLSv1.3;`
 |`http`、`server`

@@ -445,7 +445,7 @@ server:
 
 === Nginx 部署
 
-Nginx 使用 PEM 格式之憑證檔案（`.crt` 或 `.pem`）與未加密私鑰（`.key`）。
+Nginx 的 `ssl_certificate` 與 `ssl_certificate_key` 主要使用 PEM 格式。私鑰可以是未加密或加密 PEM；若 Private Key 有 passphrase，可搭配 `ssl_password_file`。`.p12` / `.pfx` 通常要先用 OpenSSL 拆成憑證鏈與私鑰後再給 Nginx 使用。
 
 ==== 1) 憑證鏈準備
 在部署前，必須將**伺服器憑證檔**與**中繼憑證檔**合併為同一個檔案（伺服器憑證內容在前，中繼憑證在後）：
@@ -480,6 +480,11 @@ server {
     }
 }
 ----
+
+[TIP]
+====
+Nginx 的 +.crt / .key / .p12 / .pfx+、Private Key 密碼、PKCS#12 拆檔與驗證方式，已集中整理在 xref:network/nginx-guide.adoc[Nginx 實務指南] 的 HTTPS / TLS 章節。
+====
 
 === IIS 部署
 
