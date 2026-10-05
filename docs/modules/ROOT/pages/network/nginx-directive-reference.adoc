@@ -242,6 +242,16 @@
 |將請求轉送至後端或 upstream。
 |結尾 `/` 會影響 URI 替換方式。
 
+|`proxy_redirect /internal/ /public/;`
+|`http`、`server`、`location`
+|改寫後端回傳的 `Location` 或 `Refresh` Redirect。
+|對外路徑與後端 Context Path 不同時常用。
+
+|`proxy_cookie_path /internal /public;`
+|`http`、`server`、`location`
+|改寫後端 `Set-Cookie` 中的 `Path`。
+|避免 Cookie 仍綁在只有後端才知道的內部路徑。
+
 |`proxy_http_version 1.1;`
 |`http`、`server`、`location`
 |指定與後端通訊的 HTTP 版本。
