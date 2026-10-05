@@ -391,7 +391,7 @@ server {
 
 `location /owasp/` 與 `alias /opt/nvd-mirror/cache/` 的尾端斜線應保持一致。
 
-更多斜線規則可參考 xref:network/nginx-trailing-slash.adoc[Nginx 路徑尾端斜線規則]。
+更多 Nginx 路徑與 `proxy_pass` 規則可參考 xref:network/nginx-guide.adoc[Nginx 實務指南]。
 
 === 驗證 Nginx
 
@@ -1204,4 +1204,4 @@ Mirror 維運：
 * link:https://nvd.nist.gov/developers/start-here[NVD Developers ^]
 * link:https://www.first.org/cvss/v4.0/specification-document[CVSS v4.0 Specification ^]
 * xref:network/nginx-guide.adoc[Nginx 基礎觀念與設定指南]
-* xref:network/nginx-config-organization.adoc[Nginx 設定檔分層、Template 與 Include]
+* xref:network/nginx-guide.adoc[Nginx 實務指南]
