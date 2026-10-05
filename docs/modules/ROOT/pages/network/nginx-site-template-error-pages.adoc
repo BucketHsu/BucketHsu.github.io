@@ -32,6 +32,28 @@
 
 真正由 Nginx 解析的是產生後的 `site.conf`，不是原始 `.template`。
 
+=== 容器啟動時實際發生什麼
+
+[plantuml,nginx-container-template-flow,svg]
+----
+@startuml
+left to right direction
+
+rectangle Env as "Environment Variables\nSERVER_NAME / BACKEND_HOST"
+rectangle Template as "site.conf.template"
+rectangle Entry as "Container Entrypoint\nenvsubst"
+rectangle Conf as "/etc/nginx/conf.d/site.conf"
+rectangle Nginx
+
+Env --> Entry
+Template --> Entry
+Entry --> Conf : 產生
+Conf --> Nginx : 載入
+@enduml
+----
+
+換句話說，環境變數不是 Nginx 自己去讀取並替換，而是容器啟動流程先把 `.template` 轉成真正的 `.conf`。
+
 === 一般 `.conf` 與 `.template` 的差異
 
 [cols="28%,36%,36%", options="header"]
@@ -541,6 +563,32 @@ error_page 502 503 504 /500.html;
 error_page 502 503 504 /500.html;
 proxy_intercept_errors on;
 ----
+
+=== 錯誤頁攔截流程圖
+
+[plantuml,nginx-error-intercept-flow,svg]
+----
+@startuml
+top to bottom direction
+
+start
+:Nginx 將 Request 送到 upstream;
+:upstream 回傳 HTTP status;
+if (是否符合 error_page?) then (是)
+  if (proxy_intercept_errors on?) then (是)
+    :改用 Nginx 自訂錯誤頁;
+  else (否)
+    :保留 upstream 原始內容;
+  endif
+else (否)
+  :保留 upstream 原始內容;
+endif
+:回傳給瀏覽器;
+stop
+@enduml
+----
+
+最容易搞混的是：`error_page` 定義「哪些狀態要怎麼處理」，而 `proxy_intercept_errors on` 決定 Nginx 是否要攔截 upstream 的錯誤回應來套用這些規則。
 
 == 為錯誤頁設定獨立 `location`
 
