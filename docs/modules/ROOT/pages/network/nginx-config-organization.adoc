@@ -322,6 +322,31 @@ include /etc/nginx/conf.d/*.conf;
 
 再讀取已產生的 `80.conf` 與 `443.conf`。
 
+=== 用圖看 Template 與 Include
+
+[plantuml,nginx-template-include-flow,svg]
+----
+@startuml
+top to bottom direction
+
+rectangle Template as "site.conf.template\n含環境變數"
+rectangle Generated as "site.conf\n正式設定檔"
+rectangle Main as "nginx.conf"
+rectangle Runtime as "Nginx Runtime"
+
+Template --> Generated : envsubst / entrypoint
+Main --> Generated : include
+Generated --> Runtime : server / location
+@enduml
+----
+
+可以把兩個機制分開記：
+
+* Template：先「產生」設定檔。
+* Include：Nginx 再「載入」已存在的設定檔。
+
+因此 `.template` 通常不是 Nginx 直接解析的最終檔案。
+
 == 可以直接指定 include 檔案
 
 除了萬用字元，也可以明確指定：
@@ -400,6 +425,56 @@ location /api/ {
 ----
 
 這種檔案比較像可重複使用的設定片段，不一定需要 `.template`；只有需要環境變數替換時，才需要使用 template。
+
+=== 一個最小可用的拆分範例
+
+假設只有一個網站與一個後端，可以先從最簡單的三個檔案開始：
+
+[source,text]
+----
+/etc/nginx/
+├── nginx.conf
+├── conf.d/
+│   └── site.conf
+└── snippets/
+    └── proxy-common.conf
+----
+
+`nginx.conf`：
+
+[source,nginx]
+----
+http {
+    include /etc/nginx/conf.d/*.conf;
+}
+----
+
+`site.conf`：
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name example.com;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        include /etc/nginx/snippets/proxy-common.conf;
+    }
+}
+----
+
+`proxy-common.conf`：
+
+[source,nginx]
+----
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+----
+
+先把「站台規則」與「共用 Proxy 規則」拆開，之後服務增加時再擴充，不需要一開始就拆得過度複雜。
 
 == 建議分工
 

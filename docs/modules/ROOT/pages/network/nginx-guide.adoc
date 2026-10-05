@@ -49,6 +49,28 @@ Nginx（通常讀作 Engine-X）是一套常用的 Web Server、反向代理伺�
 * 依網域或路徑分流。
 * 統一加入 Header、壓縮、快取與存取控制。
 
+=== 反向代理請求怎麼走
+
+以最常見的 Spring Boot / Tomcat 架構來看，瀏覽器通常只會看到 Nginx，真正的應用程式服務放在後面：
+
+[plantuml,nginx-reverse-proxy-flow,svg]
+----
+@startuml
+left to right direction
+
+actor User as "瀏覽器"
+rectangle Nginx
+rectangle App as "Spring Boot / Tomcat\n127.0.0.1:8080"
+
+User -> Nginx : https://example.com/api/users
+Nginx -> App : http://127.0.0.1:8080/api/users
+App --> Nginx : HTTP Response
+Nginx --> User : HTTP Response
+@enduml
+----
+
+因此可以把 Nginx 想成「對外入口」。它先接住請求，再依 `server`、`location` 與 `proxy_pass` 決定要把請求交給誰。
+
 == Nginx 程序架構
 
 [cols="30%,70%", options="header"]
@@ -176,6 +198,23 @@ http {
 |`upstream`
 |定義後端伺服器群組。
 |===
+
+=== 一次看懂 Request 進入 Nginx 後會發生什麼
+
+[source,text]
+----
+Request
+  ↓
+listen / server_name 找到 server
+  ↓
+location 找到最適合的路徑規則
+  ↓
+├─ root / alias      → 直接讀靜態檔案
+├─ proxy_pass        → 轉送後端
+└─ return / rewrite  → 直接回應或重新導向
+----
+
+排查時可以依這個順序往下找，不需要一開始就把整份設定檔全部看完。
 
 == 修改設定的基本流程
 
@@ -364,6 +403,31 @@ location /api/ {
 
 `proxy_set_header Connection "";` 可避免舊版 Nginx 預設傳送 `Connection: close`，讓 upstream keepalive 能實際重用連線。
 
+=== 負載平衡實際流程
+
+若後端有多台應用程式伺服器，使用者仍然只需要連到同一個 Nginx：
+
+[plantuml,nginx-load-balancing-flow,svg]
+----
+@startuml
+left to right direction
+
+actor User as "使用者"
+rectangle Nginx
+rectangle A as "Backend A\n10.0.0.11:8080"
+rectangle B as "Backend B\n10.0.0.12:8080"
+
+User -> Nginx : Request
+Nginx --> A : Request 1
+Nginx --> B : Request 2
+A --> Nginx : Response
+B --> Nginx : Response
+Nginx --> User : Response
+@enduml
+----
+
+`upstream` 負責定義後端群組；`proxy_pass http://backend_servers;` 則把請求交給這個群組。使用者不需要知道後面到底有幾台伺服器。
+
 == HTTPS
 
 [source,nginx]
@@ -387,6 +451,33 @@ server {
 `ssl_certificate` 通常應指定包含站台憑證與中繼憑證的完整憑證鏈。
 
 更多憑證內容可參考 xref:security/digital-certificates-guide.adoc[數位憑證觀念與 Web Server 部署指南]。
+
+=== HTTPS 常見架構：TLS 在 Nginx 終止
+
+常見做法是由 Nginx 對外處理 HTTPS，後端應用程式只專心處理 HTTP Request：
+
+[plantuml,nginx-tls-termination-flow,svg]
+----
+@startuml
+left to right direction
+
+actor User as "瀏覽器"
+rectangle Nginx as "Nginx\nTLS / Certificate"
+rectangle App as "Application\nSpring Boot / Tomcat"
+
+User -> Nginx : HTTPS :443
+Nginx -> App : HTTP :8080\n或內部 HTTPS
+App --> Nginx : Response
+Nginx --> User : HTTPS Response
+@enduml
+----
+
+這種方式稱為 TLS Termination。憑證集中放在 Nginx，後端則透過 `X-Forwarded-Proto` 等 Header 得知原始請求是否為 HTTPS。
+
+[NOTE]
+====
+Nginx 到後端是否可使用 HTTP，要依實際網路邊界與資安要求決定；跨主機、跨網段或零信任環境仍可能需要內部 HTTPS。
+====
 
 == 安全 Header
 
