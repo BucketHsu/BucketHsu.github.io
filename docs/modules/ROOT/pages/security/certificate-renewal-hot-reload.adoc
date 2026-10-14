@@ -1,0 +1,310 @@
+= Let's Encrypt 自動續期與憑證熱更新
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:last-update-label!:
+:nofooter:
+
+== 適用情境
+
+本頁整理 ACME 自動申請、網域驗證、續期、部署與重新載入，以及 Spring Boot、獨立 Tomcat 與 Nginx 的分工。憑證格式、CSR 與各種 Spring Boot YAML 範例請參考 xref:security/digital-certificates-guide.adoc#spring-boot-ssl-bundle[數位憑證指南的 Spring Boot SSL Bundle 章節]。
+
+以下操作以 Linux 為主，Windows 與 Docker 的 Nginx reload 指令另列於 xref:network/nginx-guide.adoc#certificate-hot-reload[Nginx 憑證熱更新章節]。範例網域與路徑須依實際環境調整。
+
+== 憑證效期縮短與應對
+
+依 Let's Encrypt 於 2026-10-07 發布的公告與效期縮短規劃：
+
+[cols="25%,40%,35%",options="header"]
+|===
+|日期 |憑證效期 |授權重複使用期限
+|2026-10-14 |Staging 預定改發 64 天憑證，供相容性測試 |依測試環境公告
+|2027-02-10 |預設 classic profile 改為 64 天 |由 30 天縮短為 10 天
+|2028-02-16 |classic profile 改為 45 天 |縮短為 7 小時
+|===
+
+上述日期針對新簽發或續期的憑證；既有有效憑證不會因這次變更主動撤銷。官方預估最後一批 90 天憑證於 2027-05-11 到期。
+
+* *憑證效期*：決定已簽發的憑證何時到期。
+* *授權重複使用期限*：決定先前的網域控制權驗證能沿用多久；不是憑證到期時間。
+* *ARI（ACME Renewal Information）*：CA 提供建議續期時段，支援的客戶端依此安排續期。確認所用客戶端版本是否實作 ARI，不要假設所有版本都支援。
+
+排程應頻繁檢查，由客戶端判斷續期時機。不要固定每 60 或 80 天才執行一次；不支援 ARI 時，官方建議約在憑證生命週期經過三分之二時續期，仍須保留失敗重試時間。
+
+來源：https://letsencrypt.org/2026/10/07/64-day-certs.html[64 天憑證公告]、https://letsencrypt.org/2025/12/02/from-90-to-45[45 天憑證規劃]。
+
+== ACME 自動申請流程
+
+. 第一次由管理員安裝 Certbot 或 acme.sh，建立 ACME 帳號，指定網域、驗證方式與部署位置。
+. 客戶端在本地產生或管理私鑰，向 CA 提交申請；私鑰不傳送給 CA。
+. Let's Encrypt 要求證明網域控制權，客戶端準備驗證資料。
+. 驗證通過後簽發憑證，客戶端保存網站憑證、中繼憑證與私鑰。
+. 排程定期檢查，必要時重新驗證並續期。
+. 成功續期後執行 deploy hook，部署新檔案並觸發服務重新載入。
+. 從實際 HTTPS 端點確認新憑證，續期、部署或載入失敗時通知維運人員。
+
+Spring Boot 與 Tomcat 負責使用憑證，不負責向 Let's Encrypt 申請。ACME 工具可以位於主機、專用容器或集中管理主機；集中簽發時，仍須將檔案安全部署到每個 TLS 終止點。
+
+=== HTTP-01 與 DNS-01
+
+[cols="20%,40%,40%",options="header"]
+|===
+|方式 |驗證內容 |部署條件
+|HTTP-01 |讀取 `http://example.com/.well-known/acme-challenge/<token>` 的暫時檔案 |外網可透過 80 port 存取驗證路徑；不能被登入、WAF 或網路限制擋住；不能申請萬用字元憑證。
+|DNS-01 |查詢 `_acme-challenge.example.com` 的公開 DNS TXT 紀錄 |自動化通常搭配 DNS 業者 API 與對應外掛；支援萬用字元憑證，網站本身可只在內網服務。
+|===
+
+DNS-01 不要求內部網站對外開放，但必須使用可驗證的公開網域及公開可查的驗證紀錄，不能替任意內部名稱或私有 IP 取得公開信任憑證。DNS API 憑證需限縮權限；沒有 API 時，可評估委派 `_acme-challenge` 子網域到可自動管理的 DNS。每次手動新增 TXT 紀錄無法構成完整自動續期。
+
+來源：https://letsencrypt.org/docs/challenge-types/[Let's Encrypt 驗證方式]。
+
+=== Nginx HTTP-01 webroot 範例
+
+先建立 webroot，讓 Nginx 與 Certbot 讀寫相同目錄：
+
+[source,bash]
+----
+sudo mkdir -p /var/www/acme/.well-known/acme-challenge
+----
+
+將下列內容納入 Nginx 的 HTTP server。HTTPS 憑證尚未取得時，先使用 HTTP 設定完成第一次申請，再啟用引用憑證的 HTTPS server。
+
+[source,nginx]
+----
+server {
+    listen 80;
+    server_name app.example.com;
+
+    # 此路徑直接提供驗證檔案，不轉送給 Spring Boot
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/acme;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    # 放在 location /，讓驗證路徑能先被處理
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+----
+
+第一次申請：
+
+[source,bash]
+----
+sudo certbot certonly --webroot -w /var/www/acme \
+  -d app.example.com --email admin@example.com --agree-tos
+----
+
+webroot 模式沿用運作中的 Nginx，不需要停掉網站。若用 standalone 模式，工具需要自行監聽驗證 port，可能與已運作的服務衝突。
+
+Certbot 通常產生下列檔案：
+
+[cols="35%,65%",options="header"]
+|===
+|檔案 |用途
+|`cert.pem` |網站憑證
+|`chain.pem` |中繼憑證鏈
+|`fullchain.pem` |網站憑證加中繼憑證，供 Nginx 或 Spring Boot PEM Bundle 使用
+|`privkey.pem` |私鑰
+|===
+
+路徑通常為 `/etc/letsencrypt/live/app.example.com/`。實際目錄以 Certbot 憑證名稱為準，可能有編號尾碼；可用 `certbot certificates` 查詢。`live` 內常為連到 `archive` 的符號連結。
+
+=== 續期排程與 deploy hook
+
+先確認安裝方式是否已提供 systemd timer 或 cron，避免重複建立排程。以下查詢只適用於 systemd 主機：
+
+[source,bash]
+----
+systemctl list-timers --all
+----
+
+手動檢查續期及演練：
+
+[source,bash]
+----
+# 只在客戶端判定需要時續期
+sudo certbot renew
+
+# 使用測試環境演練，不以測試憑證取代正式憑證
+sudo certbot renew --dry-run
+----
+
+`deploy-hook` 只在成功續期後執行；`post-hook` 在續期嘗試後執行，不適合用來判斷憑證已更新。`--dry-run` 預設不執行 deploy hook；若用 `--run-deploy-hooks`，它會實際執行部署動作，應先在測試環境確認。
+
+若排程由既有 timer 管理，可建立可執行檔 `/etc/letsencrypt/renewal-hooks/deploy/20-nginx-reload`：
+
+[source,bash]
+----
+#!/bin/sh
+set -eu
+
+# 適用於 Certbot 與 Nginx 都在同一部 systemd 主機
+nginx -t
+systemctl reload nginx
+----
+
+由管理員設定執行權限後，成功續期便會自動執行。主機有多張憑證時可依 hook 提供的 `RENEWED_LINEAGE` 判斷目標；不要把無關服務的部署操作混在一起。容器或 Windows 請換成對應 reload 指令。
+
+來源：https://eff-certbot.readthedocs.io/en/stable/using.html[Certbot 使用指南]。
+
+== 選擇憑證重新載入方式
+
+[cols="30%,35%,35%",options="header"]
+|===
+|TLS 終止點 |續期後的動作 |應用程式影響
+|Nginx |更新 PEM，檢查設定，再 graceful reload |後端 Java 服務不用重啟；後端若另有 HTTPS 憑證，仍要獨立管理。
+|Spring Boot 內嵌 Tomcat |使用 SSL Bundle 與 `reload-on-update`，更新外部 PEM、P12 或 JKS |監看器觸發 TLS 設定更新，不重新啟動 Spring 容器。
+|外部 Tomcat 部署 WAR |更新憑證，呼叫 Manager `sslReload` 或 JMX 操作 |重新載入 Connector TLS 設定，不重新部署 WAR。
+|舊版或未啟用熱更新的服務 |更新憑證後安排服務重啟 |單一執行個體可能短暫中斷；多執行個體可逐台切換。
+|===
+
+憑證重新載入主要影響後續 TLS 握手；已建立的連線通常繼續使用原本的 TLS 狀態。驗證時要建立新連線，不要只看既有瀏覽器連線。
+
+=== Spring Boot 檔案監看
+
+Spring Boot 3.1 引入 SSL Bundle，3.2 起支援內嵌 Tomcat 與 Netty 的憑證熱更新。PEM 與 JKS／PKCS12 Bundle 都可使用 `reload-on-update`；請使用符合專案版本的官方文件。
+
+. ACME 工具取得新憑證並更新外部檔案。
+. Spring Boot 監看器偵測變更，等待 quiet period 後重新載入 Bundle。
+. 使用 Bundle 的內嵌 Web Server 更新 TLS 設定。
+
+不需另外呼叫 JMX。一般 `server.ssl.key-store` 設定不等於啟用檔案監看；改用 SSL Bundle 時，移除原本用來指定憑證的 `key-store`、密碼與 alias 設定，避免混用。WAR 部署在外部 Tomcat 時，Spring Boot 的內嵌伺服器設定無法管理外部 Tomcat 的 HTTPS Connector。
+
+完整 YAML 範例見 xref:security/digital-certificates-guide.adoc#spring-boot-ssl-bundle[Spring Boot SSL Bundle 設定]。
+
+=== P12 部署與密碼
+
+若要沿用 P12，可在 deploy hook 將 Certbot 的輸出打包成新檔案。以下僅示範轉換與檢查，不會自動替換正式檔案或呼叫 reload：
+
+[source,bash]
+----
+# SSL_KEYSTORE_PASSWORD 由執行環境或機密管理機制提供
+# server.p12.next 放在與正式 P12 相同檔案系統的暫存位置
+umask 077
+openssl pkcs12 -export \
+  -inkey /etc/letsencrypt/live/app.example.com/privkey.pem \
+  -in /etc/letsencrypt/live/app.example.com/cert.pem \
+  -certfile /etc/letsencrypt/live/app.example.com/chain.pem \
+  -name tomcat -out /opt/certs/server.p12.next \
+  -passout env:SSL_KEYSTORE_PASSWORD
+
+# 確認可讀取、alias 為 tomcat，且含 PrivateKeyEntry 與正確憑證鏈
+keytool -list -v -storetype PKCS12 \
+  -keystore /opt/certs/server.p12.next \
+  -storepass:env SSL_KEYSTORE_PASSWORD
+----
+
+檢查通過後保留上一版，設定新檔案的服務帳號、群組與讀取權限，再以同一檔案系統內的 rename 替換正式 P12。Spring Boot 監看器會觸發重新載入；外部 Tomcat 則還須主動呼叫 TLS reload。維持相同路徑、密碼與 alias；只更新檔案不會自動改變設定檔中的密碼。
+
+=== Docker 掛載與檔案可見性
+
+* 建議掛載憑證目錄，避免只 bind mount 單一檔案；原子替換檔案時，單檔掛載可能仍指向舊 inode。
+* 若直接使用 Certbot 的 `live`，須同時讓容器能存取對應的 `archive`，不能只掛載符號連結。
+* 服務只需讀取憑證，可使用唯讀掛載；續期工具須有寫入權限。
+* 私鑰權限需允許實際服務帳號讀取，不要為了排錯直接設為 `777`。
+* 舊版監看器、符號連結或不同檔案系統的行為可能有差異，必須演練一次實際更新並檢查對外憑證。
+
+== 獨立 Tomcat 的 TLS reload
+
+以下以 Tomcat 11 為例。Tomcat 8.5／9／10 請依所用版本確認 Manager 指令與 JMX 操作是否存在。
+
+=== Manager 文字介面
+
+已部署 Manager 且具備 `manager-script` 權限時，可呼叫：
+
+[source,bash]
+----
+# netrc 檔案須限制讀取權限，範例使用本機 HTTP 管理連線
+curl --fail --silent --show-error \
+  --netrc-file /etc/tomcat-reload.netrc \
+  http://127.0.0.1:8080/manager/text/sslReload
+----
+
+不帶 `tlsHostName` 會重新載入所有 TLS 主機；指定 `?tlsHostName=_default_` 可只處理預設主機。腳本除了檢查 HTTP 狀態，還要確認回應以 `OK -` 開頭；Tomcat Manager 可能以 HTTP 200 回傳 `FAIL - ...`。
+
+此操作重新載入憑證與私鑰等 TLS 檔案，*不重新解析 `server.xml`*。維持原本設定的路徑、密碼與 alias；若要改 Connector port 或其他設定，不要把 TLS reload 當成完整設定熱更新。
+
+=== JMX 與 JConsole
+
+JMX 操作在 HTTPS Connector 對應的 ProtocolHandler MBean：
+
+[cols="45%,55%",options="header"]
+|===
+|操作 |用途
+|`reloadSslHostConfigs()` |重新載入該 Connector 的所有 TLS 主機設定。
+|`reloadSslHostConfig(String hostName)` |重新載入指定 TLS 主機，例如 `_default_`。
+|===
+
+JConsole 連線後選擇 *MBeans → Catalina → ProtocolHandler → HTTPS 對應項目 → Operations*，執行上述操作。8443 Connector 的 ObjectName 可能是 `Catalina:type=ProtocolHandler,port=8443`；若有指定 address，名稱可能還包含位址，必須先查詢實際名稱。
+
+也可透過 Manager 的 JMX Proxy 呼叫，這種方式需要 `manager-jmx` 權限：
+
+[source,bash]
+----
+# invoke 必須換成實際查到的 HTTPS ProtocolHandler ObjectName
+curl --fail --silent --show-error --get \
+  --netrc-file /etc/tomcat-reload.netrc \
+  --data-urlencode 'invoke=Catalina:type=ProtocolHandler,port=8443' \
+  --data-urlencode 'op=reloadSslHostConfigs' \
+  http://127.0.0.1:8080/manager/jmxproxy/
+----
+
+Manager 與 JMX 介面只開放本機或受管制的管理網路，不應暴露到公開網站。若僅需更新憑證，優先使用較單純的 `sslReload`；不必為此另外開放遠端 JMX。正式服務如果未部署 Manager，可依既有管理方式使用受保護的 JMX，不必額外安裝 Manager。
+
+來源：https://tomcat.apache.org/tomcat-11.0-doc/manager-howto.html[Tomcat Manager]、https://tomcat.apache.org/tomcat-11.0-doc/api/org/apache/coyote/http11/AbstractHttp11Protocol.html[Tomcat ProtocolHandler API]。
+
+== Nginx 憑證熱更新
+
+Nginx 不會因為磁碟上的憑證變更，就自動更新目前 worker 使用的憑證。一般使用固定憑證路徑時，需要執行 graceful reload。
+
+具體指令、Windows／Docker 操作、失敗處理與長連線注意事項見 xref:network/nginx-guide.adoc#certificate-hot-reload[Nginx 憑證更新與 graceful reload]。
+
+== 更新後驗證與失敗處理
+
+先確認磁碟上的新憑證：
+
+[source,bash]
+----
+openssl x509 -in /opt/certs/fullchain.pem \
+  -noout -subject -issuer -serial -dates
+----
+
+再以新連線確認服務實際送出的憑證：
+
+[source,bash]
+----
+# 直接接 Spring Boot 或 Tomcat 時，把 443 換成實際的 8443 等 port
+openssl s_client -connect app.example.com:443 \
+  -servername app.example.com </dev/null \
+  | openssl x509 -noout -subject -issuer -serial -dates
+
+# 另檢查 HTTPS 憑證信任、主機名稱與網站回應
+curl -I https://app.example.com/
+----
+
+前面有 CDN、負載平衡器或多部主機時，要逐一確認真正的 TLS 終止點，不能只測一次網域就假設所有節點已更新。
+
+* 申請失敗：保留目前有效憑證，檢查 HTTP 驗證路徑、DNS API、傳播時間、CAA 與對外連線，持續重試並通知。
+* 部署失敗：不要以空檔或未驗證的 P12 覆蓋正式檔案。
+* reload 失敗：檢查服務日誌並恢復上一版檔案，修正後重新載入；目前仍使用的舊憑證也有到期風險。
+* reload 回報成功：仍須比對對外憑證的序號與到期日，並監控剩餘效期。
+
+Staging 適合測試申請與續期，但其憑證不受一般瀏覽器信任。先在測試環境演練，再接正式憑證部署。
+
+== 官方參考
+
+* https://letsencrypt.org/how-it-works/[Let's Encrypt 與 ACME 原理]
+* https://eff-certbot.readthedocs.io/en/stable/using.html[Certbot 申請、續期與 hook]
+* https://docs.spring.io/spring-boot/reference/features/ssl.html[Spring Boot SSL Bundle]
+* https://docs.spring.io/spring-boot/api/java/org/springframework/boot/autoconfigure/ssl/JksSslBundleProperties.html[JKS／PKCS12 Bundle 屬性]
+* https://spring.io/blog/2023/11/07/ssl-hot-reload-in-spring-boot-3-2-0/[Spring Boot 3.2 憑證熱更新]
+* https://tomcat.apache.org/tomcat-11.0-doc/manager-howto.html[Tomcat Manager TLS reload 與 JMX Proxy]
+* https://nginx.org/en/docs/control.html[Nginx graceful reload]

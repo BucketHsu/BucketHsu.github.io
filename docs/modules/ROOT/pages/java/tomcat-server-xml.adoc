@@ -688,6 +688,14 @@ Tomcat 官方文件明確支援這組屬性，而且要求這些檔案是 PEM �
 * `.keystore`：通常只是檔名，不代表格式。:contentReference[oaicite:22]{index=22}
 * `.pem`Base64 包裝格式，不是單一憑證種類，可裝 cert、key、chain。:contentReference[oaicite:23]{index=23}
 
+== 憑證更新後重新載入 TLS
+
+憑證檔案更新後不一定要重啟整個 Tomcat。支援的版本可透過 Manager `sslReload` 或 HTTPS ProtocolHandler MBean 的 `reloadSslHostConfigs()`，重新載入 TLS 憑證而不重新部署 WAR。
+
+此操作不重新解析 `server.xml`。自動續期時維持憑證路徑、密碼與 alias，先檢查新 PEM／P12，再替換正式檔案並呼叫 reload。Manager 文字介面需要 `manager-script`，JMX Proxy 則需要 `manager-jmx`；管理介面只開放本機或受管制的管理網路。
+
+Tomcat 11 操作範例、JConsole 與 JMX Proxy、P12 轉換和對外驗證步驟見 xref:security/certificate-renewal-hot-reload.adoc[Let's Encrypt 自動續期與憑證熱更新]。其他版本請依該版本官方文件確認支援的操作。
+
 == Tomcat HTTPS 憑證設定（server.xml 寫法差異）
 
 [NOTE]
