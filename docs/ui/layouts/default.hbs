@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{page.title}} | {{site.title}}</title>
+    <title>{{{page.title}}} | {{site.title}}</title>
     <script>
       (function () {
         var savedTheme;
@@ -95,7 +95,7 @@
         <div class="site-header__crumbs" aria-label="頁面路徑">
             {{#if page.breadcrumbs}}
               {{#each page.breadcrumbs}}
-                <a href="{{{relativize url}}}">{{content}}</a>
+                <a href="{{{relativize url}}}">{{{content}}}</a>
               {{/each}}
             {{else}}
               <a href="{{{relativize site.homeUrl}}}">首頁</a>
@@ -103,7 +103,8 @@
         </div>
         <article class="doc">
           <header class="doc__header">
-          <h1>{{page.title}}</h1>
+          {{!-- page.title 已由 AsciiDoc 轉成 HTML，保留正確的字元實體。 --}}
+          <h1>{{{page.title}}}</h1>
           </header>
           {{{page.contents}}}
         </article>
