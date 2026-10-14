@@ -31,6 +31,8 @@ V1.0.0, 2026-06-24
 * 正式與測試憑證申請流程（CSR 欄位規則、憑證鏈串鏈順序）。
 * 各伺服器 HTTPS 設定範例與疑難排排查。
 
+憑證效期縮短、ACME 自動申請與續期、Tomcat JMX 重新載入及更新後驗證，另見 xref:security/certificate-renewal-hot-reload.adoc[Let's Encrypt 自動續期與憑證熱更新]。
+
 == 數位憑證基礎概念
 
 在 HTTPS 或是 TLS 加密連線的握手（Handshake）過程中，伺服器必須向用戶端（例如瀏覽器）證明自己的身份。這套信任體系是建立在**非對稱金鑰（Asymmetric Cryptography）**與**憑證授權機構（CA, Certificate Authority）**之上。
@@ -408,11 +410,12 @@ Tomcat 10+ 允許直接設定私鑰文字檔與憑證文字檔，設定方式非
 在新版 Tomcat 中，若啟用 `SSLEnabled="true"`，但依然使用舊版 Tomcat 8.5 的屬性設定（直接將 `keystoreFile` 寫在 `<Connector>` 上），Tomcat 啟動時常會拋出上述異常。這是因為新版 Tomcat 預設以 `<SSLHostConfig>` 來尋找對應的預設 hostName。修正方法是**必須**使用巢狀 `<SSLHostConfig hostName="_default_">` 結構。
 ====
 
+[[spring-boot-deployment]]
 === Spring Boot 部署
 
-Spring Boot 內部嵌入了 Tomcat，其設定通常寫在 `application.yml` 或 `application.properties` 中。
+以下適用於 Spring Boot 使用內嵌 Tomcat，直接提供 HTTPS 的情境。WAR 若部署到外部 Tomcat，應設定外部 Tomcat 的 HTTPS Connector。設定通常寫在 `application.yml` 或 `application.properties` 中。
 
-==== 使用 PKCS12 格式（`.p12` 或 `.pfx`）- 推薦
+==== 傳統設定：使用 PKCS12 格式（`.p12` 或 `.pfx`）
 [source,yaml]
 ----
 server:
@@ -442,6 +445,174 @@ server:
 ====
 在 `key-store` 的路徑中，使用 `file:` 前綴可以指定作業系統中的實體絕對路徑。若使用 `classpath:`，則會從 jar 包內部的 resources 目錄讀取（較不利於憑證過期時的動態更換）。
 ====
+
+[[spring-boot-ssl-bundle]]
+==== SSL Bundle 與自動重新載入
+
+===== 傳統設定與 Bundle 的差異
+
+傳統 `server.ssl.key-store` 是直接在 Web Server 的設定中指定憑證。SSL Bundle 則把憑證、私鑰、信任材料與相關選項整理成具名設定，例如 `webserver`，再由 `server.ssl.bundle: webserver` 引用。
+
+Bundle 不會把 P12 轉成另一種檔案格式，也不是新增一層 HTTPS 加密。使用相同憑證、私鑰與 TLS 參數時，兩者對瀏覽器提供的 HTTPS 功能相同；主要差別是設定管理與元件整合。
+
+[cols="25%,35%,40%",options="header"]
+|===
+|比較項目 |傳統 `server.ssl.*` |SSL Bundle
+|設定位置 |憑證直接寫在 `server.ssl`。 |憑證寫在 `spring.ssl.bundle`，Web Server 以名稱引用。
+|格式 |支援 P12／JKS；適用版本也可直接設定 PEM。 |支援 PEM 與 JKS／PKCS12，副檔名不決定 Bundle 類型。
+|憑證更新 |單純替換檔案，不會自動啟用 Spring Boot 檔案監看；一般安排重啟或另行觸發載入。 |啟用 `reload-on-update` 後，由監看器通知支援熱更新的元件。
+|設定重用 |主要對應這個 Web Server 的 HTTPS 設定。 |可供其他支援 Bundle 的 HTTP 用戶端或資料連線元件引用。
+|多組設定 |使用各元件原本的 SSL 設定方式。 |可定義多個名稱，分別管理對外服務、內部 API 或信任憑證。
+|安全性與效能 |取決於憑證、TLS 參數、私鑰保護與更新流程。 |不會因為改成 Bundle 就自動提升加密強度或效能。
+|適用情境 |既有系統只需單一 HTTPS，憑證更換已有維護流程。 |需要具名管理、整合支援的元件或減少憑證輪替造成的服務重啟。
+|===
+
+[NOTE]
+====
+設定成 Bundle 不代表一定會自動更新。須同時具備外部可監看的檔案、`reload-on-update: true` 與支援重新載入的使用元件。也不要把 Web Server 的熱更新能力套用到所有 HTTP 用戶端或資料庫連線；是否會採用新 Bundle，必須依元件與版本確認。
+====
+
+===== 既有 P12 設定如何轉換
+
+若原本使用前面的傳統 PKCS12 範例，轉成方案 C 時可依下表搬移設定，憑證檔案本身不需要重新簽發或轉換：
+
+[cols="45%,55%",options="header"]
+|===
+|原設定 |Bundle 設定
+|`server.ssl.key-store` |`spring.ssl.bundle.jks.webserver.keystore.location`
+|`server.ssl.key-store-type` |`spring.ssl.bundle.jks.webserver.keystore.type`
+|`server.ssl.key-store-password` |`spring.ssl.bundle.jks.webserver.keystore.password`
+|`server.ssl.key-alias` |`spring.ssl.bundle.jks.webserver.key.alias`
+|`server.ssl.key-password`（有另外設定時） |`spring.ssl.bundle.jks.webserver.key.password`
+|無 |增加 `server.ssl.bundle: webserver`。
+|無 |需要熱更新時增加 `spring.ssl.bundle.jks.webserver.reload-on-update: true`。
+|===
+
+`server.port` 與 `server.ssl.enabled` 仍保留。其他 TLS 協定、cipher 與信任設定也要依 Bundle 支援的屬性檢查；不能只搬移 P12 路徑就認定所有設定都已等價轉換。第一次切換設定需重新啟動應用程式；之後在既有 Bundle 設定下替換憑證檔案，才是熱更新。
+
+若沒有自動更新或重用設定的需求，既有傳統方式仍可繼續使用。憑證效期縮短時，則應確認原有更換流程是否能承受更頻繁的更新。
+
+===== SSL Bundle YAML 範例
+
+Spring Boot 3.1 引入 SSL Bundle，3.2 起支援內嵌 Tomcat 與 Netty 的憑證熱更新。以下各範例為獨立方案，選擇其中一種即可；不要與前面的傳統 `server.ssl.key-store` 憑證設定混用。
+
+[cols="30%,30%,40%",options="header"]
+|===
+|憑證檔案 |Bundle 類型 |重新載入條件
+|`.pem` 或 PEM 編碼的 `.crt` 與 `.key` |`pem` |啟用 `reload-on-update`，更新外部檔案。
+|`.p12` 或 `.pfx` 加密碼 |`jks`，`type: PKCS12` |啟用 `reload-on-update`，更新相同路徑的外部 P12。
+|`.jks` 加密碼 |`jks`，`type: JKS` |啟用 `reload-on-update`，更新外部 JKS。
+|===
+
+`pem` 是內容編碼格式，不是要求副檔名一定叫 `.pem`。PEM 憑證可用文字編輯器看到 `-----BEGIN CERTIFICATE-----`；DER 二進位 `.crt`／`.cer` 需先轉成 PEM。Bundle 名稱 `webserver` 是自訂名稱，必須與 `server.ssl.bundle` 相同。
+
+.方案 A：直接使用 Let's Encrypt PEM
+[source,yaml]
+----
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    bundle: webserver
+
+spring:
+  ssl:
+    bundle:
+      pem:
+        webserver:
+          # 續期工具更新檔案後，由 Spring Boot 重新載入
+          reload-on-update: true
+          keystore:
+            certificate: file:/etc/letsencrypt/live/app.example.com/fullchain.pem
+            private-key: file:/etc/letsencrypt/live/app.example.com/privkey.pem
+----
+
+.方案 B：PEM 格式的 CRT 與 KEY
+[source,yaml]
+----
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    bundle: webserver
+
+spring:
+  ssl:
+    bundle:
+      pem:
+        webserver:
+          reload-on-update: true
+          keystore:
+            # 此 CRT 已依序包含網站憑證與必要的中繼憑證
+            certificate: file:/opt/certs/server-fullchain.crt
+            private-key: file:/opt/certs/server.key
+----
+
+若拿到的是網站憑證 `server.crt` 與中繼憑證 `chain.crt`，先執行 `cat server.crt chain.crt > server-fullchain.crt`。副檔名不影響 PEM Bundle 的選擇。
+
+.方案 C：P12／PFX 加密碼
+[source,yaml]
+----
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    bundle: webserver
+
+spring:
+  ssl:
+    bundle:
+      jks:
+        webserver:
+          reload-on-update: true
+          key:
+            # 必須符合 P12 中的 PrivateKeyEntry alias
+            alias: tomcat
+          keystore:
+            location: file:/opt/certs/server.p12
+            password: ${SSL_KEYSTORE_PASSWORD}
+            type: PKCS12
+----
+
+`.pfx` 同樣使用 `type: PKCS12`，只需改 location。密碼由環境變數或既有機密管理機制提供；續期部署的新 P12 須維持相同密碼及 alias，並包含私鑰與必要的憑證鏈。若 keystore 只有一個可用私鑰項目，也可依需求省略 alias。
+
+.方案 D：JKS 與不同的私鑰密碼
+[source,yaml]
+----
+server:
+  port: 8443
+  ssl:
+    enabled: true
+    bundle: webserver
+
+spring:
+  ssl:
+    bundle:
+      jks:
+        webserver:
+          reload-on-update: true
+          key:
+            alias: tomcat
+            # 私鑰密碼不同於 keystore 密碼時才另行指定
+            password: ${SSL_KEY_PASSWORD}
+          keystore:
+            location: file:/opt/certs/server.jks
+            password: ${SSL_KEYSTORE_PASSWORD}
+            type: JKS
+----
+
+若私鑰與 keystore 密碼相同，可省略 `key.password`，使用 keystore 密碼。這裡的 `jks` 設定分類也支援 PKCS12，不代表檔案一定是 JKS。
+
+[IMPORTANT]
+====
+* 熱更新的是憑證內容，不是整份 `application.yml`；更改 port、Bundle 路徑或密碼，不能假設會隨檔案更新自動套用。
+* 使用外部 `file:` 路徑，避免把需要輪替的憑證打包在 JAR 裡。
+* 更新 PEM 時，憑證與私鑰要成套部署。檔案監看器有 quiet period，但不應依賴等待時間掩蓋不完整的部署。
+* P12／JKS 先產生新檔案、檢查內容與權限，再替換正式檔案；完整部署步驟見 xref:security/certificate-renewal-hot-reload.adoc[自動續期與憑證熱更新]。
+* 重新載入後，建立新的 HTTPS 連線確認憑證序號與到期日。
+====
+
+官方參考：https://docs.spring.io/spring-boot/reference/features/ssl.html[SSL Bundle 文件]、https://docs.spring.io/spring-boot/api/java/org/springframework/boot/autoconfigure/ssl/JksSslBundleProperties.html[JKS／PKCS12 Bundle 屬性]、https://spring.io/blog/2023/11/07/ssl-hot-reload-in-spring-boot-3-2-0/[Spring Boot 3.2 熱更新說明]。
 
 === Nginx 部署
 

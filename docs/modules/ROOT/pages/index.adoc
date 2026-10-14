@@ -146,8 +146,12 @@
 |釐清安全機制用途。
 
 |xref:security/digital-certificates-guide.adoc[數位憑證與 Web Server 部署]
-|憑證格式、CSR、憑證鏈與常見 Web Server 部署。
+|憑證格式、CSR、憑證鏈與 Spring Boot PEM、CRT／KEY、P12、JKS SSL Bundle 範例。
 |申請、轉換或排查 HTTPS 憑證。
+
+|xref:security/certificate-renewal-hot-reload.adoc[Let's Encrypt 自動續期與憑證熱更新]
+|效期縮短、ACME 網域驗證、續期 hook、Spring Boot／Tomcat／Nginx 重新載入與驗證。
+|建立自動續期流程，或希望更新憑證時避免重啟業務服務。
 
 |xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header]
 |CSP、HSTS、CORS、Cookie 與瀏覽器安全規則。

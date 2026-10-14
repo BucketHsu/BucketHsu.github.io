@@ -998,6 +998,81 @@ Nginx
 
 更多憑證格式、CSR 與憑證鏈觀念可參考 xref:security/digital-certificates-guide.adoc[數位憑證與 Web Server 部署指南]。
 
+[[certificate-hot-reload]]
+=== 憑證更新與 graceful reload
+
+一般以固定路徑設定 `ssl_certificate` 與 `ssl_certificate_key` 時，替換磁碟上的憑證檔案後，還需要 reload，運作中的 worker 才會切換到新設定。這裡的熱更新是憑證與 Nginx 設定的重新載入，不涉及重新部署後端 Java 應用程式。
+
+. 取得新憑證與私鑰，檢查期限、憑證鏈及公鑰是否相符。
+. 保留上一版，將成套檔案部署到既有路徑，維持正確的檔案權限。
+. 執行 `nginx -t`，確認設定與憑證能載入。
+. 檢查通過後執行 reload。
+. 查看 error log，並建立新的 HTTPS 連線確認對外憑證。
+
+==== Linux 主機
+
+[source,bash]
+----
+# 適用於由 systemd 管理的 Nginx
+sudo nginx -t && sudo systemctl reload nginx
+
+# 自行啟動的 Nginx 可使用以下方式；兩種擇一
+# sudo nginx -t && sudo nginx -s reload
+----
+
+reload 時，master 檢查並套用新設定，啟動新的 worker；舊 worker 停止接受新連線，完成既有工作後退出。後端 Spring Boot／Tomcat 不需要跟著重啟。設定套用失敗時，master 會繼續使用舊設定；仍須查日誌與對外憑證，不能只看送出 reload 指令的結果。
+
+==== Docker Compose
+
+以下假設 Compose service 名稱是 `nginx`，且在正確的 Compose 專案目錄執行：
+
+[source,bash]
+----
+docker compose exec -T nginx nginx -t && \
+  docker compose exec -T nginx nginx -s reload
+----
+
+更新憑證不需要 `docker compose down` 或重建映像。憑證須放在持久化目錄並掛載進容器；部署工具替換檔案時，建議掛載整個目錄，避免單檔 bind mount 仍讀到舊檔案。使用 Certbot 的符號連結路徑時，容器也須看得到對應的 `archive` 目錄。
+
+Certbot 在容器內時，不會因為更新共享憑證檔案，就自動讓另一個 Nginx 容器 reload。可由主機排程或既有部署機制執行上述指令；不必為了 reload 把 Docker socket 掛進續期容器。
+
+==== Windows
+
+[source,powershell]
+----
+# 請切換到實際 Nginx 安裝目錄，沿用原本的 prefix 與設定檔
+Set-Location C:\nginx
+& .\nginx.exe -t
+if ($LASTEXITCODE -ne 0) {
+    throw "Nginx 設定或憑證檢查失敗，未執行 reload。"
+}
+& .\nginx.exe -s reload
+if ($LASTEXITCODE -ne 0) {
+    throw "Nginx reload 指令失敗，請檢查 error log。"
+}
+----
+
+如果服務原本使用自訂 `-p` 或 `-c`，檢查與 reload 指令也要指定相同值，避免操作到另一份設定。
+
+==== 續期 hook 與長連線
+
+Certbot 成功續期後可用 deploy hook 執行檢查與 reload。申請、驗證、排程及 hook 範例見 xref:security/certificate-renewal-hot-reload.adoc[Let's Encrypt 自動續期與憑證熱更新]。
+
+* 保持憑證路徑固定，只更新檔案內容；PEM 私鑰若有密碼，`ssl_password_file` 必須能讓非互動式 reload 取得密碼。
+* 舊 worker 上的 WebSocket、SSE 或其他長連線可能持續存在。若設定 `worker_shutdown_timeout`，時間到可能關閉尚未完成的連線，需依業務需求評估。
+* graceful reload 不代表所有使用者當下就重新 TLS 握手；測試時建立新連線。
+* `nginx -t` 或 reload 失敗時，恢復上一版磁碟檔案並排查；舊 worker 繼續服務不等於新憑證部署成功。
+
+[source,bash]
+----
+# 確認網站實際送出的憑證；多節點環境需逐一檢查
+openssl s_client -connect app.example.com:443 \
+  -servername app.example.com </dev/null \
+  | openssl x509 -noout -serial -dates
+----
+
+官方參考：https://nginx.org/en/docs/control.html[Nginx 程序控制與 reload]、https://nginx.org/en/docs/switches.html[命令列參數]、https://nginx.org/en/docs/ngx_core_module.html#worker_shutdown_timeout[worker_shutdown_timeout]。
+
 == 負載平衡
 
 [source,nginx]

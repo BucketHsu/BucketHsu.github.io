@@ -33,6 +33,7 @@
 * 資安與憑證
 ** xref:security/web-crypto-basics.adoc[加密、Hash、HMAC 與簽章基礎]
 ** xref:security/digital-certificates-guide.adoc[數位憑證與 Web Server 部署]
+** xref:security/certificate-renewal-hot-reload.adoc[Let's Encrypt 自動續期與憑證熱更新]
 ** xref:security/web-security-headers.adoc[資安名詞與 Web 安全 Header]
 ** xref:security/dependency-check-nvd-mirror-guide.adoc[OWASP Dependency-Check 與內網 NVD Mirror]
 
