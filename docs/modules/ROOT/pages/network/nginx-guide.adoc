@@ -1001,6 +1001,8 @@ Nginx
 [[certificate-hot-reload]]
 === 憑證更新與 graceful reload
 
+從第一次申請到自動續期的完整操作，見 xref:security/certificate-renewal-hot-reload.adoc#nginx-runbook[Nginx 自動續期實作步驟]，包含 HTTP／HTTPS 完整設定、reload 指令與可直接建立的 deploy hook。
+
 一般以固定路徑設定 `ssl_certificate` 與 `ssl_certificate_key` 時，替換磁碟上的憑證檔案後，還需要 reload，運作中的 worker 才會切換到新設定。這裡的熱更新是憑證與 Nginx 設定的重新載入，不涉及重新部署後端 Java 應用程式。
 
 . 取得新憑證與私鑰，檢查期限、憑證鏈及公鑰是否相符。

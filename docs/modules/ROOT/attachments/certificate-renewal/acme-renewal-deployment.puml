@@ -1,0 +1,31 @@
+@startuml
+skinparam defaultFontName Noto Sans CJK TC
+start
+:第一次設定網域、HTTP 驗證路徑\n及續期成功後的部署腳本;
+:第一次申請或排程執行 certbot renew;
+if (第一次申請或已到續期時機?) then (是)
+  :Certbot 向 Let's Encrypt 申請;
+  if (需要重新驗證網域?) then (是)
+    :Certbot 放置暫時驗證檔;
+    :Let's Encrypt 從外網 80 port\n讀取驗證檔;
+  else (否)
+    :沿用尚有效的授權;
+  endif
+  if (申請成功?) then (是)
+    :更新 fullchain.pem 與 privkey.pem;
+    :執行 deploy hook;
+    if (使用 P12?) then (是)
+      :打包及檢查 P12\n再替換正式檔案;
+    else (否)
+      :使用或部署 PEM;
+    endif
+    :Nginx reload／Spring Boot Bundle 監看\n或 Tomcat TLS reload;
+    :建立新 HTTPS 連線\n確認序號、期限與信任;
+  else (否)
+    :保留現有憑證\n檢查日誌並通知維運人員;
+  endif
+else (否)
+  :不更動憑證，等待下次檢查;
+endif
+stop
+@enduml
