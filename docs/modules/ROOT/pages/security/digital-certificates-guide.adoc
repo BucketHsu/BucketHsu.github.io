@@ -449,6 +449,8 @@ server:
 [[spring-boot-ssl-bundle]]
 ==== SSL Bundle 與自動重新載入
 
+要直接部署，請先看 xref:security/certificate-renewal-hot-reload.adoc#spring-boot-runbook[Spring Boot 實作步驟]：同頁提供完整 application.yml、systemd 密碼設定、P12 轉換腳本與續期 hook，依順序操作即可。下列內容保留設定差異與格式對照。
+
 ===== 傳統設定與 Bundle 的差異
 
 傳統 `server.ssl.key-store` 是直接在 Web Server 的設定中指定憑證。SSL Bundle 則把憑證、私鑰、信任材料與相關選項整理成具名設定，例如 `webserver`，再由 `server.ssl.bundle: webserver` 引用。
