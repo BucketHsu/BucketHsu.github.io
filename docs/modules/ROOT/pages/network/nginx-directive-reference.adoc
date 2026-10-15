@@ -352,6 +352,40 @@
 |可降低重複握手成本。
 |===
 
+=== Nginx 到後端的 HTTPS 驗證
+
+以下 `proxy_ssl_*` 設定用於 Nginx 連到後端，與對外提供 HTTPS 的 `ssl_certificate` 不同。完整操作見 xref:network/nginx-guide.adoc#upstream-https-verification[後端 Spring Boot 使用自簽憑證的設定步驟]。
+
+[cols="25%,20%,30%,25%",options="header"]
+|===
+|指令 |Context |用途 |注意事項
+
+|`proxy_ssl_verify on;`
+|`http`、`server`、`location`
+|驗證後端 HTTPS 憑證。
+|預設 `off`；僅設定 `proxy_pass https://...` 不會自動驗證後端身分。
+
+|`proxy_ssl_trusted_certificate /etc/nginx/certs/internal-ca.crt;`
+|`http`、`server`、`location`
+|指定驗證後端憑證使用的 PEM 信任憑證檔。
+|內部 CA 使用 CA 憑證；直接自簽的網站憑證則信任該憑證本身，不放私鑰。
+
+|`proxy_ssl_name app.internal.example.com;`
+|`http`、`server`、`location`
+|指定後端憑證驗證與 SNI 使用的名稱。
+|預設 `$proxy_host`；使用 IP 代理時，可指定符合憑證 DNS SAN 的名稱。
+
+|`proxy_ssl_server_name on;`
+|`http`、`server`、`location`
+|連到後端時送出 SNI。
+|預設 `off`；啟用 SNI 不等於啟用憑證驗證。
+
+|`proxy_ssl_verify_depth 2;`
+|`http`、`server`、`location`
+|設定後端憑證鏈的驗證深度。
+|預設 `1`；依實際中繼 CA 層數調整。
+|===
+
 == Header、壓縮與快取
 
 [cols="25%,20%,30%,25%", options="header"]
