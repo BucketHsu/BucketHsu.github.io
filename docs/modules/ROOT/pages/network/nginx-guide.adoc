@@ -957,6 +957,124 @@ server {
 }
 ----
 
+[[upstream-https-verification]]
+=== 後端 Spring Boot 使用自簽憑證時，Nginx 要怎麼設定？
+
+瀏覽器到 Nginx、Nginx 到 Spring Boot fat JAR 是兩條獨立的 TLS 連線。瀏覽器只會看到 Nginx 對外提供的憑證；後端憑證是否受信任，由 Nginx 的代理設定決定。
+
+==== 先確認預設行為
+
+`proxy_pass https://10.10.10.127:8443;` 代表以 HTTPS 連到後端，但 Nginx 的 `proxy_ssl_verify` **預設是 `off`**，除非上層設定或 include 已啟用驗證。因此後端即使使用自簽憑證，通常仍能連線；這表示有加密，但未驗證後端身分，不代表 Nginx 已信任該憑證。
+
+[cols="35%,65%",options="header"]
+|===
+|設定 |未信任後端憑證時的結果
+|`proxy_ssl_verify off;`（預設）
+|不會因憑證不受信任而拒絕連線；仍可能因連線、TLS 版本或其他握手問題失敗。
+|`proxy_ssl_verify on;`
+|憑證驗證失敗時無法代理請求，通常回傳 `502 Bad Gateway`。
+|===
+
+==== 步驟一：準備要信任的公開憑證
+
+* 若是「內部 CA 簽發網站憑證」，取得該 CA 的根憑證；後端需提供網站憑證與必要的中繼憑證鏈。
+* 若是「網站憑證直接自己簽自己」，沒有另一張獨立根憑證，就取得該張自簽網站憑證本身。
+
+向憑證管理者確認來源與指紋後，將 PEM 格式的公開憑證存成 `internal-ca.crt`。不要直接把未驗證來源的連線所送出的憑證當成信任依據。
+
+[source,bash]
+----
+# 檢查來源檔案，確認它是憑證，而非私鑰
+openssl x509 -in internal-ca.crt -noout -subject -issuer -dates -fingerprint -sha256
+
+# Linux 主機範例：將已確認的公開憑證放到 Nginx 可讀的位置
+sudo install -d -m 755 /etc/nginx/certs
+sudo install -m 644 internal-ca.crt /etc/nginx/certs/internal-ca.crt
+----
+
+不必把它安裝到作業系統的根憑證庫；下一步直接透過 `proxy_ssl_trusted_certificate` 指定。Nginx 在這個步驟只需要公開憑證，不需要後端的 `.p12`、私鑰或 P12 密碼。
+
+==== 步驟二：設定 HTTPS 代理與憑證驗證
+
+在既有的 `server` 內，將對應的 `location` 調整如下；範例的 IP、port 與網域請換成實際值。
+
+[source,nginx]
+----
+location / {
+    proxy_pass https://10.10.10.127:8443;
+
+    # 驗證後端憑證，信任檔須為 PEM 格式
+    proxy_ssl_verify on;
+    proxy_ssl_trusted_certificate /etc/nginx/certs/internal-ca.crt;
+
+    # 以後端憑證 SAN 中的 DNS 名稱驗證身分，並透過 SNI 傳給後端
+    proxy_ssl_name app.internal.example.com;
+    proxy_ssl_server_name on;
+
+    # 若憑證鏈含一層中繼 CA，可使用深度 2；依實際鏈長調整
+    proxy_ssl_verify_depth 2;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+----
+
+* `proxy_pass` 的 IP 是實際連線位址；`proxy_ssl_name` 是要驗證的憑證名稱。此例仍連到 `10.10.10.127`，不需讓 Nginx 透過 DNS 解析 `app.internal.example.com`。
+* 後端憑證的 SAN 必須包含 `DNS:app.internal.example.com`；只有信任 CA，名稱不符仍會失敗。憑證若沒有可用的 DNS SAN，應重新簽發符合名稱的憑證。
+* `proxy_ssl_server_name on` 啟用 SNI，本身不會啟用憑證驗證；仍須設定 `proxy_ssl_verify on`。
+* `proxy_set_header Host` 是 HTTP Header，不能取代 TLS 層的 `proxy_ssl_name`。
+* Docker 環境需把信任憑證目錄唯讀掛載進 Nginx 容器，設定中的路徑是容器內路徑。
+
+==== 步驟三：先測試後端，再套用 Nginx
+
+在 Nginx 所在主機測試，保留網域名稱驗證與 SNI，但實際連到指定 IP：
+
+[source,bash]
+----
+# 不加 -k；確認信任鏈與名稱驗證都成功
+curl --noproxy '*' --cacert /etc/nginx/certs/internal-ca.crt \
+  --resolve app.internal.example.com:8443:10.10.10.127 \
+  -v https://app.internal.example.com:8443/
+
+# 後端驗證通過後，檢查並套用 Nginx 設定
+sudo nginx -t && sudo systemctl reload nginx
+
+# 再從對外入口確認代理結果；請換成實際網站網域
+curl -v https://example.com/
+----
+
+後端若回傳 `401`、`403` 或 `404`，要與 TLS 驗證錯誤分開判讀。`nginx -t` 只檢查設定及檔案是否可載入，不會幫你連到後端完成憑證驗證；仍需實際發出代理請求。
+
+容器或 Windows 的檢查與 reload 指令，見 xref:network/nginx-guide.adoc#certificate-hot-reload[憑證更新與 graceful reload]。
+
+==== 遇到 502 時檢查什麼？
+
+先查看 Nginx error log；實際位置依 `error_log` 設定，例如：
+
+[source,bash]
+----
+sudo tail -n 100 /var/log/nginx/error.log
+----
+
+[cols="40%,60%",options="header"]
+|===
+|錯誤線索 |檢查方向
+|`upstream SSL certificate verify error`
+|信任憑證是否正確、後端中繼鏈是否完整、憑證是否過期、驗證深度是否足夠。
+|`upstream SSL certificate does not match`
+|`proxy_ssl_name` 是否符合後端憑證的 DNS SAN。
+|`SSL_do_handshake() failed`
+|SNI、TLS 版本、加密套件，以及後端是否要求用戶端憑證（mTLS）。
+|`connect() failed` 或連線逾時
+|後端服務、IP、port、防火牆與容器網路。
+|===
+
+後續若由同一個內部 CA 續發後端憑證，且名稱與憑證鏈仍符合設定，通常不需更換 Nginx 信任檔；後端仍要重新載入自己的新憑證。若更換 CA，或直接信任的自簽網站憑證換新，就要同步更新 Nginx 的信任檔並檢查、reload。
+
+官方說明： https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_verify[proxy_ssl_verify]、https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_trusted_certificate[proxy_ssl_trusted_certificate]、https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ssl_name[proxy_ssl_name]。
+
 === 實務上怎麼選
 
 [cols="32%,28%,40%",options="header"]
