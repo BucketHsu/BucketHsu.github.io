@@ -1,0 +1,339 @@
+= Git 分支協作實務：Fetch、Pull、Merge 與 MR / PR
+學藝不精工程師
+:experimental:
+:icons: font
+:sectnums:
+:toc: left
+:toc-title: 目錄
+:toclevels: 3
+:source-highlighter: highlight.js
+:last-update-label!:
+:nofooter:
+
+本篇以多人開發的 `dev`、`main` 與 `feature/login` 為例，整理 Git 分支的本機與遠端關係、`fetch` 與 `pull` 的差別、同步他人修改、分支刪除，以及 GitLab Merge Request（MR）與 GitHub Pull Request（PR）的操作。
+
+延伸影片：https://www.youtube.com/watch?v=6zGgQod1VW8[Git 流程教學影片]。
+
+[NOTE]
+====
+下方為依 Git 操作行為重新繪製的原創流程圖，並非影片畫面的截圖。建議搭配影片對照觀念；此處不對未核實的影片畫面或示範步驟作額外推定。
+====
+
+== 先分清楚 Git 與 GitLab / GitHub
+
+* Git 管理本機版本、提交、分支、下載與合併，例如 `commit`、`fetch`、`merge`、`pull`、`push`。
+* GitLab 的 *Merge Request（MR）* 與 GitHub 的 *Pull Request（PR）* 是平台提供的變更審查與合併申請，並非 Git 的 `merge` 或 `pull` 指令。
+* 在 `feature/login` 上執行 `git pull origin dev`，整合的目標是「目前的 `feature/login`」，並不是將 `feature/login` 合併回 `dev`。
+* 已建立 MR / PR 後，只要推送到相同的來源分支，平台就會顯示新的提交與差異；不必重新建立，但也不代表已自動合併至目標分支。
+
+image::git/git-local-remote-workflow.svg[Git 本機工作區、遠端追蹤分支與 GitLab MR 資料流,align=center]
+
+== 三種分支名稱，並不是同一個東西
+
+假設遠端代號為 `origin`：
+
+[cols="32%,34%,34%",options="header"]
+|===
+|名稱 |實際位置 |用途
+
+|`dev`
+|本機分支
+|本機切換、修改及提交
+
+|`feature/login`
+|本機功能分支
+|開發自己的功能；目前所在分支可用 `git branch --show-current` 查詢
+
+|`origin/dev`
+|本機的遠端追蹤分支
+|代表上次從 `origin` 取得的 `dev` 狀態，不是 GitLab 伺服器上的即時內容
+
+|GitLab 上的 `dev`
+|遠端儲存庫中的分支
+|其他開發者可依權限推送或透過 MR 合併
+|===
+
+[source,bash]
+----
+git remote -v                 # 查看 origin 指向哪個遠端
+git branch                    # 只顯示本機分支
+git branch -r                 # 顯示本機記錄的遠端追蹤分支
+git branch -a                 # 兩者都顯示
+git branch --show-current     # 查看目前分支
+----
+
+[IMPORTANT]
+====
+`git fetch` 更新遠端追蹤資訊，不會自動更新本機同名的 `dev`，也不會自動合併進目前的 `feature/login`。
+====
+
+== Fetch、Pull、Merge 的差別
+
+[cols="24%,38%,38%",options="header"]
+|===
+|指令 |做了什麼 |是否整合到目前分支
+
+|`git fetch origin`
+|依照設定的 refspec 下載遠端更新，通常更新 `origin/dev` 等遠端追蹤分支
+|否
+
+|`git merge origin/dev`
+|將本機已取得的 `origin/dev` 整合至目前分支
+|是
+
+|`git pull --no-rebase origin dev`
+|先 fetch，再以 merge 策略整合遠端 `dev`
+|是
+
+|`git pull --rebase origin dev`
+|先 fetch，再以 rebase 策略重放目前分支的提交
+|是，且可能改寫提交 SHA
+
+|`git push origin feature/login`
+|把本機功能分支的提交推送到遠端
+|不會將它合併進 `dev`
+|===
+
+`git pull` 並非永遠等於 `fetch + merge`：整合方式可能受到 Git 版本、`pull.rebase`、`pull.ff` 等設定影響。在團隊筆記或腳本中需要確定採用 merge 時，明確使用 `--no-rebase`，或分開執行 `fetch + merge`。
+
+=== 只取得資料，不進行合併
+
+[source,bash]
+----
+git switch feature/login
+git fetch origin
+
+# 檢查目標分支比目前分支多出的提交
+git log --oneline HEAD..origin/dev
+
+# 比較兩個分支目前的檔案內容
+git diff HEAD origin/dev
+
+# 確認後才合併
+git merge origin/dev
+----
+
+`git fetch origin dev` 也可以取得指定分支，並能以 `FETCH_HEAD` 參照剛取得的內容；`origin/dev` 是否同步更新取決於 refspec。一般環境建議直接使用 `git fetch origin`，方便後續查看各遠端追蹤分支。
+
+=== 取得所有 Remote 的更新
+
+[source,bash]
+----
+git fetch origin            # 取得 origin 設定追蹤的分支
+git fetch --all             # 取得所有設定的 Remote
+git fetch --all --prune     # 並清理已失效的遠端追蹤參照
+----
+
+`--all` 指所有已設定的 Remote；實際取得哪些分支仍受各 Remote 的 fetch refspec 影響，不是把 GitLab 上所有分支都建立成本機工作分支。
+
+== 實際開發流程：從 dev 建立自己的功能分支
+
+第一次建立分支時：
+
+[source,bash]
+----
+# 先更新本機 dev
+git switch dev
+git pull --ff-only origin dev
+
+# 由最新 dev 建立功能分支
+git switch -c feature/login
+
+# 編輯完成後
+git status
+git add .
+git commit -m "新增登入功能"
+
+# 首次推送，同時設定 upstream
+git push -u origin feature/login
+----
+
+然後在 GitLab 建立 `feature/login → dev` 的 MR，或在 GitHub 建立同樣來源與目標的 PR。
+
+=== MR 已建立，其他同事又更新 dev
+
+此時不必重新建立 MR；先把 `dev` 的修改整合進自己的分支，再 push。
+
+[source,bash]
+----
+git switch feature/login
+git status                    # 先處理尚未提交的修改
+git fetch origin              # 更新 origin/dev
+git merge origin/dev          # 合併進目前 feature/login
+
+# 若有衝突，先解決並完成合併，再執行
+git push origin feature/login
+----
+
+image::git/git-branch-merge-mr.svg[dev 與 feature/login 的提交分流、同步及 MR 合併示意,align=center]
+
+* `git switch dev && git pull origin dev` 只會更新目前的本機 `dev`，不會讓另一條 `feature/login` 自動跟著更新。
+* `git merge origin/dev` 只在本機合併。要讓既有 MR / PR 顯示新提交，仍須 `git push origin feature/login`。
+* MR / PR 是「請求合併」；經過審查、CI 與平台 Merge 動作後，變更才真正進入 `dev`。
+* 若團隊使用 rebase 工作流程，要注意已 push 的分支 rebase 後提交 SHA 會改變；不要任意對共用分支 force push。
+
+== 衝突發生時怎麼辦
+
+[source,bash]
+----
+# 合併時發生衝突，查看有問題的檔案
+git status
+
+# 編輯檔案，移除衝突標記並保留正確內容
+git add path/to/conflicted-file
+
+# 完成此次 merge（需要先解完所有衝突）
+git merge --continue
+----
+
+如果打算取消尚未完成的 merge：
+
+[source,bash]
+----
+git merge --abort
+----
+
+[WARNING]
+====
+整合分支前，先確認 `git status`，並提交或妥善暫存尚未完成的修改。不要在不清楚目前分支與修改狀態的情況下執行 `reset --hard` 或 `push --force`。
+====
+
+== 本機建立 MR / PR？要分清楚「本機指令」與「平台物件」
+
+MR / PR 不是能在本機 `commit` 後直接 `push` 的 Git 物件，而是存在 GitLab / GitHub 上的合併申請。不過，可以從本機終端機直接要求平台建立。
+
+=== GitLab：Push Options
+
+[source,bash]
+----
+# 將功能分支推送並要求 GitLab 建立 MR
+git push -u origin feature/login \
+  -o merge_request.create \
+  -o merge_request.target=dev \
+  -o merge_request.title="新增登入功能"
+----
+
+此方式不需要額外安裝 GitLab CLI，但只適用支援這些 push options 的 GitLab 伺服器。
+
+=== GitLab：glab
+
+[source,bash]
+----
+# 首次連接自架 GitLab，請改用自己的網域
+glab auth login --hostname gitlab.example.com
+
+git push -u origin feature/login
+
+glab mr create --target-branch dev \
+  --title "新增登入功能" \
+  --description "完成登入功能與驗證"
+----
+
+=== GitHub：Pull Request
+
+在 GitHub 上對應的名稱是 PR；若已安裝並登入 GitHub CLI，可使用：
+
+[source,bash]
+----
+git push -u origin feature/login
+
+gh pr create --base dev --head feature/login \
+  --title "新增登入功能" \
+  --body "完成登入功能與驗證"
+----
+
+GitLab 的 `merge_request.create` push option 不是 GitHub 的 PR 建立指令，兩個平台不能混用。
+
+== 刪除分支、清理失效追蹤紀錄
+
+[cols="51%,49%",options="header"]
+|===
+|指令 |效果
+
+|`git branch -d feature/login`
+|刪除已符合 Git 安全合併檢查條件的本機分支；目前所在分支不可直接刪
+
+|`git branch -D feature/login`
+|強制刪除本機分支，可能遺失尚未合併的提交參照
+
+|`git push origin --delete feature/login`
+|刪除 GitLab / GitHub 上的遠端分支；權限與分支保護規則可能阻止
+
+|`git branch -dr origin/feature/login`
+|只刪除本機的遠端追蹤參照，遠端分支仍存在
+
+|`git fetch origin --prune`
+|取得最新資料並清除依 refspec 判定已不存在的遠端追蹤參照
+
+|`git remote prune origin`
+|清理失效的遠端追蹤參照，不執行一般的最新提交下載
+|===
+
+[NOTE]
+====
+MR / PR 採 *Squash merge* 時，功能分支的原始提交 SHA 不會原樣存在於目標分支，即使平台顯示已合併，`git branch -d` 仍可能因 Git 的提交祖先檢查而拒絕刪除。確認沒有需要保留的本機提交後，再考慮 `-D`。
+====
+
+== 常見誤解速查
+
+[cols="48%,52%",options="header"]
+|===
+|常見誤解 |正確認識
+
+|`fetch` 會把遠端 `dev` 合併到目前分支
+|不會；需要另外 `merge` 或 `rebase`。
+
+|在 `feature/login` 執行 `pull origin dev`，會更新遠端 `dev`
+|不會；它是把遠端 `dev` 的變更整合到目前的功能分支。
+
+|`pull` 後 GitLab 自動建立 MR
+|不會；除非另有平台整合、腳本或 Push Options 等流程。
+
+|`merge origin/dev` 後，既有 MR 立即更新
+|本機 merge 還不夠；要 push 功能分支到遠端。
+
+|`git branch -r` 顯示的就是遠端即時狀態
+|顯示本機記錄的遠端追蹤資訊，先 fetch 才能更新。
+
+|刪除 `origin/feature/login` 也會刪 GitLab 分支
+|不會；真正刪除遠端分支使用 `git push origin --delete feature/login`。
+
+|MR 就是 Git 的 `merge` 指令
+|MR / PR 是平台審查申請；執行 merge 是另一個動作。
+|===
+
+== 建議的團隊日常操作
+
+[source,bash]
+----
+# 1. 確定自己目前的分支與工作目錄狀態
+git status
+git branch --show-current
+
+# 2. 取得各 Remote 最新資訊並移除失效追蹤紀錄
+git fetch --all --prune
+
+# 3. 在功能分支中視需要整合 dev
+git merge origin/dev
+
+# 4. 確認提交紀錄與差異
+git log --oneline --graph --decorate -15
+git status
+
+# 5. 更新遠端功能分支，讓既有 MR / PR 反映新提交
+git push origin feature/login
+----
+
+`main` 與 `dev` 的選擇取決於團隊流程：功能分支若預計合入 `dev`，就應從 `dev` 建立並同步；不要未經確認就混入 `main` 的變更。
+
+== 相關筆記與官方文件
+
+* xref:tools/gitlab-github-first-use-guide.adoc[GitLab 與 GitHub 初次使用差異指南]
+* xref:tools/gitlab-github-operations-guide.adoc[GitLab 與 GitHub 操作差異及 Repository 初始設定]
+* https://git-scm.com/docs/git-fetch[Git 官方：fetch]
+* https://git-scm.com/docs/git-pull[Git 官方：pull]
+* https://git-scm.com/docs/git-merge[Git 官方：merge]
+* https://git-scm.com/docs/git-branch[Git 官方：branch]
+* https://docs.gitlab.com/topics/git/commit/#push-options-for-merge-requests[GitLab 官方：MR Push Options]
+* https://docs.gitlab.com/cli/mr/create/[GitLab 官方：glab mr create]
+* https://cli.github.com/manual/gh_pr_create[GitHub CLI：gh pr create]
