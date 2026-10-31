@@ -168,6 +168,10 @@
 |===
 |文件 |重點 |適合情境
 
+|xref:tools/git-branch-fetch-pull-mr-workflow.adoc[Git 分支協作實務：Fetch、Pull、Merge 與 MR / PR]
+|原創 Git 流程圖、fetch / pull / merge、dev 與 feature 同步、分支清理，以及 GitLab MR / GitHub PR 的建立與更新。
+|多人共用 GitLab / GitHub、已開 MR 後同步 dev 或想分清本機與遠端操作時。
+
 |xref:tools/gitlab-github-first-use-guide.adoc[GitLab 與 GitHub 初次使用差異指南]
 |快速對照 MR / PR、Protected Branch / Ruleset、Runner、CI/CD 與新 Repository 建議設定。
 |第一次從 GitLab 切換到 GitHub 時快速建立對應觀念。

@@ -15,6 +15,8 @@ GitLab 與 GitHub 都以 Git repository、branch、commit 與 code review 為核
 
 本文件整理從 GitLab 轉換到 GitHub 時最常遇到的名詞差異，並提供 GitHub repository 建立後的基礎設定清單。
 
+若要先掌握 Git 本身的分支更新、`fetch` 與 `pull`、本機 `merge` 及既有 MR / PR 更新流程，請參考 xref:tools/git-branch-fetch-pull-mr-workflow.adoc[Git 分支協作實務：Fetch、Pull、Merge 與 MR / PR]。
+
 NOTE: GitHub 與 GitLab 的部分功能會依 Free、Team、Enterprise、GitLab tier、公開或私人 repository 而不同。實際可用項目仍應以目前方案與管理介面為準。
 
 == 核心觀念

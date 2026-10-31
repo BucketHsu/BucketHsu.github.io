@@ -38,6 +38,7 @@
 ** xref:security/dependency-check-nvd-mirror-guide.adoc[OWASP Dependency-Check 與內網 NVD Mirror]
 
 * Git、CI/CD、AI 與開發工具
+** xref:tools/git-branch-fetch-pull-mr-workflow.adoc[Git 分支協作實務：Fetch、Pull、Merge 與 MR / PR]
 ** xref:tools/gitlab-github-first-use-guide.adoc[GitLab 與 GitHub 初次使用差異指南]
 ** xref:tools/gitlab-github-operations-guide.adoc[GitLab 與 GitHub 操作差異及 Repository 初始設定]
 ** xref:tools/dependency-update-guide.adoc[套件依賴更新流程]
