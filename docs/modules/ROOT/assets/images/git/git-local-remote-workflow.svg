@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 590" role="img" aria-labelledby="title desc">
+<title id="title">Git 遠端、本機追蹤分支、功能分支與 MR 的資料流</title>
+<desc id="desc">GitLab 遠端有 dev 與 feature/login；fetch 更新本機 origin/dev，merge 將它整合到本機 feature/login，push 更新遠端功能分支及既有 MR。</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#2563eb"/></marker>
+<marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#15803d"/></marker>
+</defs>
+<rect width="1000" height="590" rx="20" fill="#f8fafc"/>
+<text x="38" y="45" font-family="sans-serif" font-weight="700" font-size="27" fill="#0f172a">Fetch、Merge、Push 與 MR 的關係</text>
+<rect x="40" y="80" width="920" height="150" rx="14" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+<text x="64" y="113" font-family="sans-serif" font-size="20" font-weight="700" fill="#075985">GitLab 遠端儲存庫（origin）</text>
+<rect x="89" y="137" width="309" height="60" rx="10" fill="#ffffff" stroke="#38bdf8" stroke-width="2"/>
+<text x="243" y="174" text-anchor="middle" font-family="monospace" font-size="21" fill="#0f172a">dev</text>
+<rect x="592" y="137" width="310" height="60" rx="10" fill="#ffffff" stroke="#38bdf8" stroke-width="2"/>
+<text x="747" y="174" text-anchor="middle" font-family="monospace" font-size="21" fill="#0f172a">feature/login</text>
+<rect x="40" y="317" width="385" height="132" rx="13" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+<text x="64" y="349" font-family="sans-serif" font-weight="700" font-size="18" fill="#1e40af">本機遠端追蹤分支</text>
+<text x="232" y="410" text-anchor="middle" font-family="monospace" font-size="25" fill="#1e3a8a">origin/dev</text>
+<rect x="533" y="317" width="427" height="132" rx="13" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+<text x="555" y="349" font-family="sans-serif" font-weight="700" font-size="18" fill="#166534">本機工作分支</text>
+<text x="746" y="410" text-anchor="middle" font-family="monospace" font-size="24" fill="#14532d">feature/login</text>
+<path d="M243 198 L243 313" fill="none" stroke="#2563eb" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="163" y="247" width="158" height="29" rx="8" fill="#f8fafc"/>
+<text x="242" y="267" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#1d4ed8">git fetch origin</text>
+<path d="M427 383 L528 383" fill="none" stroke="#2563eb" stroke-width="3" marker-end="url(#arrow)"/>
+<rect x="438" y="346" width="83" height="26" rx="6" fill="#f8fafc"/>
+<text x="479" y="365" text-anchor="middle" font-family="monospace" font-size="16" fill="#1d4ed8">merge</text>
+<path d="M747 314 L747 201" fill="none" stroke="#15803d" stroke-width="3" marker-end="url(#arrowGreen)"/>
+<rect x="770" y="248" width="105" height="28" rx="7" fill="#f8fafc"/>
+<text x="822" y="267" text-anchor="middle" font-family="monospace" font-size="17" fill="#166534">git push</text>
+<rect x="533" y="490" width="427" height="73" rx="12" fill="#fff7ed" stroke="#ea580c" stroke-width="2"/>
+<text x="746" y="521" text-anchor="middle" font-family="sans-serif" font-size="20" font-weight="700" fill="#9a3412">GitLab MR：feature/login → dev</text>
+<text x="746" y="545" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#9a3412">push 後更新既有 MR，仍需審查與合併</text>
+<path d="M747 451 L747 485" fill="none" stroke="#ea580c" stroke-width="3" stroke-dasharray="7 5"/>
+<text x="50" y="492" font-family="sans-serif" font-size="16" fill="#334155">git pull --no-rebase origin dev</text>
+<text x="50" y="518" font-family="sans-serif" font-size="16" fill="#334155">＝ fetch + merge（整合到目前分支）</text>
+<text x="50" y="545" font-family="sans-serif" font-size="15" fill="#64748b">fetch 本身不會合併，也不會建立 MR</text>
+</svg>
