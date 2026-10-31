@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 510" role="img" aria-labelledby="title desc">
+<title id="title">dev 更新與 feature/login 合併及 MR 的提交歷程</title>
+<desc id="desc">功能分支自 dev 的 B 提交分出，產生 F 與 G；dev 繼續提交 C 與 D。功能分支合併 origin/dev 後產生 M，再推送到 GitLab，待 MR 審查合併後才產生 dev 的 E。</desc>
+<defs><marker id="end" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#475569"/></marker></defs>
+<rect width="1000" height="510" rx="20" fill="#f8fafc"/>
+<text x="38" y="46" font-family="sans-serif" font-size="28" font-weight="700" fill="#0f172a">功能分支同步 dev 並更新 MR</text>
+<text x="52" y="135" font-family="monospace" font-size="22" font-weight="700" fill="#1d4ed8">dev</text>
+<text x="52" y="312" font-family="monospace" font-size="22" font-weight="700" fill="#15803d">feature/login</text>
+<path d="M165 165 H825" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round"/>
+<path d="M300 165 C335 165 341 340 390 340 H825" fill="none" stroke="#16a34a" stroke-width="6" stroke-linecap="round"/>
+<path d="M690 165 C736 165 758 340 825 340" fill="none" stroke="#64748b" stroke-width="3" stroke-dasharray="7 7"/>
+<path d="M825 340 C875 340 876 165 918 165" fill="none" stroke="#ea580c" stroke-width="3" stroke-dasharray="7 7" marker-end="url(#end)"/>
+<g fill="#2563eb" stroke="#ffffff" stroke-width="3">
+<circle cx="165" cy="165" r="17"/><circle cx="300" cy="165" r="17"/><circle cx="515" cy="165" r="17"/><circle cx="690" cy="165" r="17"/><circle cx="918" cy="165" r="17"/>
+</g>
+<g fill="#16a34a" stroke="#ffffff" stroke-width="3">
+<circle cx="515" cy="340" r="17"/><circle cx="690" cy="340" r="17"/><circle cx="825" cy="340" r="17"/>
+</g>
+<g font-family="monospace" text-anchor="middle" font-size="18" font-weight="700" fill="#ffffff">
+<text x="165" y="172">A</text><text x="300" y="172">B</text><text x="515" y="172">C</text><text x="690" y="172">D</text><text x="918" y="172">E</text>
+<text x="515" y="347">F</text><text x="690" y="347">G</text><text x="825" y="347">M</text>
+</g>
+<text x="380" y="111" font-family="sans-serif" font-size="16" fill="#334155">從 B 建立功能分支</text>
+<text x="628" y="95" font-family="sans-serif" font-size="16" fill="#334155">同事更新 dev</text>
+<text x="747" y="249" font-family="sans-serif" font-size="16" fill="#475569">merge origin/dev</text>
+<text x="800" y="401" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#166534">M：本機合併提交</text>
+<text x="911" y="111" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#9a3412">MR 合併後</text>
+<text x="500" y="448" font-family="sans-serif" text-anchor="middle" font-size="17" fill="#334155">先在 feature/login 合併 dev → push 更新來源分支 → MR 審查通過後才合入 dev</text>
+<text x="500" y="478" font-family="sans-serif" text-anchor="middle" font-size="15" fill="#64748b">E 為示意結果；實際會是 merge、squash 或 rebase 策略產生的提交歷史</text>
+</svg>
